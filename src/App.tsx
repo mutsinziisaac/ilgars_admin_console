@@ -1,20 +1,48 @@
-import { Button } from "@/components/ui/button"
+import { useState } from "react"
+import { Layout } from "@/components/layout"
+import { DashboardPage } from "@/pages/dashboard"
+import { TransactionsPage } from "@/pages/transactions"
+import { PermitsPage } from "@/pages/permits"
+import { EnforcementPage } from "@/pages/enforcement"
+import { VehiclesPage } from "@/pages/vehicles"
+import { TransportersPage } from "@/pages/transporters"
+import { ReportsPage } from "@/pages/reports"
+import { TariffsPage } from "@/pages/tariffs"
+import { Toaster } from "@/components/ui/sonner"
 
 export function App() {
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "transactions" | "permits" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs">("dashboard")
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case "dashboard":
+        return <DashboardPage />
+      case "transactions":
+        return <TransactionsPage />
+      case "permits":
+        return <PermitsPage />
+      case "enforcement":
+        return <EnforcementPage />
+      case "vehicles":
+        return <VehiclesPage />
+      case "transporters":
+        return <TransportersPage />
+      case "reports":
+        return <ReportsPage />
+      case "tariffs":
+        return <TariffsPage />
+      default:
+        return <DashboardPage />
+    }
+  }
+
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
-        </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
-      </div>
-    </div>
+    <>
+      <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
+        {renderPage()}
+      </Layout>
+      <Toaster />
+    </>
   )
 }
 

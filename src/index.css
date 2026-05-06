@@ -49,72 +49,126 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.153 0.006 107.1);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.153 0.006 107.1);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.153 0.006 107.1);
-    --primary: oklch(0.527 0.154 150.069);
-    --primary-foreground: oklch(0.982 0.018 155.826);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.966 0.005 106.5);
-    --muted-foreground: oklch(0.58 0.031 107.3);
-    --accent: oklch(0.966 0.005 106.5);
-    --accent-foreground: oklch(0.228 0.013 107.4);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.93 0.007 106.5);
-    --input: oklch(0.93 0.007 106.5);
-    --ring: oklch(0.737 0.021 106.9);
-    --chart-1: oklch(0.871 0.15 154.449);
-    --chart-2: oklch(0.723 0.219 149.579);
-    --chart-3: oklch(0.627 0.194 149.214);
-    --chart-4: oklch(0.527 0.154 150.069);
-    --chart-5: oklch(0.448 0.119 151.328);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.988 0.003 106.5);
-    --sidebar-foreground: oklch(0.153 0.006 107.1);
-    --sidebar-primary: oklch(0.627 0.194 149.214);
-    --sidebar-primary-foreground: oklch(0.982 0.018 155.826);
-    --sidebar-accent: oklch(0.966 0.005 106.5);
-    --sidebar-accent-foreground: oklch(0.228 0.013 107.4);
-    --sidebar-border: oklch(0.93 0.007 106.5);
-    --sidebar-ring: oklch(0.737 0.021 106.9);
+    /* Background colors - Light mode */
+    --background: #FDFCF9;                         /* Background (very light cream/almost white) */
+    --foreground: #1C1C1C;                         /* Text (dark gray/black) */
+    
+    /* Card colors */
+    --card: #FFFFFF;                               /* Card Background (white) */
+    --card-foreground: #1C1C1C;                    /* Primary Text on cards */
+    
+    /* Popover colors */
+    --popover: #FFFFFF;                            /* White popover background */
+    --popover-foreground: #1C1C1C;                 /* Dark text in popovers */
+    
+    /* Primary brand color - Deep Green */
+    --primary: oklch(0.30 0.06 155);               /* Primary (Deep Green) #0A4429 approx */
+    --primary-foreground: #FFFFFF;                 /* White text on green */
+    
+    /* Secondary colors */
+    --secondary: #DAA22A;                          /* Secondary (Golden Yellow) */
+    --secondary-foreground: #1C1C1C;               /* Dark text on yellow */
+    
+    /* Muted colors - for subtle text and backgrounds */
+    --muted: #F8F6F2;                              /* Very light background / subtle areas */
+    --muted-foreground: #6B6B6B;                   /* Text Secondary (gray) */
+    
+    /* Accent colors - Soft Green Highlight */
+    --accent: #D6F0E0;                             /* Success (light mint green) */
+    --accent-foreground: #1C1C1C;                  /* Dark text on accent */
+    
+    /* Destructive/Error colors */
+    --destructive: #E5533D;                        /* Error (red) - keeping existing */
+    --destructive-foreground: #FFFFFF;             /* White text on red */
+    
+    /* Success/Warning colors */
+    --success: #D6F0E0;                            /* Success (light mint green) */
+    --warning: #FFF306;                            /* Warning (bright yellow) */
+    
+    /* Border and input colors */
+    --border: #F0EDE7;                             /* Border (very light beige/gray) */
+    --input: #F0EDE7;                              /* Input border color */
+    --ring: oklch(0.30 0.06 155);                  /* Focus ring - Deep Green */
+    
+    /* Chart colors - Green shades */
+    --chart-1: #D6F0E0;                            /* Light mint green */
+    --chart-2: #4FAF7C;                            /* Medium Green */
+    --chart-3: oklch(0.30 0.06 155);               /* Deep Green (primary) */
+    --chart-4: #0A4429;                            /* Darker Green */
+    --chart-5: #062D1C;                            /* Darkest Green */
+    
+    /* Border radius */
+    --radius: 0.75rem;                             /* 12px rounded corners */
+    
+    /* Sidebar colors */
+    --sidebar: #FDFCF9;                            /* Sidebar Background (very light cream) */
+    --sidebar-foreground: #6B6B6B;                 /* Text Secondary (gray) */
+    --sidebar-primary: oklch(0.30 0.06 155);       /* Deep Green for active items */
+    --sidebar-primary-foreground: #FFFFFF;         /* White text on green */
+    --sidebar-accent: #D6F0E0;                     /* Success (light mint) for hover */
+    --sidebar-accent-foreground: #1C1C1C;          /* Dark text on hover */
+    --sidebar-border: #F0EDE7;                     /* Border (very light beige/gray) */
+    --sidebar-ring: oklch(0.30 0.06 155);          /* Focus ring - Deep Green */
 }
 
 .dark {
-    --background: oklch(0.153 0.006 107.1);
-    --foreground: oklch(0.988 0.003 106.5);
-    --card: oklch(0.228 0.013 107.4);
-    --card-foreground: oklch(0.988 0.003 106.5);
-    --popover: oklch(0.228 0.013 107.4);
-    --popover-foreground: oklch(0.988 0.003 106.5);
-    --primary: oklch(0.448 0.119 151.328);
-    --primary-foreground: oklch(0.982 0.018 155.826);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.286 0.016 107.4);
-    --muted-foreground: oklch(0.737 0.021 106.9);
-    --accent: oklch(0.286 0.016 107.4);
-    --accent-foreground: oklch(0.988 0.003 106.5);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.58 0.031 107.3);
-    --chart-1: oklch(0.871 0.15 154.449);
-    --chart-2: oklch(0.723 0.219 149.579);
-    --chart-3: oklch(0.627 0.194 149.214);
-    --chart-4: oklch(0.527 0.154 150.069);
-    --chart-5: oklch(0.448 0.119 151.328);
-    --sidebar: oklch(0.228 0.013 107.4);
-    --sidebar-foreground: oklch(0.988 0.003 106.5);
-    --sidebar-primary: oklch(0.723 0.219 149.579);
-    --sidebar-primary-foreground: oklch(0.982 0.018 155.826);
-    --sidebar-accent: oklch(0.286 0.016 107.4);
-    --sidebar-accent-foreground: oklch(0.988 0.003 106.5);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.58 0.031 107.3);
+    /* Background colors - Dark mode */
+    --background: #0D1410;                         /* Very dark green-tinted background */
+    --foreground: #FAF7EE;                         /* Light cream text */
+    
+    /* Card colors */
+    --card: #1A2420;                               /* Dark card background */
+    --card-foreground: #FAF7EE;                    /* Light text on cards */
+    
+    /* Popover colors */
+    --popover: #1A2420;                            /* Dark popover */
+    --popover-foreground: #FAF7EE;                 /* Light text */
+    
+    /* Primary brand color - Brighter green for dark mode */
+    --primary: #4FAF7C;                            /* Medium Green (more visible in dark) */
+    --primary-foreground: #0D1410;                 /* Dark text on green */
+    
+    /* Secondary colors */
+    --secondary: #DAA22A;                          /* Golden Yellow */
+    --secondary-foreground: #0D1410;               /* Dark text on yellow */
+    
+    /* Muted colors */
+    --muted: #1F2A24;                              /* Dark muted background */
+    --muted-foreground: #6B6B6B;                   /* Gray text */
+    
+    /* Accent colors */
+    --accent: #1F2A24;                             /* Dark accent */
+    --accent-foreground: #D6F0E0;                  /* Light mint text */
+    
+    /* Destructive/Error colors */
+    --destructive: #E5533D;                        /* Error (red) - same as light */
+    --destructive-foreground: #FFFFFF;             /* White text on red */
+    
+    /* Success/Warning colors */
+    --success: #D6F0E0;                            /* Light mint green */
+    --warning: #FFF306;                            /* Bright yellow */
+    
+    /* Border and input colors */
+    --border: #2A3830;                             /* Darker border */
+    --input: #2A3830;                              /* Input border */
+    --ring: #4FAF7C;                               /* Focus ring - Medium Green */
+    
+    /* Chart colors - Same greens work in dark mode */
+    --chart-1: #D6F0E0;                            /* Light mint green */
+    --chart-2: #4FAF7C;                            /* Medium Green */
+    --chart-3: oklch(0.30 0.06 155);               /* Deep Green */
+    --chart-4: #0A4429;                            /* Darker Green */
+    --chart-5: #062D1C;                            /* Darkest Green */
+    
+    /* Sidebar colors */
+    --sidebar: #1A2420;                            /* Dark sidebar */
+    --sidebar-foreground: #6B6B6B;                 /* Gray text */
+    --sidebar-primary: #4FAF7C;                    /* Medium Green active */
+    --sidebar-primary-foreground: #0D1410;         /* Dark text on green */
+    --sidebar-accent: #1F2A24;                     /* Dark hover */
+    --sidebar-accent-foreground: #FAF7EE;          /* Light text on hover */
+    --sidebar-border: #2A3830;                     /* Dark border */
+    --sidebar-ring: #4FAF7C;                       /* Focus ring */
 }
 
 @layer base {
