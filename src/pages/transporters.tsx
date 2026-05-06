@@ -64,7 +64,7 @@ const mockTransporters = [
     phone: "+258 84 777 8888",
     address: "Av. Eduardo Mondlane, Maputo",
     vehicleCount: 6,
-    status: "Suspended",
+    status: "Active",
     registrationDate: "2023-05-18",
     compliance: "Non-compliant"
   },
@@ -116,7 +116,6 @@ export function TransportersPage() {
 
   // Group by status
   const activeCount = transporters.filter(t => t.status === "Active").length
-  const suspendedCount = transporters.filter(t => t.status === "Suspended").length
   const compliantCount = transporters.filter(t => t.compliance === "Compliant").length
   const totalVehicles = transporters.reduce((sum, t) => sum + t.vehicleCount, 0)
 
@@ -308,15 +307,12 @@ export function TransportersPage() {
         <CardContent>
           {/* Filters */}
           <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-3 h-12">
+            <TabsList className="grid w-full grid-cols-2 h-12">
               <TabsTrigger value="all" className="text-base">
                 All ({transporters.length})
               </TabsTrigger>
               <TabsTrigger value="Active" className="text-base">
                 Active ({activeCount})
-              </TabsTrigger>
-              <TabsTrigger value="Suspended" className="text-base">
-                Suspended ({suspendedCount})
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -350,8 +346,6 @@ export function TransportersPage() {
                   <TableHead className="text-base">Contact Person</TableHead>
                   <TableHead className="text-base">Phone</TableHead>
                   <TableHead className="text-base">Vehicles</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
-                  <TableHead className="text-base">Compliance</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -363,8 +357,6 @@ export function TransportersPage() {
                     <TableCell className="text-base">{transporter.contactPerson}</TableCell>
                     <TableCell className="text-base">{transporter.phone}</TableCell>
                     <TableCell className="text-base font-medium">{transporter.vehicleCount}</TableCell>
-                    <TableCell>{getStatusBadge(transporter.status)}</TableCell>
-                    <TableCell>{getComplianceBadge(transporter.compliance)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -432,12 +424,6 @@ export function TransportersPage() {
           
           {selectedTransporter && (
             <div className="space-y-6 py-4">
-              {/* Status Badges */}
-              <div className="flex items-center gap-3">
-                {getStatusBadge(selectedTransporter.status)}
-                {getComplianceBadge(selectedTransporter.compliance)}
-              </div>
-
               {/* Transporter Info Grid */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -488,11 +474,6 @@ export function TransportersPage() {
                   <Label className="text-base text-muted-foreground">Registration Date</Label>
                   <p className="text-lg font-medium">{selectedTransporter.registrationDate}</p>
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-base text-muted-foreground">Compliance Status</Label>
-                  <p className="text-lg font-medium">{selectedTransporter.compliance}</p>
-                </div>
               </div>
             </div>
           )}
@@ -501,15 +482,6 @@ export function TransportersPage() {
             <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)} className="text-base h-11 px-6">
               Close
             </Button>
-            {selectedTransporter && (
-              <Button 
-                onClick={() => handleToggleStatus(selectedTransporter.id)} 
-                variant={selectedTransporter.status === "Active" ? "outline" : "default"}
-                className="text-base h-11 px-6"
-              >
-                {selectedTransporter.status === "Active" ? "Suspend Transporter" : "Activate Transporter"}
-              </Button>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

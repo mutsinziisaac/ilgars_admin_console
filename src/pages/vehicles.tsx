@@ -59,7 +59,7 @@ const mockVehicles = [
     vehicleType: "Cargo Truck",
     weightClass: "16,001–25,000 kg",
     dailyRate: 2000,
-    status: "Suspended",
+    status: "Active",
     lastPayment: "2026-03-15",
     registrationDate: "2023-11-05",
     compliance: "Non-compliant"
@@ -110,7 +110,6 @@ export function VehiclesPage() {
 
   // Group by status
   const activeCount = vehicles.filter(v => v.status === "Active").length
-  const suspendedCount = vehicles.filter(v => v.status === "Suspended").length
   const compliantCount = vehicles.filter(v => v.compliance === "Compliant").length
 
   // Handle view details
@@ -254,7 +253,7 @@ export function VehiclesPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Active</CardDescription>
-            <CardTitle className="text-4xl text-[#4CAF50]">{activeCount}</CardTitle>
+            <CardTitle className="text-4xl text-[#D6F0E0]">{activeCount}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">Currently operational</p>
@@ -263,18 +262,8 @@ export function VehiclesPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">Suspended</CardDescription>
-            <CardTitle className="text-4xl text-[#E5533D]">{suspendedCount}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-base text-muted-foreground">Requires attention</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
             <CardDescription className="text-base">Compliant</CardDescription>
-            <CardTitle className="text-4xl text-[#4CAF50]">{compliantCount}</CardTitle>
+            <CardTitle className="text-4xl text-[#D6F0E0]">{compliantCount}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">
@@ -300,15 +289,12 @@ export function VehiclesPage() {
         <CardContent>
           {/* Filters */}
           <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-3 h-12">
+            <TabsList className="grid w-full grid-cols-2 h-12">
               <TabsTrigger value="all" className="text-base">
                 All ({vehicles.length})
               </TabsTrigger>
               <TabsTrigger value="Active" className="text-base">
                 Active ({activeCount})
-              </TabsTrigger>
-              <TabsTrigger value="Suspended" className="text-base">
-                Suspended ({suspendedCount})
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -341,8 +327,6 @@ export function VehiclesPage() {
                   <TableHead className="text-base">Owner</TableHead>
                   <TableHead className="text-base">Type</TableHead>
                   <TableHead className="text-base">Weight Class</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
-                  <TableHead className="text-base">Compliance</TableHead>
                   <TableHead className="text-base">Last Payment</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
                 </TableRow>
@@ -354,8 +338,6 @@ export function VehiclesPage() {
                     <TableCell className="text-base">{vehicle.owner}</TableCell>
                     <TableCell className="text-base">{vehicle.vehicleType}</TableCell>
                     <TableCell className="text-base">{vehicle.weightClass}</TableCell>
-                    <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
-                    <TableCell>{getComplianceBadge(vehicle.compliance)}</TableCell>
                     <TableCell className="text-base">{vehicle.lastPayment}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -424,12 +406,6 @@ export function VehiclesPage() {
           
           {selectedVehicle && (
             <div className="space-y-6 py-4">
-              {/* Status Badges */}
-              <div className="flex items-center gap-3">
-                {getStatusBadge(selectedVehicle.status)}
-                {getComplianceBadge(selectedVehicle.compliance)}
-              </div>
-
               {/* Vehicle Info Grid */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -466,11 +442,6 @@ export function VehiclesPage() {
                   <Label className="text-base text-muted-foreground">Last Payment</Label>
                   <p className="text-lg font-medium">{selectedVehicle.lastPayment}</p>
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-base text-muted-foreground">Compliance Status</Label>
-                  <p className="text-lg font-medium">{selectedVehicle.compliance}</p>
-                </div>
               </div>
             </div>
           )}
@@ -479,15 +450,6 @@ export function VehiclesPage() {
             <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)} className="text-base h-11 px-6">
               Close
             </Button>
-            {selectedVehicle && (
-              <Button 
-                onClick={() => handleToggleStatus(selectedVehicle.id)} 
-                variant={selectedVehicle.status === "Active" ? "outline" : "default"}
-                className="text-base h-11 px-6"
-              >
-                {selectedVehicle.status === "Active" ? "Suspend Vehicle" : "Activate Vehicle"}
-              </Button>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -354,7 +354,6 @@ export function PermitsPage() {
                   <TableHead className="text-base">Vehicle</TableHead>
                   <TableHead className="text-base">Type</TableHead>
                   <TableHead className="text-base">Route</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
                   <TableHead className="text-base">Submitted</TableHead>
                   <TableHead className="text-base">Fee</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
@@ -368,7 +367,6 @@ export function PermitsPage() {
                     <TableCell className="text-base">{permit.vehicle}</TableCell>
                     <TableCell>{getPermitTypeBadge(permit.permitType)}</TableCell>
                     <TableCell className="text-base">{permit.route}</TableCell>
-                    <TableCell>{getStatusBadge(permit.status)}</TableCell>
                     <TableCell className="text-base">{permit.submittedDate}</TableCell>
                     <TableCell className="text-base font-medium">{permit.fee.toLocaleString()} MZN</TableCell>
                     <TableCell className="text-right">

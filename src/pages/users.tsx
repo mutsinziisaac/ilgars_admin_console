@@ -260,7 +260,6 @@ export function UsersPage() {
                   <TableHead className="text-base">Name</TableHead>
                   <TableHead className="text-base">Email</TableHead>
                   <TableHead className="text-base">Role</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -272,11 +271,6 @@ export function UsersPage() {
                     <TableCell>
                       <Badge variant={user.role === "Admin" ? "default" : "secondary"} className="text-sm px-3 py-1">
                         {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.status === "Active" ? "default" : "secondary"} className="text-sm px-3 py-1">
-                        {user.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">

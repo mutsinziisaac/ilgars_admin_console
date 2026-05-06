@@ -295,7 +295,6 @@ export function TariffsPage() {
                 <TableHead className="text-base">Protocol Roads</TableHead>
                 <TableHead className="text-base">Secondary Roads</TableHead>
                 <TableHead className="text-base">Tertiary Roads</TableHead>
-                <TableHead className="text-base">Status</TableHead>
                 <TableHead className="text-base">Effective Date</TableHead>
                 <TableHead className="text-right text-base">Actions</TableHead>
               </TableRow>
@@ -308,11 +307,6 @@ export function TariffsPage() {
                   <TableCell className="text-base font-bold">{tariff.secondaryRoads.toLocaleString()} MZN</TableCell>
                   <TableCell className="text-base font-bold">
                     {tariff.tertiaryRoads === 0 ? "0 MZN" : `${tariff.tertiaryRoads.toLocaleString()} MZN`}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className="bg-[#4CAF50] text-white text-sm px-3 py-1">
-                      {tariff.status}
-                    </Badge>
                   </TableCell>
                   <TableCell className="text-base">{tariff.effectiveDate}</TableCell>
                   <TableCell className="text-right">

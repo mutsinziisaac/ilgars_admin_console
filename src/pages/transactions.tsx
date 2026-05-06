@@ -288,7 +288,6 @@ export function TransactionsPage() {
                   <TableHead className="text-base">Vehicle</TableHead>
                   <TableHead className="text-base">Type</TableHead>
                   <TableHead className="text-base">Amount</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
                   <TableHead className="text-base">Date & Time</TableHead>
                   <TableHead className="text-base">Location</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
@@ -306,7 +305,6 @@ export function TransactionsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-base font-medium">{txn.amount.toLocaleString()} MZN</TableCell>
-                    <TableCell>{getStatusBadge(txn.status)}</TableCell>
                     <TableCell className="text-base">{txn.date}</TableCell>
                     <TableCell className="text-base">{txn.location}</TableCell>
                     <TableCell className="text-right">
