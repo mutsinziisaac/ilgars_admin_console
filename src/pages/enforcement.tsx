@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, MapPin, AlertTriangle, CheckCircle, XCircle, Clock, Truck, FileText } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Search, MapPin, AlertTriangle, CheckCircle, XCircle, Clock, Truck, FileText, Eye, User, Calendar } from "lucide-react"
 import { toast } from "sonner"
 
 // Mock enforcement log data
@@ -35,10 +37,10 @@ const mockEnforcementLogs = [
     coordinates: "-25.9612, 32.5731",
     amountOwed: "32,500 MZN",
     daysOverdue: 8,
-    action: "Citation Issued",
+    action: "Warning Issued",
     officer: "Officer Macamo",
     timestamp: "2026-05-06 13:45",
-    notes: "Driver issued citation. Vehicle allowed to proceed to payment center."
+    notes: "Driver issued warning. Vehicle allowed to proceed. Must pay within 7 days."
   },
   {
     id: "ENF-003",
@@ -98,8 +100,12 @@ export function EnforcementPage() {
   const [enforcementLogs, setEnforcementLogs] = useState(mockEnforcementLogs)
   const [searchQuery, setSearchQuery] = useState("")
   const [lookupResult, setLookupResult] = useState<any>(null)
+  const [selectedEnforcement, setSelectedEnforcement] = useState<typeof mockEnforcementLogs[0] | null>(null)
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false)
   const [actionFilter, setActionFilter] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   // Form state for logging enforcement
   const [formData, setFormData] = useState({
@@ -188,11 +194,16 @@ export function EnforcementPage() {
     return log.action === actionFilter
   })
 
+  // Pagination
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex)
+
   // Get action badge
   const getActionBadge = (action: string) => {
     const colors: Record<string, string> = {
       "Vehicle Impounded": "bg-[#E5533D] text-white",
-      "Citation Issued": "bg-[#FFF306] text-[#1C1C1C]",
       "Warning Issued": "bg-[#FFF306] text-[#1C1C1C]"
     }
     return (
@@ -211,7 +222,7 @@ export function EnforcementPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Actions Today</CardDescription>
@@ -236,25 +247,13 @@ export function EnforcementPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">Citations Issued</CardDescription>
-            <CardTitle className="text-4xl text-[#FFF306]">
-              {enforcementLogs.filter(l => l.action === "Citation Issued").length}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-base text-muted-foreground">Moderate violations</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
             <CardDescription className="text-base">Warnings Issued</CardDescription>
             <CardTitle className="text-4xl text-[#FFF306]">
               {enforcementLogs.filter(l => l.action === "Warning Issued").length}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Minor violations</p>
+            <p className="text-base text-muted-foreground">Moderate violations</p>
           </CardContent>
         </Card>
       </div>
@@ -349,10 +348,9 @@ export function EnforcementPage() {
         <CardContent>
           {/* Action Filter */}
           <Tabs value={actionFilter} onValueChange={setActionFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-4 h-12">
+            <TabsList className="grid w-full grid-cols-3 h-12">
               <TabsTrigger value="all" className="text-sm">All</TabsTrigger>
               <TabsTrigger value="Vehicle Impounded" className="text-sm">Impounded</TabsTrigger>
-              <TabsTrigger value="Citation Issued" className="text-sm">Citations</TabsTrigger>
               <TabsTrigger value="Warning Issued" className="text-sm">Warnings</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -369,10 +367,11 @@ export function EnforcementPage() {
                 <TableHead className="text-base">Action Taken</TableHead>
                 <TableHead className="text-base">Officer</TableHead>
                 <TableHead className="text-base">Time</TableHead>
+                <TableHead className="text-right text-base">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLogs.map((log) => (
+              {paginatedLogs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="font-medium text-base">{log.id}</TableCell>
                   <TableCell className="font-bold text-base">{log.plateNumber}</TableCell>
@@ -390,10 +389,55 @@ export function EnforcementPage() {
                   <TableCell>{getActionBadge(log.action)}</TableCell>
                   <TableCell className="text-base">{log.officer}</TableCell>
                   <TableCell className="text-base text-muted-foreground">{log.timestamp}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setSelectedEnforcement(log)
+                        setIsDetailsModalOpen(true)
+                      }}
+                      className="h-10 w-10"
+                    >
+                      <Eye className="h-5 w-5" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {filteredLogs.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredLogs.length)} of {filteredLogs.length} logs
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -493,7 +537,6 @@ export function EnforcementPage() {
                 </SelectTrigger>
                 <SelectContent className="text-base">
                   <SelectItem value="Vehicle Impounded" className="text-base">Vehicle Impounded</SelectItem>
-                  <SelectItem value="Citation Issued" className="text-base">Citation Issued</SelectItem>
                   <SelectItem value="Warning Issued" className="text-base">Warning Issued</SelectItem>
                 </SelectContent>
               </Select>
@@ -526,6 +569,171 @@ export function EnforcementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Enforcement Details Modal */}
+      <Modal open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen} className="w-[90vw] max-w-[1000px]">
+        <ModalHeader onClose={() => setIsDetailsModalOpen(false)}>
+          <div>
+            <ModalTitle>Enforcement Action Details</ModalTitle>
+            <ModalDescription>
+              Complete information for {selectedEnforcement?.id}
+            </ModalDescription>
+          </div>
+        </ModalHeader>
+        
+        <ModalBody>
+          {selectedEnforcement && (
+            <div className="space-y-6">
+              {/* Action Badge */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {getActionBadge(selectedEnforcement.action)}
+                  <span className="text-sm text-muted-foreground">
+                    {selectedEnforcement.timestamp}
+                  </span>
+                </div>
+                <Badge variant="outline" className="text-sm">
+                  {selectedEnforcement.id}
+                </Badge>
+              </div>
+
+              <Separator />
+
+              {/* Vehicle Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Truck className="h-5 w-5" />
+                  Vehicle Information
+                </h3>
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Plate Number</Label>
+                    <p className="text-lg font-mono font-bold">{selectedEnforcement.plateNumber}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Vehicle Type</Label>
+                    <p className="text-base font-medium">{selectedEnforcement.vehicleType}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Days Overdue</Label>
+                    <p className="text-base font-medium text-destructive">{selectedEnforcement.daysOverdue} days</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Financial Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Financial Information</h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <Card className="bg-muted/40">
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Amount Owed</CardDescription>
+                      <CardTitle className="text-2xl text-destructive">{selectedEnforcement.amountOwed}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card className="bg-muted/40">
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Overdue Period</CardDescription>
+                      <CardTitle className="text-2xl">{selectedEnforcement.daysOverdue} days</CardTitle>
+                    </CardHeader>
+                  </Card>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Location Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Location Information
+                </h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Location</Label>
+                    <p className="text-base font-medium">{selectedEnforcement.location}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">GPS Coordinates</Label>
+                    <p className="text-base font-mono">{selectedEnforcement.coordinates}</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Officer Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Officer Information
+                </h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Officer Name</Label>
+                    <p className="text-base font-medium">{selectedEnforcement.officer}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Timestamp
+                    </Label>
+                    <p className="text-base font-medium">{selectedEnforcement.timestamp}</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Action Notes */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Action Notes
+                </h3>
+                <div className="rounded-lg bg-muted/40 p-4">
+                  <p className="text-base leading-relaxed">{selectedEnforcement.notes}</p>
+                </div>
+              </div>
+
+              {/* Action Summary */}
+              {selectedEnforcement.action === "Vehicle Impounded" && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-destructive">Vehicle Impounded</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Vehicle has been impounded and towed to the impound lot. Owner must pay all outstanding fees plus impound fees to retrieve the vehicle.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedEnforcement.action === "Warning Issued" && (
+                <div className="rounded-lg bg-[#FFF306]/20 border border-[#FFF306]/50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-[#DAA22A] mt-0.5" />
+                    <div>
+                      <p className="font-semibold">Warning Issued</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Driver has been issued a formal warning. Payment must be made within the specified timeframe to avoid further enforcement action.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </ModalBody>
+
+        <ModalFooter>
+          {/* Footer can be used for additional actions if needed */}
+        </ModalFooter>
+      </Modal>
     </div>
   )
 }

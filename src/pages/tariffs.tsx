@@ -6,18 +6,20 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { DollarSign, Plus, Pencil, Trash2, TrendingUp, Calendar, AlertCircle } from "lucide-react"
+import { DollarSign, Plus, TrendingUp, Calendar, AlertCircle, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-// Mock tariff data - Per Hour rates by Purpose and Road Type
+// Mock tariff data - Per Hour rates by Purpose, Road Type, and Closure Type
 const mockTariffs = [
   {
     id: 1,
     purpose: "Construction Works",
+    closureType: "Full Road Closure",
     protocolRoads: 50000,
     secondaryRoads: 30000,
     tertiaryRoads: 15000,
@@ -27,17 +29,8 @@ const mockTariffs = [
   },
   {
     id: 2,
-    purpose: "Filming",
-    protocolRoads: 50000,
-    secondaryRoads: 30000,
-    tertiaryRoads: 20000,
-    status: "Active",
-    effectiveDate: "2024-01-01",
-    lastUpdated: "2024-01-01"
-  },
-  {
-    id: 3,
-    purpose: "Sporting Events",
+    purpose: "Construction Works",
+    closureType: "Partial Road Closure",
     protocolRoads: 10000,
     secondaryRoads: 5000,
     tertiaryRoads: 3500,
@@ -46,8 +39,53 @@ const mockTariffs = [
     lastUpdated: "2024-01-01"
   },
   {
+    id: 3,
+    purpose: "Filming",
+    closureType: "Full Road Closure",
+    protocolRoads: 50000,
+    secondaryRoads: 30000,
+    tertiaryRoads: 20000,
+    status: "Active",
+    effectiveDate: "2024-01-01",
+    lastUpdated: "2024-01-01"
+  },
+  {
     id: 4,
+    purpose: "Filming",
+    closureType: "Partial Road Closure",
+    protocolRoads: 40000,
+    secondaryRoads: 30000,
+    tertiaryRoads: 20000,
+    status: "Active",
+    effectiveDate: "2024-01-01",
+    lastUpdated: "2024-01-01"
+  },
+  {
+    id: 5,
+    purpose: "Sporting Events",
+    closureType: "Full Road Closure",
+    protocolRoads: 10000,
+    secondaryRoads: 5000,
+    tertiaryRoads: 3500,
+    status: "Active",
+    effectiveDate: "2024-01-01",
+    lastUpdated: "2024-01-01"
+  },
+  {
+    id: 6,
+    purpose: "Sporting Events",
+    closureType: "Partial Road Closure",
+    protocolRoads: 5000,
+    secondaryRoads: 3500,
+    tertiaryRoads: 1800,
+    status: "Active",
+    effectiveDate: "2024-01-01",
+    lastUpdated: "2024-01-01"
+  },
+  {
+    id: 7,
     purpose: "Fairs",
+    closureType: "Full Road Closure",
     protocolRoads: 2000,
     secondaryRoads: 1000,
     tertiaryRoads: 0,
@@ -56,8 +94,20 @@ const mockTariffs = [
     lastUpdated: "2024-01-01"
   },
   {
-    id: 5,
+    id: 8,
+    purpose: "Fairs",
+    closureType: "Partial Road Closure",
+    protocolRoads: 2000,
+    secondaryRoads: 1000,
+    tertiaryRoads: 0,
+    status: "Active",
+    effectiveDate: "2024-01-01",
+    lastUpdated: "2024-01-01"
+  },
+  {
+    id: 9,
     purpose: "For-Profit Events",
+    closureType: "Full Road Closure",
     protocolRoads: 40000,
     secondaryRoads: 20000,
     tertiaryRoads: 10000,
@@ -65,25 +115,33 @@ const mockTariffs = [
     effectiveDate: "2024-01-01",
     lastUpdated: "2024-01-01"
   },
+  {
+    id: 10,
+    purpose: "For-Profit Events",
+    closureType: "Partial Road Closure",
+    protocolRoads: 20000,
+    secondaryRoads: 10000,
+    tertiaryRoads: 5000,
+    status: "Active",
+    effectiveDate: "2024-01-01",
+    lastUpdated: "2024-01-01"
+  },
 ]
-
-// Mock penalty rates
-const penaltyRates = {
-  latePayment: 30,
-  nonCompliance: 50,
-  repeatOffender: 100
-}
 
 export function TariffsPage() {
   const [tariffs, setTariffs] = useState(mockTariffs)
   const [selectedTariff, setSelectedTariff] = useState<typeof mockTariffs[0] | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [isPenaltyDialogOpen, setIsPenaltyDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [tariffToDelete, setTariffToDelete] = useState<typeof mockTariffs[0] | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   // Form state
   const [formData, setFormData] = useState({
     purpose: "",
+    closureType: "",
     roadType: "",
     rate: "",
     effectiveDate: "",
@@ -101,18 +159,18 @@ export function TariffsPage() {
     tertiaryRoads: ""
   })
 
-  // Penalty form state
-  const [penaltyFormData, setPenaltyFormData] = useState({
-    latePayment: penaltyRates.latePayment.toString(),
-    nonCompliance: penaltyRates.nonCompliance.toString(),
-    repeatOffender: penaltyRates.repeatOffender.toString()
-  })
+  // Pagination
+  const totalPages = Math.ceil(tariffs.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTariffs = tariffs.slice(startIndex, endIndex)
 
   // Handle add tariff
   const handleAddTariff = () => {
     const newTariff = {
       id: tariffs.length + 1,
       purpose: formData.purpose,
+      closureType: formData.closureType,
       protocolRoads: parseInt(tariffRates.protocolRoads),
       secondaryRoads: parseInt(tariffRates.secondaryRoads),
       tertiaryRoads: parseInt(tariffRates.tertiaryRoads),
@@ -122,10 +180,10 @@ export function TariffsPage() {
     }
     setTariffs([...tariffs, newTariff])
     setIsAddDialogOpen(false)
-    setFormData({ purpose: "", roadType: "", rate: "", effectiveDate: "", notes: "" })
+    setFormData({ purpose: "", closureType: "", roadType: "", rate: "", effectiveDate: "", notes: "" })
     setTariffRates({ protocolRoads: "", secondaryRoads: "", tertiaryRoads: "" })
     toast.success("Tariff added", {
-      description: `New tariff for ${formData.purpose} has been added.`
+      description: `New tariff for ${formData.purpose} (${formData.closureType}) has been added.`
     })
   }
 
@@ -155,12 +213,14 @@ export function TariffsPage() {
   }
 
   // Handle delete tariff
-  const handleDeleteTariff = (tariffId: number) => {
-    const tariff = tariffs.find(t => t.id === tariffId)
-    setTariffs(tariffs.filter(t => t.id !== tariffId))
+  const handleDeleteTariff = () => {
+    if (!tariffToDelete) return
+    setTariffs(tariffs.filter(t => t.id !== tariffToDelete.id))
+    setDeleteDialogOpen(false)
     toast.error("Tariff removed", {
-      description: `Tariff for ${tariff?.purpose} has been removed.`
+      description: `Tariff for ${tariffToDelete.purpose} has been removed.`
     })
+    setTariffToDelete(null)
   }
 
   // Open edit dialog
@@ -168,6 +228,7 @@ export function TariffsPage() {
     setSelectedTariff(tariff)
     setFormData({
       purpose: tariff.purpose,
+      closureType: tariff.closureType,
       roadType: "",
       rate: "",
       effectiveDate: tariff.effectiveDate,
@@ -192,14 +253,6 @@ export function TariffsPage() {
     }
   }
 
-  // Handle update penalties
-  const handleUpdatePenalties = () => {
-    setIsPenaltyDialogOpen(false)
-    toast.success("Penalty rates updated", {
-      description: "New penalty rates have been applied."
-    })
-  }
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -216,7 +269,7 @@ export function TariffsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Active Tariffs</CardDescription>
@@ -246,63 +299,45 @@ export function TariffsPage() {
             <p className="text-base text-muted-foreground">MZN per hour</p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-base">Late Payment Penalty</CardDescription>
-            <CardTitle className="text-4xl text-[#E5533D]">{penaltyRates.latePayment}%</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-base text-muted-foreground">Of outstanding amount</p>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* Fee Calculation Example */}
-      <Card className="bg-muted/30">
-        <CardHeader>
-          <CardTitle className="text-xl">Fee Calculation</CardTitle>
-          <CardDescription className="text-base">System computes: Total Fee = Hourly Rate × Number of Hours</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <p className="text-base"><strong>Example:</strong></p>
-            <p className="text-base">Filming on Secondary Road for 5 hours</p>
-            <p className="text-lg font-bold text-primary">→ 30,000 × 5 = 150,000 MZN</p>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Tariff Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl">Tariff Structure (Per Hour)</CardTitle>
-              <CardDescription className="text-base">Fees based on purpose and road type</CardDescription>
-            </div>
-            <Button variant="outline" onClick={() => setIsPenaltyDialogOpen(true)} className="text-base h-11 px-6">
-              <AlertCircle className="h-5 w-5 mr-2" />
-              Manage Penalties
-            </Button>
+          <div>
+            <CardTitle className="text-2xl">Tariff Structure (Per Hour)</CardTitle>
+            <CardDescription className="text-base">Fees based on purpose, closure type, and road type</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-base">Purpose</TableHead>
-                <TableHead className="text-base">Protocol Roads</TableHead>
-                <TableHead className="text-base">Secondary Roads</TableHead>
-                <TableHead className="text-base">Tertiary Roads</TableHead>
-                <TableHead className="text-base">Effective Date</TableHead>
-                <TableHead className="text-right text-base">Actions</TableHead>
+                <TableHead className="text-lg font-semibold">Purpose</TableHead>
+                <TableHead className="text-lg font-semibold">Closure Type</TableHead>
+                <TableHead className="text-lg font-semibold">Protocol Roads</TableHead>
+                <TableHead className="text-lg font-semibold">Secondary Roads</TableHead>
+                <TableHead className="text-lg font-semibold">Tertiary Roads</TableHead>
+                <TableHead className="text-lg font-semibold">Effective Date</TableHead>
+                <TableHead className="text-right text-lg font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tariffs.map((tariff) => (
+              {paginatedTariffs.map((tariff) => (
                 <TableRow key={tariff.id}>
                   <TableCell className="font-medium text-base">{tariff.purpose}</TableCell>
+                  <TableCell className="text-base">
+                    <Badge 
+                      variant="outline"
+                      className={
+                        tariff.closureType === "Full Road Closure" 
+                          ? "!bg-green-600 !text-white !border-green-600 text-sm px-3 py-1" 
+                          : "!bg-[#4A90E2] !text-white !border-[#4A90E2] text-sm px-3 py-1"
+                      }
+                    >
+                      {tariff.closureType}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-base font-bold">{tariff.protocolRoads.toLocaleString()} MZN</TableCell>
                   <TableCell className="text-base font-bold">{tariff.secondaryRoads.toLocaleString()} MZN</TableCell>
                   <TableCell className="text-base font-bold">
@@ -319,158 +354,182 @@ export function TariffsPage() {
                       >
                         <Pencil className="h-5 w-5" />
                       </Button>
-                      
-                      {/* Delete Confirmation Dialog */}
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-10 w-10">
-                            <Trash2 className="h-5 w-5 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="text-base">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="text-2xl">Remove Tariff</AlertDialogTitle>
-                            <AlertDialogDescription className="text-base">
-                              Are you sure you want to remove the tariff for <strong>{tariff.purpose}</strong>? 
-                              This may affect existing permits for this purpose.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="text-base h-11 px-6">Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteTariff(tariff.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6"
-                            >
-                              Remove
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setTariffToDelete(tariff)
+                          setDeleteDialogOpen(true)
+                        }}
+                        className="h-10 w-10 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {tariffs.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, tariffs.length)} of {tariffs.length} tariffs
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Penalty Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Penalty Rates</CardTitle>
-          <CardDescription className="text-base">Current penalty structure for non-compliance</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label className="text-base text-muted-foreground">Late Payment Penalty</Label>
-              <p className="text-3xl font-bold text-[#E5533D]">{penaltyRates.latePayment}%</p>
-              <p className="text-base text-muted-foreground">Applied to outstanding RUC amount</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-base text-muted-foreground">Non-Compliance Fine</Label>
-              <p className="text-3xl font-bold text-[#E5533D]">{penaltyRates.nonCompliance}%</p>
-              <p className="text-base text-muted-foreground">Additional penalty for violations</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-base text-muted-foreground">Repeat Offender</Label>
-              <p className="text-3xl font-bold text-[#E5533D]">{penaltyRates.repeatOffender}%</p>
-              <p className="text-base text-muted-foreground">For multiple violations</p>
-            </div>
+      {/* Add Tariff Modal */}
+      <Modal open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} className="w-[90vw] max-w-[900px]">
+        <ModalHeader onClose={() => setIsAddDialogOpen(false)}>
+          <div>
+            <ModalTitle>Add New Tariff</ModalTitle>
+            <ModalDescription>
+              Create a new tariff for a purpose category and closure type
+            </ModalDescription>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Add Tariff Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="text-base max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Add New Tariff</DialogTitle>
-            <DialogDescription className="text-base">
-              Create a new tariff for a purpose category
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="purpose" className="text-base">Purpose *</Label>
-              <Select value={formData.purpose} onValueChange={(value) => setFormData({ ...formData, purpose: value })}>
-                <SelectTrigger className="text-base h-11">
-                  <SelectValue placeholder="Select purpose" />
-                </SelectTrigger>
-                <SelectContent className="text-base">
-                  <SelectItem value="Construction Works" className="text-base">Construction Works</SelectItem>
-                  <SelectItem value="Filming" className="text-base">Filming</SelectItem>
-                  <SelectItem value="Sporting Events" className="text-base">Sporting Events</SelectItem>
-                  <SelectItem value="Fairs" className="text-base">Fairs</SelectItem>
-                  <SelectItem value="For-Profit Events" className="text-base">For-Profit Events</SelectItem>
-                  <SelectItem value="Other" className="text-base">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
+        </ModalHeader>
+        
+        <ModalBody>
+          <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="road-type" className="text-base">Road Type *</Label>
-                <Select value={formData.roadType} onValueChange={(value) => setFormData({ ...formData, roadType: value })}>
-                  <SelectTrigger className="text-base h-11">
-                    <SelectValue placeholder="Select road type" />
-                  </SelectTrigger>
-                  <SelectContent className="text-base">
-                    <SelectItem value="Protocol Roads" className="text-base">Protocol Roads</SelectItem>
-                    <SelectItem value="Secondary Roads" className="text-base">Secondary Roads</SelectItem>
-                    <SelectItem value="Tertiary Roads" className="text-base">Tertiary Roads</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="purpose" className="text-base">Purpose *</Label>
+                <Input
+                  id="purpose"
+                  placeholder="e.g., Construction Works, Filming, etc."
+                  value={formData.purpose}
+                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
+                  className="text-base h-11"
+                />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="rate" className="text-base">Rate (MZN/hr) *</Label>
-                <Input
-                  id="rate"
-                  type="number"
-                  placeholder="e.g., 50000"
-                  value={formData.rate}
-                  onChange={(e) => {
-                    setFormData({ ...formData, rate: e.target.value })
-                    if (formData.roadType) {
-                      handleRateUpdate(formData.roadType, e.target.value)
-                    }
-                  }}
-                  className="text-base h-11"
-                />
+                <Label htmlFor="closure-type" className="text-base">Closure Type *</Label>
+                <Select value={formData.closureType} onValueChange={(value) => setFormData({ ...formData, closureType: value })}>
+                  <SelectTrigger className="text-base h-11">
+                    <SelectValue placeholder="Select closure type" />
+                  </SelectTrigger>
+                  <SelectContent className="text-base">
+                    <SelectItem value="Full Road Closure" className="text-base">Full Road Closure</SelectItem>
+                    <SelectItem value="Partial Road Closure" className="text-base">Partial Road Closure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <Label className="text-base font-semibold">Set Rates by Road Type</Label>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="road-type" className="text-base">Road Type *</Label>
+                  <Select value={formData.roadType} onValueChange={(value) => setFormData({ ...formData, roadType: value })}>
+                    <SelectTrigger className="text-base h-11">
+                      <SelectValue placeholder="Select road type" />
+                    </SelectTrigger>
+                    <SelectContent className="text-base">
+                      <SelectItem value="Protocol Roads" className="text-base">Protocol Roads</SelectItem>
+                      <SelectItem value="Secondary Roads" className="text-base">Secondary Roads</SelectItem>
+                      <SelectItem value="Tertiary Roads" className="text-base">Tertiary Roads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="rate" className="text-base">Rate (MZN/hr) *</Label>
+                  <Input
+                    id="rate"
+                    type="number"
+                    placeholder="e.g., 50000"
+                    value={formData.rate}
+                    onChange={(e) => {
+                      setFormData({ ...formData, rate: e.target.value })
+                      if (formData.roadType) {
+                        handleRateUpdate(formData.roadType, e.target.value)
+                      }
+                    }}
+                    className="text-base h-11"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Display entered rates */}
             {(tariffRates.protocolRoads || tariffRates.secondaryRoads || tariffRates.tertiaryRoads) && (
-              <div className="rounded-lg bg-muted/50 p-4 space-y-2">
-                <Label className="text-base font-semibold">Entered Rates:</Label>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  {tariffRates.protocolRoads && (
-                    <div>
-                      <p className="text-muted-foreground">Protocol Roads</p>
-                      <p className="font-bold text-base">{parseInt(tariffRates.protocolRoads).toLocaleString()} MZN/hr</p>
-                    </div>
-                  )}
-                  {tariffRates.secondaryRoads && (
-                    <div>
-                      <p className="text-muted-foreground">Secondary Roads</p>
-                      <p className="font-bold text-base">{parseInt(tariffRates.secondaryRoads).toLocaleString()} MZN/hr</p>
-                    </div>
-                  )}
-                  {tariffRates.tertiaryRoads && (
-                    <div>
-                      <p className="text-muted-foreground">Tertiary Roads</p>
-                      <p className="font-bold text-base">{parseInt(tariffRates.tertiaryRoads).toLocaleString()} MZN/hr</p>
-                    </div>
-                  )}
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Entered Rates:</Label>
+                  <div className="grid grid-cols-3 gap-4">
+                    {tariffRates.protocolRoads && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardDescription className="text-xs">Protocol Roads</CardDescription>
+                          <CardTitle className="text-xl">{parseInt(tariffRates.protocolRoads).toLocaleString()}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">MZN/hr</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {tariffRates.secondaryRoads && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardDescription className="text-xs">Secondary Roads</CardDescription>
+                          <CardTitle className="text-xl">{parseInt(tariffRates.secondaryRoads).toLocaleString()}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">MZN/hr</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {tariffRates.tertiaryRoads && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardDescription className="text-xs">Tertiary Roads</CardDescription>
+                          <CardTitle className="text-xl">{parseInt(tariffRates.tertiaryRoads).toLocaleString()}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">MZN/hr</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
+
+            <Separator />
 
             <div className="space-y-2">
               <Label htmlFor="effective-date" className="text-base">Effective Date *</Label>
@@ -495,91 +554,124 @@ export function TariffsPage() {
               />
             </div>
           </div>
+        </ModalBody>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="text-base h-11 px-6">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleAddTariff} 
-              disabled={!formData.purpose || !tariffRates.protocolRoads || !tariffRates.secondaryRoads || !tariffRates.tertiaryRoads || !formData.effectiveDate}
-              className="text-base h-11 px-6"
-            >
-              Add Tariff
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="text-base h-11 px-6">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleAddTariff} 
+            disabled={!formData.purpose || !formData.closureType || !tariffRates.protocolRoads || !tariffRates.secondaryRoads || !tariffRates.tertiaryRoads || !formData.effectiveDate}
+            className="text-base h-11 px-6"
+          >
+            Add Tariff
+          </Button>
+        </ModalFooter>
+      </Modal>
 
-      {/* Edit Tariff Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="text-base max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Edit Tariff</DialogTitle>
-            <DialogDescription className="text-base">
-              Update tariff for {selectedTariff?.purpose}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-base">Purpose</Label>
-              <p className="text-lg font-bold">{formData.purpose}</p>
+      {/* Edit Tariff Modal */}
+      <Modal open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen} className="w-[90vw] max-w-[900px]">
+        <ModalHeader onClose={() => setIsEditDialogOpen(false)}>
+          <div>
+            <ModalTitle>Edit Tariff</ModalTitle>
+            <ModalDescription>
+              Update tariff rates for {selectedTariff?.purpose} ({selectedTariff?.closureType})
+            </ModalDescription>
+          </div>
+        </ModalHeader>
+        
+        <ModalBody>
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-base text-muted-foreground">Purpose</Label>
+                <p className="text-xl font-bold">{formData.purpose}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-base text-muted-foreground">Closure Type</Label>
+                <Badge variant="outline" className="text-base px-3 py-1">
+                  {formData.closureType}
+                </Badge>
+              </div>
             </div>
 
             <Separator />
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-road-type" className="text-base">Road Type *</Label>
-                <Select value={formData.roadType} onValueChange={(value) => setFormData({ ...formData, roadType: value })}>
-                  <SelectTrigger className="text-base h-11">
-                    <SelectValue placeholder="Select road type" />
-                  </SelectTrigger>
-                  <SelectContent className="text-base">
-                    <SelectItem value="Protocol Roads" className="text-base">Protocol Roads</SelectItem>
-                    <SelectItem value="Secondary Roads" className="text-base">Secondary Roads</SelectItem>
-                    <SelectItem value="Tertiary Roads" className="text-base">Tertiary Roads</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-4">
+              <Label className="text-base font-semibold">Update Rates by Road Type</Label>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-road-type" className="text-base">Select Road Type *</Label>
+                  <Select value={formData.roadType} onValueChange={(value) => setFormData({ ...formData, roadType: value })}>
+                    <SelectTrigger className="text-base h-11">
+                      <SelectValue placeholder="Select road type to update" />
+                    </SelectTrigger>
+                    <SelectContent className="text-base">
+                      <SelectItem value="Protocol Roads" className="text-base">Protocol Roads</SelectItem>
+                      <SelectItem value="Secondary Roads" className="text-base">Secondary Roads</SelectItem>
+                      <SelectItem value="Tertiary Roads" className="text-base">Tertiary Roads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-rate" className="text-base">Rate (MZN/hr) *</Label>
-                <Input
-                  id="edit-rate"
-                  type="number"
-                  placeholder="e.g., 50000"
-                  value={formData.rate}
-                  onChange={(e) => {
-                    setFormData({ ...formData, rate: e.target.value })
-                    if (formData.roadType) {
-                      handleRateUpdate(formData.roadType, e.target.value)
-                    }
-                  }}
-                  className="text-base h-11"
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="edit-rate" className="text-base">New Rate (MZN/hr) *</Label>
+                  <Input
+                    id="edit-rate"
+                    type="number"
+                    placeholder="e.g., 50000"
+                    value={formData.rate}
+                    onChange={(e) => {
+                      setFormData({ ...formData, rate: e.target.value })
+                      if (formData.roadType) {
+                        handleRateUpdate(formData.roadType, e.target.value)
+                      }
+                    }}
+                    className="text-base h-11"
+                  />
+                </div>
               </div>
             </div>
+
+            <Separator />
 
             {/* Display current rates */}
-            <div className="rounded-lg bg-muted/50 p-4 space-y-2">
+            <div className="space-y-3">
               <Label className="text-base font-semibold">Current Rates:</Label>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Protocol Roads</p>
-                  <p className="font-bold text-base">{parseInt(tariffRates.protocolRoads || "0").toLocaleString()} MZN/hr</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Secondary Roads</p>
-                  <p className="font-bold text-base">{parseInt(tariffRates.secondaryRoads || "0").toLocaleString()} MZN/hr</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Tertiary Roads</p>
-                  <p className="font-bold text-base">{parseInt(tariffRates.tertiaryRoads || "0").toLocaleString()} MZN/hr</p>
-                </div>
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs">Protocol Roads</CardDescription>
+                    <CardTitle className="text-2xl">{parseInt(tariffRates.protocolRoads || "0").toLocaleString()}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">MZN/hr</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs">Secondary Roads</CardDescription>
+                    <CardTitle className="text-2xl">{parseInt(tariffRates.secondaryRoads || "0").toLocaleString()}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">MZN/hr</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs">Tertiary Roads</CardDescription>
+                    <CardTitle className="text-2xl">{parseInt(tariffRates.tertiaryRoads || "0").toLocaleString()}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">MZN/hr</p>
+                  </CardContent>
+                </Card>
               </div>
             </div>
+
+            <Separator />
 
             <div className="space-y-2">
               <Label htmlFor="edit-effective-date" className="text-base">Effective Date *</Label>
@@ -592,85 +684,43 @@ export function TariffsPage() {
               />
             </div>
           </div>
+        </ModalBody>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="text-base h-11 px-6">
-              Cancel
-            </Button>
-            <Button onClick={handleEditTariff} className="text-base h-11 px-6">
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="text-base h-11 px-6">
+            Cancel
+          </Button>
+          <Button onClick={handleEditTariff} className="text-base h-11 px-6">
+            Save Changes
+          </Button>
+        </ModalFooter>
+      </Modal>
 
-      {/* Manage Penalties Dialog */}
-      <Dialog open={isPenaltyDialogOpen} onOpenChange={setIsPenaltyDialogOpen}>
-        <DialogContent className="text-base">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Manage Penalty Rates</DialogTitle>
-            <DialogDescription className="text-base">
-              Update penalty percentages for non-compliance
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="late-payment" className="text-base">Late Payment Penalty (%)</Label>
-              <Input
-                id="late-payment"
-                type="number"
-                value={penaltyFormData.latePayment}
-                onChange={(e) => setPenaltyFormData({ ...penaltyFormData, latePayment: e.target.value })}
-                className="text-base h-11"
-              />
-              <p className="text-sm text-muted-foreground">Applied to outstanding RUC amount</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="non-compliance" className="text-base">Non-Compliance Fine (%)</Label>
-              <Input
-                id="non-compliance"
-                type="number"
-                value={penaltyFormData.nonCompliance}
-                onChange={(e) => setPenaltyFormData({ ...penaltyFormData, nonCompliance: e.target.value })}
-                className="text-base h-11"
-              />
-              <p className="text-sm text-muted-foreground">Additional penalty for violations</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="repeat-offender" className="text-base">Repeat Offender Penalty (%)</Label>
-              <Input
-                id="repeat-offender"
-                type="number"
-                value={penaltyFormData.repeatOffender}
-                onChange={(e) => setPenaltyFormData({ ...penaltyFormData, repeatOffender: e.target.value })}
-                className="text-base h-11"
-              />
-              <p className="text-sm text-muted-foreground">For multiple violations</p>
-            </div>
-
-            <div className="rounded-lg bg-[#F4A62A]/10 border border-[#F4A62A]/20 p-4">
-              <div className="flex gap-3">
-                <AlertCircle className="h-5 w-5 text-[#F4A62A] flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-muted-foreground">
-                  Changes to penalty rates will apply to all new violations. Existing penalties will not be affected.
-                </div>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="text-base">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl">Delete Tariff</AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              Are you sure you want to delete the tariff for <strong>{tariffToDelete?.purpose}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+              <div className="text-sm text-muted-foreground">
+                Deleting this tariff will affect all future permit applications for this purpose. Existing permits will not be affected.
               </div>
             </div>
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPenaltyDialogOpen(false)} className="text-base h-11 px-6">
-              Cancel
-            </Button>
-            <Button onClick={handleUpdatePenalties} className="text-base h-11 px-6">
-              Update Penalties
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-base h-11 px-6">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTariff} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">
+              Delete Tariff
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

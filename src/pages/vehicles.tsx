@@ -11,7 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Truck, Search, Eye, Pencil, Trash2, Download, CheckCircle, XCircle, AlertCircle } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Truck, Search, Eye, CheckCircle, XCircle, AlertCircle } from "lucide-react"
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { toast } from "sonner"
 
 // Mock vehicle data
@@ -86,6 +88,8 @@ export function VehiclesPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<typeof mockVehicles[0] | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   // Form state
   const [formData, setFormData] = useState({
@@ -107,6 +111,12 @@ export function VehiclesPage() {
     
     return matchesSearch && matchesStatus
   })
+
+  // Pagination
+  const totalPages = Math.ceil(filteredVehicles.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedVehicles = filteredVehicles.slice(startIndex, endIndex)
 
   // Group by status
   const activeCount = vehicles.filter(v => v.status === "Active").length
@@ -239,7 +249,7 @@ export function VehiclesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Total Vehicles</CardDescription>
@@ -332,7 +342,7 @@ export function VehiclesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredVehicles.map((vehicle) => (
+                {paginatedVehicles.map((vehicle) => (
                   <TableRow key={vehicle.id}>
                     <TableCell className="font-mono font-medium text-base">{vehicle.plate}</TableCell>
                     <TableCell className="text-base">{vehicle.owner}</TableCell>
@@ -349,41 +359,6 @@ export function VehiclesPage() {
                         >
                           <Eye className="h-5 w-5" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(vehicle)}
-                          className="h-10 w-10"
-                        >
-                          <Pencil className="h-5 w-5" />
-                        </Button>
-                        
-                        {/* Delete Confirmation Dialog */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10">
-                              <Trash2 className="h-5 w-5 text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="text-base">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle className="text-2xl">Remove Vehicle</AlertDialogTitle>
-                              <AlertDialogDescription className="text-base">
-                                Are you sure you want to remove <strong>{vehicle.plate}</strong>? 
-                                This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel className="text-base h-11 px-6">Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteVehicle(vehicle.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6"
-                              >
-                                Remove
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -391,21 +366,80 @@ export function VehiclesPage() {
               </TableBody>
             </Table>
           )}
+
+          {/* Pagination */}
+          {!isLoading && filteredVehicles.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredVehicles.length)} of {filteredVehicles.length} vehicles
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Vehicle Details Dialog */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="text-base max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Vehicle Details</DialogTitle>
-            <DialogDescription className="text-base">
+      {/* Vehicle Details Modal */}
+      <Modal open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen} className="w-[90vw] max-w-[1200px]">
+        <ModalHeader onClose={() => setIsDetailsDialogOpen(false)}>
+          <div>
+            <ModalTitle>Vehicle Details</ModalTitle>
+            <ModalDescription>
               Complete information for {selectedVehicle?.plate}
-            </DialogDescription>
-          </DialogHeader>
-          
+            </ModalDescription>
+          </div>
+        </ModalHeader>
+        
+        <ModalBody>
           {selectedVehicle && (
-            <div className="space-y-6 py-4">
+            <div className="space-y-6">
+              {/* Compliance Status Banner */}
+              {selectedVehicle.compliance === "Non-compliant" && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-destructive">Non-Compliant Vehicle</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Payment overdue since {selectedVehicle.lastPayment}. Vehicle may be subject to enforcement action.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedVehicle.compliance === "Compliant" && (
+                <div className="rounded-lg bg-[#D6F0E0]/30 border border-[#D6F0E0] p-4 flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 text-[#4FAF7C] mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-[#4FAF7C]">Compliant Vehicle</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      All payments up to date. Last payment: {selectedVehicle.lastPayment}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Vehicle Info Grid */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -442,17 +476,131 @@ export function VehiclesPage() {
                   <Label className="text-base text-muted-foreground">Last Payment</Label>
                   <p className="text-lg font-medium">{selectedVehicle.lastPayment}</p>
                 </div>
+
+                <div className="space-y-2">
+                  <Label className="text-base text-muted-foreground">Days Since Payment</Label>
+                  <p className="text-lg font-medium">
+                    {Math.floor((new Date().getTime() - new Date(selectedVehicle.lastPayment).getTime()) / (1000 * 60 * 60 * 24))} days
+                  </p>
+                </div>
               </div>
+
+              <Separator />
+
+              {/* Transaction History */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Recent Transaction History</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-5 w-5 text-[#4FAF7C]" />
+                      <div>
+                        <p className="text-sm font-medium">Payment Received</p>
+                        <p className="text-xs text-muted-foreground">{selectedVehicle.lastPayment}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-5 w-5 text-[#4FAF7C]" />
+                      <div>
+                        <p className="text-sm font-medium">Payment Received</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(new Date(selectedVehicle.lastPayment).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-5 w-5 text-[#4FAF7C]" />
+                      <div>
+                        <p className="text-sm font-medium">Payment Received</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(new Date(selectedVehicle.lastPayment).getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Payment Summary */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Payment Summary</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Total Paid (30 days)</CardDescription>
+                      <CardTitle className="text-xl">{(selectedVehicle.dailyRate * 4).toLocaleString()} MZN</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Total Paid (90 days)</CardDescription>
+                      <CardTitle className="text-xl">{(selectedVehicle.dailyRate * 13).toLocaleString()} MZN</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Payment Status</CardDescription>
+                      <CardTitle className="text-xl">
+                        {selectedVehicle.compliance === "Compliant" ? (
+                          <span className="text-[#4FAF7C]">Current</span>
+                        ) : (
+                          <span className="text-destructive">Overdue</span>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Warnings/Alerts */}
+              {selectedVehicle.compliance === "Non-compliant" && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Active Warnings</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/30">
+                        <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-destructive">Payment Overdue</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Last payment was {Math.floor((new Date().getTime() - new Date(selectedVehicle.lastPayment).getTime()) / (1000 * 60 * 60 * 24))} days ago. 
+                            Penalties may apply.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#FFF306]/20 border border-[#FFF306]/50">
+                        <AlertCircle className="h-5 w-5 text-[#DAA22A] mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">Enforcement Risk</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Vehicle may be subject to impoundment or citation if payment is not received soon.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
+        </ModalBody>
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)} className="text-base h-11 px-6">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <ModalFooter>
+          {/* Footer can be used for additional actions if needed */}
+        </ModalFooter>
+      </Modal>
 
       {/* Edit Vehicle Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

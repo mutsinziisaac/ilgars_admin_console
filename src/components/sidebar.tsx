@@ -7,13 +7,15 @@ import {
   Users as UsersIcon, 
   BarChart3, 
   DollarSign,
-  ChevronDown
+  Settings,
+  ChevronDown,
+  ShieldAlert
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface SidebarProps {
-  currentPage: "dashboard" | "transactions" | "permits" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs"
-  onNavigate: (page: "dashboard" | "transactions" | "permits" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs") => void
+  currentPage: "dashboard" | "transactions" | "permits" | "authorizations" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs" | "configs"
+  onNavigate: (page: "dashboard" | "transactions" | "permits" | "authorizations" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs" | "configs") => void
 }
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
@@ -21,11 +23,13 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { icon: LayoutDashboard, label: "Overview", page: "dashboard" as const },
     { icon: Receipt, label: "Transactions", page: "transactions" as const },
     { icon: FileText, label: "Permits", page: "permits" as const, badge: 8 },
-    { icon: Shield, label: "Enforcement", page: "enforcement" as const },
+    { icon: Shield, label: "Authorizations", page: "authorizations" as const, badge: 5 },
+    { icon: ShieldAlert, label: "Enforcement", page: "enforcement" as const },
     { icon: Truck, label: "Vehicles", page: "vehicles" as const },
     { icon: UsersIcon, label: "Transporters", page: "transporters" as const },
     { icon: BarChart3, label: "Reports", page: "reports" as const },
     { icon: DollarSign, label: "Tariffs", page: "tariffs" as const },
+    // { icon: Settings, label: "Configs", page: "configs" as const },
   ]
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-sidebar-border bg-card">

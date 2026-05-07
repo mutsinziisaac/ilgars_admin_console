@@ -7,12 +7,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Plus, Receipt } from "lucide-react"
+import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Plus, Receipt, MapPin, FileCheck, AlertTriangle, Shield, Calendar } from "lucide-react"
 import { toast } from "sonner"
 
 const TARIFFS: Record<string, Record<string, number>> = {
@@ -73,6 +74,8 @@ export function PermitsPage() {
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
   const [form, setForm] = useState({ applicant: "", contactEmail: "", contactPhone: "", purpose: "", roadType: "", location: "", hours: "", eventDate: "", notes: "" })
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   const previewRate = form.purpose && form.roadType ? (TARIFFS[form.purpose]?.[form.roadType] ?? 0) : 0
   const previewFee  = previewRate * (Number(form.hours) || 0)
@@ -87,6 +90,12 @@ export function PermitsPage() {
     const matchSearch = p.id.toLowerCase().includes(q) || p.applicant.toLowerCase().includes(q) || p.purpose.toLowerCase().includes(q) || p.location.toLowerCase().includes(q)
     return matchSearch && (statusFilter === "all" || p.status === statusFilter)
   })
+
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedPermits = filtered.slice(startIndex, endIndex)
 
   const handleApprove = () => {
     if (!selectedPermit) return
@@ -135,28 +144,16 @@ export function PermitsPage() {
   }
 
   const purposeBadge = (purpose: string) => {
-    const colors: Record<string, string> = {
-      "Filming":            "bg-primary text-primary-foreground",
-      "Construction Works": "bg-[#6B6B6B] text-white",
-      "Sporting Events":    "bg-[#4FAF7C] text-white",
-      "Fairs":              "bg-[#DAA22A] text-[#1C1C1C]",
-      "For-Profit Events":  "bg-[#9B59B6] text-white",
-    }
-    return <Badge className={`${colors[purpose] ?? "bg-secondary text-secondary-foreground"} text-sm px-3 py-1`}>{purpose}</Badge>
+    return <Badge className="bg-[#4FAF7C] text-white text-sm px-3 py-1">{purpose}</Badge>
   }
 
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-semibold text-foreground">Permits</h1>
-          <p className="text-lg text-muted-foreground">Road usage permit applications</p>
-        </div>
-        <Button onClick={() => setIsAddOpen(true)} className="gap-2 text-base h-11 px-6">
-          <Plus className="h-5 w-5" />New Permit
-        </Button>
+      <div>
+        <h1 className="text-4xl font-semibold text-foreground">Permits</h1>
+        <p className="text-lg text-muted-foreground">Road usage permit applications</p>
       </div>
 
       {/* Stats */}
@@ -214,7 +211,7 @@ export function PermitsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(permit => (
+                {paginatedPermits.map(permit => (
                   <TableRow key={permit.id}>
                     <TableCell className="font-mono font-medium text-base">{permit.id}</TableCell>
                     <TableCell className="text-base font-medium">{permit.applicant}</TableCell>
@@ -237,53 +234,275 @@ export function PermitsPage() {
               </TableBody>
             </Table>
           )}
+
+          {/* Pagination */}
+          {!isLoading && filtered.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, filtered.length)} of {filtered.length} permits
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
 
       {/* ── Details Dialog ── */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="max-w-2xl text-base">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Permit Details</DialogTitle>
-            <DialogDescription className="text-base">{selectedPermit?.id}</DialogDescription>
-          </DialogHeader>
+      <Modal open={isDetailsOpen} onOpenChange={setIsDetailsOpen} className="w-[95vw] max-w-[1400px]">
+        <ModalHeader onClose={() => setIsDetailsOpen(false)}>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <ModalTitle>{selectedPermit?.id}</ModalTitle>
+                <span className="text-sm text-muted-foreground">• Submitted {selectedPermit?.submittedDate}</span>
+              </div>
+              <ModalDescription>
+                {selectedPermit?.purpose} — {selectedPermit?.applicant}
+              </ModalDescription>
+            </div>
+            {selectedPermit?.status === "Pending" && (
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setIsRejectOpen(true)} className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+                <Button onClick={() => setIsApproveOpen(true)} className="text-base h-11 px-6 bg-[#4FAF7C] text-white hover:bg-[#4FAF7C]/90">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve
+                </Button>
+              </div>
+            )}
+          </div>
+        </ModalHeader>
+        
+        <ModalBody>
           {selectedPermit && (
-            <div className="space-y-5 py-2">
-              <div className="flex items-center justify-between">{statusBadge(selectedPermit.status)}<span className="text-sm text-muted-foreground">Submitted {selectedPermit.submittedDate}</span></div>
-              <Separator />
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label className="text-sm text-muted-foreground">Applicant</Label><p className="text-base font-semibold">{selectedPermit.applicant}</p></div>
-                <div><Label className="text-sm text-muted-foreground">Contact Email</Label><p className="text-base">{selectedPermit.contactEmail}</p></div>
-                <div><Label className="text-sm text-muted-foreground">Phone</Label><p className="text-base">{selectedPermit.contactPhone}</p></div>
-                <div><Label className="text-sm text-muted-foreground">Purpose</Label><div className="mt-1">{purposeBadge(selectedPermit.purpose)}</div></div>
-                <div><Label className="text-sm text-muted-foreground">Road Type</Label><p className="text-base font-medium">{selectedPermit.roadType}</p></div>
-                <div><Label className="text-sm text-muted-foreground">Duration</Label><p className="text-base font-medium">{selectedPermit.hours} hours</p></div>
-                <div className="col-span-2"><Label className="text-sm text-muted-foreground">Location</Label><p className="text-base">{selectedPermit.location}</p></div>
-                <div><Label className="text-sm text-muted-foreground">Event Date</Label><p className="text-base font-medium">{selectedPermit.eventDate}</p></div>
-                <div><Label className="text-sm text-muted-foreground">Payment Deadline</Label><p className="text-base font-medium">{selectedPermit.paymentDeadline}</p></div>
+            <div className="grid grid-cols-3 gap-6">
+              {/* Left Column - Main Details */}
+              <div className="col-span-2 space-y-6">
+                {/* Location & Route Info */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                    <MapPin className="h-4 w-4" />
+                    <span>{selectedPermit.location}</span>
+                  </div>
+                  
+                  {/* Map Placeholder */}
+                  <div className="rounded-lg bg-gradient-to-br from-[#D6F0E0]/30 to-[#4FAF7C]/20 border border-[#4FAF7C]/30 p-8 flex items-center justify-center min-h-[200px]">
+                    <div className="text-center space-y-2">
+                      <MapPin className="h-12 w-12 mx-auto text-[#4FAF7C]" />
+                      <p className="text-sm text-muted-foreground">Route visualization</p>
+                      <p className="text-xs text-muted-foreground">{selectedPermit.location}</p>
+                    </div>
+                  </div>
+
+                  {/* Route Details Grid */}
+                  <div className="grid grid-cols-3 gap-4 pt-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground uppercase">Road Class</Label>
+                      <p className="text-lg font-semibold">{selectedPermit.roadType}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground uppercase">Hourly Rate</Label>
+                      <p className="text-lg font-semibold">{selectedPermit.hourlyRate.toLocaleString()} MZN</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground uppercase">Hours</Label>
+                      <p className="text-lg font-semibold">{selectedPermit.hours}h</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground uppercase">Event Date & Time</Label>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-base font-medium">{selectedPermit.eventDate}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground uppercase">Total Fee</Label>
+                      <p className="text-2xl font-bold text-[#4FAF7C]">{selectedPermit.totalFee.toLocaleString()} MZN</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Justification */}
+                {selectedPermit.notes && (
+                  <>
+                    <div className="space-y-3">
+                      <h3 className="text-base font-semibold uppercase text-muted-foreground">Justification</h3>
+                      <div className="rounded-lg bg-muted/40 p-4">
+                        <p className="text-base leading-relaxed">{selectedPermit.notes}</p>
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
+
+                {/* Attached Documents */}
+                <div className="space-y-3">
+                  <h3 className="text-base font-semibold uppercase text-muted-foreground">Attached Documents</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">application-form.pdf</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">route-plan.pdf</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">insurance.pdf</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rejection Reason if applicable */}
+                {selectedPermit.rejectionReason && (
+                  <>
+                    <Separator />
+                    <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">
+                      <div className="flex items-start gap-3">
+                        <XCircle className="h-5 w-5 text-destructive mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-semibold text-destructive mb-1">Rejection Reason</p>
+                          <p className="text-sm text-muted-foreground">{selectedPermit.rejectionReason}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-              <Separator />
-              <div className="rounded-lg bg-muted/40 p-4 space-y-2">
-                <p className="text-sm text-muted-foreground">Fee Calculation</p>
-                <p className="text-base">{selectedPermit.hourlyRate.toLocaleString()} MZN/hr × {selectedPermit.hours} hrs</p>
-                <p className="text-2xl font-bold text-primary">= {selectedPermit.totalFee.toLocaleString()} MZN</p>
+
+              {/* Right Column - Applicant & Checks */}
+              <div className="space-y-6">
+                {/* Applicant Info */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs uppercase">Applicant</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <p className="text-lg font-bold mb-1">{selectedPermit.applicant}</p>
+                      <p className="text-xs text-muted-foreground">Chest ID 100184733 • 3 prior permits</p>
+                    </div>
+                    <Separator />
+                    <div className="space-y-2 text-sm">
+                      <p className="text-muted-foreground break-all">{selectedPermit.contactEmail}</p>
+                      <p className="text-muted-foreground">{selectedPermit.contactPhone}</p>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">History score</span>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">4.8 / 5</p>
+                        <p className="text-xs text-[#4FAF7C]">Trusted</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Automated Checks */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs uppercase">Automated Checks</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {/* Check items */}
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
+                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Road class verified</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
+                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">No conflicting permits in window</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full bg-[#FFF306]/30 p-1 mt-0.5">
+                        <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Overlaps weekend market</p>
+                        <p className="text-xs text-muted-foreground">(informational)</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
+                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Insurance policy active</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
+                        <Shield className="h-4 w-4 text-[#4FAF7C]" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Safety plan approved</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Status Badge */}
+                <div className="flex justify-center">
+                  {statusBadge(selectedPermit.status)}
+                </div>
               </div>
-              {selectedPermit.notes && <div><Label className="text-sm text-muted-foreground">Notes</Label><p className="text-base mt-1">{selectedPermit.notes}</p></div>}
-              {selectedPermit.rejectionReason && <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3"><Label className="text-sm text-destructive">Rejection Reason</Label><p className="text-base mt-1">{selectedPermit.rejectionReason}</p></div>}
             </div>
           )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsDetailsOpen(false)} className="text-base h-11 px-6">Close</Button>
-            {selectedPermit?.status === "Pending" && (
-              <>
-                <Button variant="outline" onClick={() => setIsRejectOpen(true)} className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10"><XCircle className="h-4 w-4 mr-2" />Reject</Button>
-                <Button onClick={() => setIsApproveOpen(true)} className="text-base h-11 px-6 bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80"><CheckCircle className="h-4 w-4 mr-2" />Approve</Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </ModalBody>
+
+        <ModalFooter>
+          {/* Footer can be used for additional actions if needed */}
+        </ModalFooter>
+      </Modal>
 
       {/* ── Approve Dialog ── */}
       <AlertDialog open={isApproveOpen} onOpenChange={setIsApproveOpen}>

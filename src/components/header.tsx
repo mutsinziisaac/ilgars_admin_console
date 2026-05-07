@@ -1,5 +1,4 @@
-import { Bell, Download } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Bell } from "lucide-react"
 
 export function Header() {
   return (
@@ -18,12 +17,6 @@ export function Header() {
             <Bell className="h-5 w-5 text-foreground" />
             <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" />
           </button>
-
-          {/* Export Button */}
-          <Button className="gap-2 text-base">
-            <Download className="h-4 w-4" />
-            Export
-          </Button>
         </div>
       </div>
     </header>

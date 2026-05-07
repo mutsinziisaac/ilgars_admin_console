@@ -6,12 +6,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Search, Eye, Pencil, Trash2, Download, CheckCircle, XCircle, Building2, Phone, Mail } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Users, Search, Eye, CheckCircle, XCircle, Building2, Phone, Mail } from "lucide-react"
 import { toast } from "sonner"
 
 // Mock transporter data
@@ -91,6 +93,10 @@ export function TransportersPage() {
   const [selectedTransporter, setSelectedTransporter] = useState<typeof mockTransporters[0] | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+  const [fleetCurrentPage, setFleetCurrentPage] = useState(1)
+  const vehiclesPerPage = 5
 
   // Form state
   const [formData, setFormData] = useState({
@@ -114,6 +120,12 @@ export function TransportersPage() {
     return matchesSearch && matchesStatus
   })
 
+  // Pagination
+  const totalPages = Math.ceil(filteredTransporters.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTransporters = filteredTransporters.slice(startIndex, endIndex)
+
   // Group by status
   const activeCount = transporters.filter(t => t.status === "Active").length
   const compliantCount = transporters.filter(t => t.compliance === "Compliant").length
@@ -123,7 +135,56 @@ export function TransportersPage() {
   const handleViewDetails = (transporter: typeof mockTransporters[0]) => {
     setSelectedTransporter(transporter)
     setIsDetailsDialogOpen(true)
+    setFleetCurrentPage(1) // Reset to first page when opening
   }
+
+  // Get mock fleet data for selected transporter
+  const getFleetData = (transporterId: number) => {
+    const allVehicles = []
+    
+    if (transporterId === 1) {
+      allVehicles.push(
+        { plate: "MZB 5678 B", type: "Cargo Truck", lastPayment: "2026-04-20", daysOverdue: 17, fines: "25,500 MZN", status: "Non-Compliant" },
+        { plate: "MZB 1234 A", type: "Heavy Truck", lastPayment: "2026-05-03", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 9876 C", type: "Tractor", lastPayment: "2026-05-01", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 4455 D", type: "Cargo Truck", lastPayment: "2026-04-15", daysOverdue: 22, fines: "33,000 MZN", status: "Non-Compliant" },
+        { plate: "MZB 2211 E", type: "Heavy Truck", lastPayment: "2026-05-04", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 6677 F", type: "Tractor", lastPayment: "2026-05-02", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 8899 G", type: "Cargo Truck", lastPayment: "2026-04-28", daysOverdue: 9, fines: "13,500 MZN", status: "Non-Compliant" },
+        { plate: "MZB 3322 H", type: "Heavy Truck", lastPayment: "2026-05-05", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 5544 I", type: "Tractor", lastPayment: "2026-05-03", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 7766 J", type: "Cargo Truck", lastPayment: "2026-05-01", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 9988 K", type: "Heavy Truck", lastPayment: "2026-05-04", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 1122 L", type: "Tractor", lastPayment: "2026-05-02", daysOverdue: 0, fines: "0 MZN", status: "Compliant" }
+      )
+    } else if (transporterId === 2) {
+      allVehicles.push(
+        { plate: "MZB 0011 E", type: "Tractor", lastPayment: "2026-05-04", daysOverdue: 0, fines: "0 MZN", status: "Compliant" },
+        { plate: "MZB 2233 F", type: "Heavy Truck", lastPayment: "2026-05-02", daysOverdue: 0, fines: "0 MZN", status: "Compliant" }
+      )
+    } else if (transporterId === 3) {
+      allVehicles.push(
+        { plate: "MZB 3344 F", type: "Heavy Truck", lastPayment: "2026-04-10", daysOverdue: 27, fines: "40,500 MZN", status: "Non-Compliant" },
+        { plate: "MZB 5566 G", type: "Cargo Truck", lastPayment: "2026-05-01", daysOverdue: 0, fines: "0 MZN", status: "Compliant" }
+      )
+    } else {
+      allVehicles.push(
+        { plate: "MZB XXXX X", type: "Cargo Truck", lastPayment: "2026-05-02", daysOverdue: 0, fines: "0 MZN", status: "Compliant" }
+      )
+    }
+    
+    return allVehicles
+  }
+
+  // Pagination logic
+  const paginatedVehicles = selectedTransporter ? (() => {
+    const allVehicles = getFleetData(selectedTransporter.id)
+    const startIndex = (fleetCurrentPage - 1) * vehiclesPerPage
+    const endIndex = startIndex + vehiclesPerPage
+    return allVehicles.slice(startIndex, endIndex)
+  })() : []
+
+  const fleetTotalPages = selectedTransporter ? Math.ceil(getFleetData(selectedTransporter.id).length / vehiclesPerPage) : 0
 
   // Handle edit transporter
   const handleEditTransporter = () => {
@@ -350,7 +411,7 @@ export function TransportersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransporters.map((transporter) => (
+                {paginatedTransporters.map((transporter) => (
                   <TableRow key={transporter.id}>
                     <TableCell className="font-medium text-base">{transporter.name}</TableCell>
                     <TableCell className="font-mono text-base">{transporter.registrationNumber}</TableCell>
@@ -367,41 +428,6 @@ export function TransportersPage() {
                         >
                           <Eye className="h-5 w-5" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(transporter)}
-                          className="h-10 w-10"
-                        >
-                          <Pencil className="h-5 w-5" />
-                        </Button>
-                        
-                        {/* Delete Confirmation Dialog */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10">
-                              <Trash2 className="h-5 w-5 text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="text-base">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle className="text-2xl">Remove Transporter</AlertDialogTitle>
-                              <AlertDialogDescription className="text-base">
-                                Are you sure you want to remove <strong>{transporter.name}</strong>? 
-                                This action cannot be undone and will affect {transporter.vehicleCount} vehicles.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel className="text-base h-11 px-6">Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteTransporter(transporter.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6"
-                              >
-                                Remove
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -409,23 +435,57 @@ export function TransportersPage() {
               </TableBody>
             </Table>
           )}
+
+          {/* Pagination */}
+          {!isLoading && filteredTransporters.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredTransporters.length)} of {filteredTransporters.length} transporters
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Transporter Details Dialog */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="text-base max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Transporter Details</DialogTitle>
-            <DialogDescription className="text-base">
+      {/* Transporter Details Modal */}
+      <Modal open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen} className="w-[95vw] max-w-[1600px]">
+        <ModalHeader onClose={() => setIsDetailsDialogOpen(false)}>
+          <div>
+            <ModalTitle>Transporter Details</ModalTitle>
+            <ModalDescription>
               Complete information for {selectedTransporter?.name}
-            </DialogDescription>
-          </DialogHeader>
-          
+            </ModalDescription>
+          </div>
+        </ModalHeader>
+        
+        <ModalBody>
           {selectedTransporter && (
-            <div className="space-y-6 py-4">
-              {/* Transporter Info Grid */}
-              <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-6">
+              {/* Company Info Grid */}
+              <div className="grid grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <Label className="text-base text-muted-foreground flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
@@ -461,30 +521,166 @@ export function TransportersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-base text-muted-foreground">Registered Vehicles</Label>
-                  <p className="text-lg font-medium">{selectedTransporter.vehicleCount} vehicles</p>
+                  <Label className="text-base text-muted-foreground">Registration Date</Label>
+                  <p className="text-lg font-medium">{selectedTransporter.registrationDate}</p>
                 </div>
 
                 <div className="col-span-2 space-y-2">
                   <Label className="text-base text-muted-foreground">Address</Label>
                   <p className="text-lg font-medium">{selectedTransporter.address}</p>
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label className="text-base text-muted-foreground">Registration Date</Label>
-                  <p className="text-lg font-medium">{selectedTransporter.registrationDate}</p>
+              <Separator />
+
+              {/* Fleet Overview */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">Fleet Overview</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Total Vehicles</CardDescription>
+                      <CardTitle className="text-2xl">{selectedTransporter.vehicleCount}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Compliant</CardDescription>
+                      <CardTitle className="text-2xl text-[#4FAF7C]">
+                        {Math.floor(selectedTransporter.vehicleCount * 0.75)}
+                      </CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Non-Compliant</CardDescription>
+                      <CardTitle className="text-2xl text-destructive">
+                        {Math.ceil(selectedTransporter.vehicleCount * 0.25)}
+                      </CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Total Fines</CardDescription>
+                      <CardTitle className="text-2xl text-[#DAA22A]">
+                        {(selectedTransporter.vehicleCount * 12500).toLocaleString()} MZN
+                      </CardTitle>
+                    </CardHeader>
+                  </Card>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Fleet Details Table */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold">Fleet Details</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((fleetCurrentPage - 1) * vehiclesPerPage) + 1}-{Math.min(fleetCurrentPage * vehiclesPerPage, selectedTransporter.vehicleCount)} of {selectedTransporter.vehicleCount} vehicles
+                  </p>
+                </div>
+                <div className="border rounded-lg">
+                  <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-base">Plate Number</TableHead>
+                      <TableHead className="text-base">Vehicle Type</TableHead>
+                      <TableHead className="text-base">Last Payment</TableHead>
+                      <TableHead className="text-base">Days Overdue</TableHead>
+                      <TableHead className="text-base">Fines</TableHead>
+                      <TableHead className="text-base">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedVehicles.map((vehicle, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-mono font-medium text-base">{vehicle.plate}</TableCell>
+                        <TableCell className="text-base">{vehicle.type}</TableCell>
+                        <TableCell className="text-base">{vehicle.lastPayment}</TableCell>
+                        <TableCell className={`text-base font-medium ${vehicle.daysOverdue > 0 ? 'text-destructive' : 'text-[#4FAF7C]'}`}>
+                          {vehicle.daysOverdue} days
+                        </TableCell>
+                        <TableCell className={`text-base ${vehicle.daysOverdue > 0 ? 'font-bold text-destructive' : ''}`}>
+                          {vehicle.fines}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={vehicle.status === "Compliant" ? "bg-[#4FAF7C] text-white text-sm" : "bg-destructive text-white text-sm"}>
+                            {vehicle.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                </div>
+                
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Page {fleetCurrentPage} of {fleetTotalPages}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setFleetCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={fleetCurrentPage === 1}
+                        className="text-base h-10 px-4"
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setFleetCurrentPage(prev => Math.min(fleetTotalPages, prev + 1))}
+                        disabled={fleetCurrentPage === fleetTotalPages}
+                        className="text-base h-10 px-4"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Payment Summary */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">Payment Summary</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <Card className="bg-muted/40">
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Total Paid (30 days)</CardDescription>
+                      <CardTitle className="text-xl">
+                        {(selectedTransporter.vehicleCount * 8000).toLocaleString()} MZN
+                      </CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card className="bg-muted/40">
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Outstanding Fines</CardDescription>
+                      <CardTitle className="text-xl text-destructive">
+                        {(selectedTransporter.vehicleCount * 12500).toLocaleString()} MZN
+                      </CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card className="bg-muted/40">
+                    <CardHeader className="pb-3">
+                      <CardDescription className="text-xs">Compliance Rate</CardDescription>
+                      <CardTitle className="text-xl text-[#4FAF7C]">75%</CardTitle>
+                    </CardHeader>
+                  </Card>
                 </div>
               </div>
             </div>
           )}
+        </ModalBody>
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)} className="text-base h-11 px-6">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <ModalFooter>
+          {/* Footer can be used for additional actions if needed */}
+        </ModalFooter>
+      </Modal>
 
       {/* Edit Transporter Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

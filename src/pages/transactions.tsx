@@ -84,6 +84,8 @@ export function TransactionsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedTransaction, setSelectedTransaction] = useState<typeof mockTransactions[0] | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   // Filter transactions
   const filteredTransactions = transactions.filter(txn => {
@@ -96,6 +98,12 @@ export function TransactionsPage() {
     
     return matchesSearch && matchesStatus
   })
+
+  // Pagination
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex)
 
   // Group by status
   const completedCount = transactions.filter(t => t.status === "Completed").length
@@ -294,7 +302,7 @@ export function TransactionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransactions.map((txn) => (
+                {paginatedTransactions.map((txn) => (
                   <TableRow key={txn.id}>
                     <TableCell className="font-medium text-base">{txn.id}</TableCell>
                     <TableCell className="text-base">{txn.vehicle}</TableCell>
@@ -351,6 +359,38 @@ export function TransactionsPage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+
+          {/* Pagination */}
+          {!isLoading && filteredTransactions.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredTransactions.length)} of {filteredTransactions.length} transactions
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
