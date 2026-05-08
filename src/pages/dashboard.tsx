@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, PieChart, Pie, Cell } from "recharts"
 import { useState } from "react"
@@ -60,7 +60,7 @@ export function DashboardPage() {
   // Compliance data for donut chart
   const complianceData = [
     { name: "Compliant", value: 1847, color: "#D6F0E0" },
-    { name: "Postponed open", value: 331, color: "#FFF306" },
+    { name: "Postponed open", value: 331, color: "#DAA22A" },
     { name: "Delinquent", value: 189, color: "#E5533D" },
   ]
 
@@ -77,7 +77,7 @@ export function DashboardPage() {
 
   const complianceChartConfig = {
     compliant: { label: "Compliant", color: "#D6F0E0" },
-    postponed: { label: "Postponed open", color: "#FFF306" },
+    postponed: { label: "Postponed open", color: "#DAA22A" },
     delinquent: { label: "Delinquent", color: "#E5533D" },
   }
 
@@ -133,7 +133,7 @@ export function DashboardPage() {
           <CardContent>
             <div className="text-4xl font-bold">8</div>
             <div className="mt-2 flex items-center gap-2">
-              <Badge variant="outline" className="border-[#FFF306]/30 bg-[#FFF306]/10 text-[#1C1C1C] hover:bg-[#FFF306]/20 text-sm px-2 py-1 flex items-center gap-1">
+              <Badge variant="outline" className="border-[#DAA22A]/30 bg-[#DAA22A]/10 text-[#1C1C1C] hover:bg-[#DAA22A]/20 text-sm px-2 py-1 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3" />
                 +2
               </Badge>
@@ -171,13 +171,16 @@ export function DashboardPage() {
               <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
                 Revenue · Last {timeRange === "day" ? "24 Hours" : timeRange === "week" ? "14 Days" : "4 Weeks"}
               </CardTitle>
-              <Tabs value={timeRange} onValueChange={(value) => setTimeRange(value as "day" | "week" | "month")}>
-                <TabsList>
-                  <TabsTrigger value="day" className="text-sm">Day</TabsTrigger>
-                  <TabsTrigger value="week" className="text-sm">Week</TabsTrigger>
-                  <TabsTrigger value="month" className="text-sm">Month</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <Select value={timeRange} onValueChange={(value) => setTimeRange(value as "day" | "week" | "month")}>
+                <SelectTrigger className="w-[120px] text-sm h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="text-sm">
+                  <SelectItem value="day" className="text-sm">Day</SelectItem>
+                  <SelectItem value="week" className="text-sm">Week</SelectItem>
+                  <SelectItem value="month" className="text-sm">Month</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="text-4xl font-bold">{formattedTotal} <span className="text-xl font-normal text-muted-foreground">MZN</span></div>
           </CardHeader>
@@ -261,7 +264,7 @@ export function DashboardPage() {
                   <span className="text-base font-bold">124,800 MZN</span>
                 </div>
                 <div className="h-3 rounded-full bg-muted">
-                  <div className="h-3 rounded-full bg-[#FFF306]" style={{ width: "38%" }} />
+                  <div className="h-3 rounded-full bg-[#DAA22A]" style={{ width: "38%" }} />
                 </div>
               </div>
 
@@ -272,7 +275,7 @@ export function DashboardPage() {
                   <span className="text-base font-bold">98,400 MZN</span>
                 </div>
                 <div className="h-3 rounded-full bg-muted">
-                  <div className="h-3 rounded-full bg-[#FFF306]" style={{ width: "30%" }} />
+                  <div className="h-3 rounded-full bg-[#DAA22A]" style={{ width: "30%" }} />
                 </div>
               </div>
 
@@ -283,7 +286,7 @@ export function DashboardPage() {
                   <span className="text-base font-bold">72,600 MZN</span>
                 </div>
                 <div className="h-3 rounded-full bg-muted">
-                  <div className="h-3 rounded-full bg-[#FFF306]" style={{ width: "22%" }} />
+                  <div className="h-3 rounded-full bg-[#DAA22A]" style={{ width: "22%" }} />
                 </div>
               </div>
 

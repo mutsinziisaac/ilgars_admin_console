@@ -4,8 +4,8 @@ import { Header } from "./header"
 
 interface LayoutProps {
   children: ReactNode
-  currentPage: "dashboard" | "transactions" | "permits" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs"
-  onNavigate: (page: "dashboard" | "transactions" | "permits" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs") => void
+  currentPage: "dashboard" | "transactions" | "permits" | "authorizations" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs" | "configs"
+  onNavigate: (page: "dashboard" | "transactions" | "permits" | "authorizations" | "enforcement" | "vehicles" | "transporters" | "reports" | "tariffs" | "configs") => void
 }
 
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {

@@ -9,7 +9,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Download, Search, Filter, Eye, XCircle, CheckCircle, Clock, Truck } from "lucide-react"
 import { toast } from "sonner"
 
@@ -238,22 +237,22 @@ export function TransactionsPage() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-4 h-12">
-              <TabsTrigger value="all" className="text-base">
-                All ({transactions.length})
-              </TabsTrigger>
-              <TabsTrigger value="Completed" className="text-base">
-                Completed ({completedCount})
-              </TabsTrigger>
-              <TabsTrigger value="Pending" className="text-base">
-                Pending ({pendingCount})
-              </TabsTrigger>
-              <TabsTrigger value="Failed" className="text-base">
-                Failed ({failedCount})
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="mb-6 flex items-center justify-end gap-3">
+            <Label htmlFor="status-filter" className="text-base font-medium">
+              Filter by Status:
+            </Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger id="status-filter" className="w-[200px] text-base h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="text-base">
+                <SelectItem value="all" className="text-base">All ({transactions.length})</SelectItem>
+                <SelectItem value="Completed" className="text-base">Completed ({completedCount})</SelectItem>
+                <SelectItem value="Pending" className="text-base">Pending ({pendingCount})</SelectItem>
+                <SelectItem value="Failed" className="text-base">Failed ({failedCount})</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Search Bar */}
           <div className="mb-4">

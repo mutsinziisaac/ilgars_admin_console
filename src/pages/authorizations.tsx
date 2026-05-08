@@ -30,6 +30,9 @@ const mockAuthorizations = [
     validTo: "",
     approvedBy: "",
     approvedDate: "",
+    travelReason: "Transporting construction materials to Matola",
+    travelStartDate: "2024-01-25",
+    travelEndDate: "2024-02-25",
     documents: ["livrete.pdf", "title.pdf"]
   },
   {
@@ -48,6 +51,9 @@ const mockAuthorizations = [
     approvedBy: "",
     approvedDate: "",
     justification: "Emergency construction materials for hospital expansion",
+    travelReason: "Urgent delivery of medical equipment to Hospital Central",
+    travelStartDate: "2024-01-22",
+    travelEndDate: "2024-01-22",
     escortRequired: true,
     escortAssigned: false,
     documents: ["livrete.pdf", "title.pdf", "justification.pdf"]
@@ -273,7 +279,7 @@ export function AuthorizationsPage() {
       )
     if (status === "PENDING")
       return (
-        <Badge className="bg-[#FFF306] text-[#1C1C1C] text-sm px-3 py-1 gap-1">
+        <Badge className="bg-[#DAA22A] text-[#1C1C1C] text-sm px-3 py-1 gap-1">
           <Clock className="h-3.5 w-3.5" />
           Pending
         </Badge>
@@ -633,6 +639,29 @@ export function AuthorizationsPage() {
                   <div>
                     <Label className="text-sm text-muted-foreground">Submitted Date</Label>
                     <p className="text-base font-medium">{selectedAuth.submittedDate}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Travel Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Travel Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Reason for Travel</Label>
+                    <p className="text-base font-medium">{selectedAuth.travelReason || "Not specified"}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Travel Start Date</Label>
+                      <p className="text-base font-medium">{selectedAuth.travelStartDate || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Travel End Date</Label>
+                      <p className="text-base font-medium">{selectedAuth.travelEndDate || "Not specified"}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

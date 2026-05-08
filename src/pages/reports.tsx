@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Calendar, Download, FileText, TrendingUp, DollarSign, Truck, Users, AlertCircle, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
@@ -41,7 +40,7 @@ const enforcementData = [
 ]
 
 export function ReportsPage() {
-  const [reportType, setReportType] = useState("revenue")
+  const [reportType, setReportType] = useState("overview")
   const [dateRange, setDateRange] = useState("month")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -157,17 +156,37 @@ export function ReportsPage() {
         </CardContent>
       </Card>
 
-      {/* Report Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 h-12">
-          <TabsTrigger value="overview" className="text-base">Overview</TabsTrigger>
-          <TabsTrigger value="revenue" className="text-base">Revenue</TabsTrigger>
-          <TabsTrigger value="compliance" className="text-base">Compliance</TabsTrigger>
-          <TabsTrigger value="enforcement" className="text-base">Enforcement</TabsTrigger>
-        </TabsList>
+      {/* Report Type Filter */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl">Report View</CardTitle>
+              <CardDescription className="text-base">Select report type to view detailed analytics</CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <Label htmlFor="report-type" className="text-base font-medium">
+                Report Type:
+              </Label>
+              <Select value={reportType} onValueChange={setReportType}>
+                <SelectTrigger id="report-type" className="w-[200px] text-base h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="text-base">
+                  <SelectItem value="overview" className="text-base">Overview</SelectItem>
+                  <SelectItem value="revenue" className="text-base">Revenue</SelectItem>
+                  <SelectItem value="compliance" className="text-base">Compliance</SelectItem>
+                  <SelectItem value="enforcement" className="text-base">Enforcement</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+      {/* Overview Report */}
+      {reportType === "overview" && (
+        <div className="space-y-6">
           {/* Summary Cards */}
           <div className="grid gap-6 md:grid-cols-4">
             <Card>
@@ -270,10 +289,12 @@ export function ReportsPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Revenue Tab */}
-        <TabsContent value="revenue" className="space-y-6">
+      {/* Revenue Report */}
+      {reportType === "revenue" && (
+        <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">Revenue Trends</CardTitle>
@@ -324,10 +345,12 @@ export function ReportsPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Compliance Tab */}
-        <TabsContent value="compliance" className="space-y-6">
+      {/* Compliance Report */}
+      {reportType === "compliance" && (
+        <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -394,10 +417,12 @@ export function ReportsPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Enforcement Tab */}
-        <TabsContent value="enforcement" className="space-y-6">
+      {/* Enforcement Report */}
+      {reportType === "enforcement" && (
+        <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">Enforcement Activity</CardTitle>
@@ -448,8 +473,8 @@ export function ReportsPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   )
 }

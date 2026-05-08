@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Search, MapPin, AlertTriangle, CheckCircle, XCircle, Clock, Truck, FileText, Eye, User, Calendar } from "lucide-react"
 import { toast } from "sonner"
@@ -204,7 +203,7 @@ export function EnforcementPage() {
   const getActionBadge = (action: string) => {
     const colors: Record<string, string> = {
       "Vehicle Impounded": "bg-[#E5533D] text-white",
-      "Warning Issued": "bg-[#FFF306] text-[#1C1C1C]"
+      "Warning Issued": "bg-[#DAA22A] text-[#1C1C1C]"
     }
     return (
       <Badge className={`${colors[action] || "bg-secondary"} text-sm px-3 py-1`}>
@@ -248,7 +247,7 @@ export function EnforcementPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Warnings Issued</CardDescription>
-            <CardTitle className="text-4xl text-[#FFF306]">
+            <CardTitle className="text-4xl text-[#DAA22A]">
               {enforcementLogs.filter(l => l.action === "Warning Issued").length}
             </CardTitle>
           </CardHeader>
@@ -347,13 +346,21 @@ export function EnforcementPage() {
         </CardHeader>
         <CardContent>
           {/* Action Filter */}
-          <Tabs value={actionFilter} onValueChange={setActionFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-3 h-12">
-              <TabsTrigger value="all" className="text-sm">All</TabsTrigger>
-              <TabsTrigger value="Vehicle Impounded" className="text-sm">Impounded</TabsTrigger>
-              <TabsTrigger value="Warning Issued" className="text-sm">Warnings</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="mb-6 flex items-center justify-end gap-3">
+            <Label htmlFor="action-filter" className="text-base font-medium">
+              Filter by Action:
+            </Label>
+            <Select value={actionFilter} onValueChange={setActionFilter}>
+              <SelectTrigger id="action-filter" className="w-[200px] text-base h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="text-base">
+                <SelectItem value="all" className="text-base">All Actions</SelectItem>
+                <SelectItem value="Vehicle Impounded" className="text-base">Impounded</SelectItem>
+                <SelectItem value="Warning Issued" className="text-base">Warnings</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <Table>
             <TableHeader>
@@ -714,7 +721,7 @@ export function EnforcementPage() {
               )}
 
               {selectedEnforcement.action === "Warning Issued" && (
-                <div className="rounded-lg bg-[#FFF306]/20 border border-[#FFF306]/50 p-4">
+                <div className="rounded-lg bg-[#DAA22A]/20 border border-[#DAA22A]/50 p-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="h-5 w-5 text-[#DAA22A] mt-0.5" />
                     <div>

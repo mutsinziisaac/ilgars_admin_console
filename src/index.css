@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/outfit";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -50,7 +51,7 @@
 
 :root {
     /* Background colors - Light mode */
-    --background: #FDFCF9;                         /* Background (very light cream/almost white) */
+    --background: #FAF7EE;                         /* Background (brand cream) */
     --foreground: #1C1C1C;                         /* Text (dark gray/black) */
     
     /* Card colors */
@@ -65,12 +66,12 @@
     --primary: oklch(0.30 0.06 155);               /* Primary (Deep Green) #0A4429 approx */
     --primary-foreground: #FFFFFF;                 /* White text on green */
     
-    /* Secondary colors */
-    --secondary: #DAA22A;                          /* Secondary (Golden Yellow) */
+    /* Secondary colors - Brand Yellow */
+    --secondary: #DAA22A;                          /* Secondary (Brand Golden Yellow) */
     --secondary-foreground: #1C1C1C;               /* Dark text on yellow */
     
     /* Muted colors - for subtle text and backgrounds */
-    --muted: #F8F6F2;                              /* Very light background / subtle areas */
+    --muted: #FAF7EE;                              /* Brand cream background */
     --muted-foreground: #6B6B6B;                   /* Text Secondary (gray) */
     
     /* Accent colors - Soft Green Highlight */
@@ -83,7 +84,7 @@
     
     /* Success/Warning colors */
     --success: #D6F0E0;                            /* Success (light mint green) */
-    --warning: #FFF306;                            /* Warning (bright yellow) */
+    --warning: #DAA22A;                            /* Warning (brand yellow) */
     
     /* Border and input colors */
     --border: #F0EDE7;                             /* Border (very light beige/gray) */
@@ -101,7 +102,7 @@
     --radius: 0.75rem;                             /* 12px rounded corners */
     
     /* Sidebar colors */
-    --sidebar: #FDFCF9;                            /* Sidebar Background (very light cream) */
+    --sidebar: #FAF7EE;                            /* Sidebar Background (brand cream) */
     --sidebar-foreground: #6B6B6B;                 /* Text Secondary (gray) */
     --sidebar-primary: oklch(0.30 0.06 155);       /* Deep Green for active items */
     --sidebar-primary-foreground: #FFFFFF;         /* White text on green */

@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Plus, Receipt, MapPin, FileCheck, AlertTriangle, Shield, Calendar } from "lucide-react"
 import { toast } from "sonner"
+import { Map } from "@/components/ui/map"
 
 const TARIFFS: Record<string, Record<string, number>> = {
   "Construction Works": { "Protocol Roads": 10000, "Secondary Roads": 5000,  "Tertiary Roads": 3500  },
@@ -139,7 +140,7 @@ export function PermitsPage() {
 
   const statusBadge = (status: string) => {
     if (status === "Approved") return <Badge className="bg-[#D6F0E0] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><CheckCircle className="h-3.5 w-3.5" />{status}</Badge>
-    if (status === "Pending")  return <Badge className="bg-[#FFF306] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><Clock className="h-3.5 w-3.5" />{status}</Badge>
+    if (status === "Pending")  return <Badge className="bg-[#DAA22A] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><Clock className="h-3.5 w-3.5" />{status}</Badge>
     return <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1 gap-1"><XCircle className="h-3.5 w-3.5" />{status}</Badge>
   }
 
@@ -159,7 +160,7 @@ export function PermitsPage() {
       {/* Stats */}
       <div className="grid gap-6 md:grid-cols-4">
         <Card><CardHeader className="pb-3"><CardDescription className="text-base">Total Permits</CardDescription><CardTitle className="text-4xl">{permits.length}</CardTitle></CardHeader><CardContent><p className="text-base text-muted-foreground">All applications</p></CardContent></Card>
-        <Card><CardHeader className="pb-3"><CardDescription className="text-base">Pending Review</CardDescription><CardTitle className="text-4xl text-[#DAA22A]">{pendingCount}</CardTitle></CardHeader><CardContent><Badge className="bg-[#FFF306] text-[#1C1C1C] text-sm">Requires action</Badge></CardContent></Card>
+        <Card><CardHeader className="pb-3"><CardDescription className="text-base">Pending Review</CardDescription><CardTitle className="text-4xl text-[#DAA22A]">{pendingCount}</CardTitle></CardHeader><CardContent><Badge className="bg-[#DAA22A] text-[#1C1C1C] text-sm">Requires action</Badge></CardContent></Card>
         <Card><CardHeader className="pb-3"><CardDescription className="text-base">Approved</CardDescription><CardTitle className="text-4xl text-[#4FAF7C]">{approvedCount}</CardTitle></CardHeader><CardContent><p className="text-base text-muted-foreground">Active permits</p></CardContent></Card>
         <Card><CardHeader className="pb-3"><CardDescription className="text-base">Revenue Collected</CardDescription><CardTitle className="text-4xl">{totalRevenue.toLocaleString()} <span className="text-xl font-normal text-muted-foreground">MZN</span></CardTitle></CardHeader><CardContent><p className="text-base text-muted-foreground">From approved permits</p></CardContent></Card>
       </div>
@@ -310,14 +311,21 @@ export function PermitsPage() {
                     <span>{selectedPermit.location}</span>
                   </div>
                   
-                  {/* Map Placeholder */}
-                  <div className="rounded-lg bg-gradient-to-br from-[#D6F0E0]/30 to-[#4FAF7C]/20 border border-[#4FAF7C]/30 p-8 flex items-center justify-center min-h-[200px]">
-                    <div className="text-center space-y-2">
-                      <MapPin className="h-12 w-12 mx-auto text-[#4FAF7C]" />
-                      <p className="text-sm text-muted-foreground">Route visualization</p>
-                      <p className="text-xs text-muted-foreground">{selectedPermit.location}</p>
-                    </div>
-                  </div>
+                  {/* Interactive Map */}
+                  <Map
+                    center={[-25.9655, 32.5832]}
+                    zoom={16}
+                    markers={[
+                      {
+                        position: [-25.9655, 32.5832],
+                        label: selectedPermit.location,
+                        description: `${selectedPermit.purpose} - ${selectedPermit.roadType}`,
+                      },
+                    ]}
+                    height="250px"
+                    className="rounded-lg border"
+                    defaultView="satellite"
+                  />
 
                   {/* Route Details Grid */}
                   <div className="grid grid-cols-3 gap-4 pt-2">
@@ -461,7 +469,7 @@ export function PermitsPage() {
                     </div>
 
                     <div className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#FFF306]/30 p-1 mt-0.5">
+                      <div className="rounded-full bg-[#DAA22A]/30 p-1 mt-0.5">
                         <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
                       </div>
                       <div className="flex-1">

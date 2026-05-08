@@ -10,7 +10,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Truck, Search, Eye, CheckCircle, XCircle, AlertCircle } from "lucide-react"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
@@ -22,6 +21,9 @@ const mockVehicles = [
     id: 1,
     plate: "MZB 5678 B",
     owner: "Moza Transportes Lda",
+    ownerContact: "+258 84 123 4567",
+    ownerEmail: "contact@mozatransportes.co.mz",
+    ownerAddress: "Av. Julius Nyerere, 1234, Maputo",
     vehicleType: "Cargo Truck",
     weightClass: "16,001–25,000 kg",
     dailyRate: 2000,
@@ -34,6 +36,9 @@ const mockVehicles = [
     id: 2,
     plate: "MZB 0011 E",
     owner: "TransMoz Logistics",
+    ownerContact: "+258 82 987 6543",
+    ownerEmail: "info@transmoz.co.mz",
+    ownerAddress: "Av. 25 de Setembro, 567, Maputo",
     vehicleType: "Tractor",
     weightClass: "10,001–16,000 kg",
     dailyRate: 1500,
@@ -46,6 +51,9 @@ const mockVehicles = [
     id: 3,
     plate: "MZB 3344 F",
     owner: "Cargo Express Ltd",
+    ownerContact: "+258 84 555 7890",
+    ownerEmail: "operations@cargoexpress.co.mz",
+    ownerAddress: "Av. Mártires de Inhaminga, 890, Maputo",
     vehicleType: "Heavy Truck",
     weightClass: "25,001–35,000 kg",
     dailyRate: 3000,
@@ -88,6 +96,7 @@ export function VehiclesPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<typeof mockVehicles[0] | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -298,16 +307,20 @@ export function VehiclesPage() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-2 h-12">
-              <TabsTrigger value="all" className="text-base">
-                All ({vehicles.length})
-              </TabsTrigger>
-              <TabsTrigger value="Active" className="text-base">
-                Active ({activeCount})
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="mb-6 flex items-center justify-end gap-3">
+            <Label htmlFor="status-filter" className="text-base font-medium">
+              Filter by Status:
+            </Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger id="status-filter" className="w-[200px] text-base h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="text-base">
+                <SelectItem value="all" className="text-base">All ({vehicles.length})</SelectItem>
+                <SelectItem value="Active" className="text-base">Active ({activeCount})</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Data Table with Loading State */}
           {isLoading ? (
@@ -559,6 +572,17 @@ export function VehiclesPage() {
                         )}
                       </CardTitle>
                     </CardHeader>
+                    {selectedVehicle.compliance === "Non-compliant" && (
+                      <CardContent>
+                        <Button
+                          onClick={() => setIsContactDialogOpen(true)}
+                          variant="outline"
+                          className="w-full text-sm"
+                        >
+                          Contact Owner
+                        </Button>
+                      </CardContent>
+                    )}
                   </Card>
                 </div>
               </div>
@@ -580,7 +604,7 @@ export function VehiclesPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#FFF306]/20 border border-[#FFF306]/50">
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#DAA22A]/20 border border-[#DAA22A]/50">
                         <AlertCircle className="h-5 w-5 text-[#DAA22A] mt-0.5" />
                         <div className="flex-1">
                           <p className="text-sm font-medium">Enforcement Risk</p>
@@ -669,6 +693,96 @@ export function VehiclesPage() {
             </Button>
             <Button onClick={handleEditVehicle} className="text-base h-11 px-6">
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Contact Owner Dialog */}
+      <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Contact Vehicle Owner</DialogTitle>
+            <DialogDescription className="text-base">
+              Owner information for {selectedVehicle?.plate}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedVehicle && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Company/Owner Name</Label>
+                <p className="text-base font-semibold">{selectedVehicle.owner}</p>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Phone Number</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-base font-medium">{selectedVehicle.ownerContact}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedVehicle.ownerContact)
+                      toast.success("Phone number copied to clipboard")
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Email Address</Label>
+                <div className="flex items-center gap-2">
+                  <p className="text-base font-medium">{selectedVehicle.ownerEmail}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedVehicle.ownerEmail)
+                      toast.success("Email copied to clipboard")
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Address</Label>
+                <p className="text-base font-medium">{selectedVehicle.ownerAddress}</p>
+              </div>
+
+              <Separator />
+
+              <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-yellow-900">Payment Overdue</p>
+                    <p className="text-yellow-700 mt-1">
+                      This vehicle has an outstanding balance. Please contact the owner to arrange payment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsContactDialogOpen(false)} className="text-base h-11 px-6">
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                window.location.href = `tel:${selectedVehicle?.ownerContact}`
+              }}
+              className="text-base h-11 px-6"
+            >
+              Call Owner
             </Button>
           </DialogFooter>
         </DialogContent>
