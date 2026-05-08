@@ -29,7 +29,7 @@ const mockVehicles = [
     dailyRate: 2000,
     status: "Active",
     lastPayment: "2026-04-20",
-    registrationDate: "2024-01-15",
+    registrationDate: "2026-01-15",
     compliance: "Non-compliant"
   },
   {
@@ -59,7 +59,7 @@ const mockVehicles = [
     dailyRate: 3000,
     status: "Active",
     lastPayment: "2026-05-03",
-    registrationDate: "2024-03-10",
+    registrationDate: "2026-03-10",
     compliance: "Compliant"
   },
   {
@@ -83,7 +83,7 @@ const mockVehicles = [
     dailyRate: 1500,
     status: "Active",
     lastPayment: "2026-05-02",
-    registrationDate: "2024-02-18",
+    registrationDate: "2026-02-18",
     compliance: "Compliant"
   },
 ]

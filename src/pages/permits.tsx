@@ -11,7 +11,6 @@ import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFoote
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Plus, Receipt, MapPin, FileCheck, AlertTriangle, Shield, Calendar } from "lucide-react"
 import { toast } from "sonner"
@@ -66,7 +65,7 @@ export function PermitsPage() {
   const [permits, setPermits] = useState<Permit[]>(mockPermits)
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("Pending")
   const [selectedPermit, setSelectedPermit] = useState<Permit | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isApproveOpen, setIsApproveOpen] = useState(false)
@@ -174,14 +173,22 @@ export function PermitsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-6">
-            <TabsList className="grid w-full grid-cols-4 h-12">
-              <TabsTrigger value="all" className="text-base">All ({permits.length})</TabsTrigger>
-              <TabsTrigger value="Pending" className="text-base">Pending ({pendingCount})</TabsTrigger>
-              <TabsTrigger value="Approved" className="text-base">Approved ({approvedCount})</TabsTrigger>
-              <TabsTrigger value="Rejected" className="text-base">Rejected ({rejectedCount})</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="mb-6 flex items-center justify-end gap-3">
+            <Label htmlFor="status-filter" className="text-base font-medium">
+              Filter by Status:
+            </Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger id="status-filter" className="w-[200px] text-base h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="text-base">
+                <SelectItem value="all" className="text-base">All ({permits.length})</SelectItem>
+                <SelectItem value="Pending" className="text-base">Pending ({pendingCount})</SelectItem>
+                <SelectItem value="Approved" className="text-base">Approved ({approvedCount})</SelectItem>
+                <SelectItem value="Rejected" className="text-base">Rejected ({rejectedCount})</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
