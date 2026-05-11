@@ -103,9 +103,9 @@ export function VehiclesPage(): JSX.Element {
 
   // Fetch vehicles from API
   const { data: vehiclesResponse, isLoading, error } = useQuery({
-    queryKey: ["fleet-vehicles", { page: currentPage, pageSize: itemsPerPage, plateNumber: searchQuery, status: statusFilter }],
+    queryKey: ["vehicles", { page: currentPage, pageSize: itemsPerPage, plateNumber: searchQuery }],
     queryFn: ({ signal }) =>
-      VehiclesApi.getFleetVehicles(
+      VehiclesApi.searchVehicles(
         {
           page: currentPage,
           pageSize: itemsPerPage,
@@ -164,6 +164,12 @@ export function VehiclesPage(): JSX.Element {
   if (error) {
     const errorMessage = getApiErrorMessage(error)
     toast.error(errorMessage)
+  }
+    setSelectedVehicle(null)
+    setFormData({ plate: "", owner: "", vehicleType: "", weightClass: "", notes: "" })
+    toast.success("Vehicle updated", {
+      description: `${formData.plate} has been updated.`
+    })
   }
 
   // Handle delete vehicle

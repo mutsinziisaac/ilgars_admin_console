@@ -11,4 +11,21 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      // Proxy API requests to avoid CORS issues in development
+      '/api/core': {
+        target: 'https://ilgars.ayinza.dev',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/core/, '/core/api'),
+        secure: false,
+      },
+      '/api/motorvehicle': {
+        target: 'https://ilgars.ayinza.dev',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/motorvehicle/, '/motorvehicle/api'),
+        secure: false,
+      },
+    },
+  },
 })

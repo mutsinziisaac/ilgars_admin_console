@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useQuery, useMutation } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,8 +12,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { DollarSign, Plus, TrendingUp, Calendar, AlertCircle, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { TariffPlansApi, RoadClosureRatesApi, getApiErrorMessage } from "@/lib/api"
+import type { TariffPlan, RoadClosureRate } from "@/lib/api"
+import { queryClient } from "@/lib/queryClient"
 
 // Mock tariff data - Per Hour rates by Purpose, Road Type, and Closure Type
 const mockRoadClosureTariffs = [
@@ -212,12 +217,10 @@ const mockCirculationFees = [
   }
 ]
 
-export function TariffsPage() {
-  const [roadClosureTariffs, setRoadClosureTariffs] = useState(mockRoadClosureTariffs)
-  const [circulationFees, setCirculationFees] = useState(mockCirculationFees)
-  const [tariffType, setTariffType] = useState("road-closure")
-  const [selectedTariff, setSelectedTariff] = useState<typeof mockRoadClosureTariffs[0] | null>(null)
-  const [selectedCirculationFee, setSelectedCirculationFee] = useState<typeof mockCirculationFees[0] | null>(null)
+export function TariffsPage(): JSX.Element {
+  const [tariffType, setTariffType] = useState<"road-closure" | "circulation">("road-closure")
+  const [selectedTariff, setSelectedTariff] = useState<any>(null)
+  const [selectedCirculationFee, setSelectedCirculationFee] = useState<any>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -225,8 +228,77 @@ export function TariffsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
+  // Fetch Road Closure Rates
+  const { 
+    data: roadClosureData, 
+    isLoading: isLoadingRoadClosure,
+    error: roadClosureError 
+  } = useQuery({
+    queryKey: ["road-closure-rates", { page: currentPage, pageSize: itemsPerPage }],
+    queryFn: ({ signal }) =>
+      RoadClosureRatesApi.listRoadClosureRates(
+        { page: currentPage, pageSize: itemsPerPage, status: "ACTIVE" },
+        signal
+      ),
+    enabled: tariffType === "road-closure",
+    retry: false, // Don't retry on 403 errors
+  })
+
+  // Fetch Circulation Fees (Tariff Plans)
+  const { 
+    data: circulationData, 
+    isLoading: isLoadingCirculation,
+    error: circulationError 
+  } = useQuery({
+    queryKey: ["tariff-plans", { page: currentPage, pageSize: itemsPerPage, type: "CIRCULATION" }],
+    queryFn: ({ signal }) =>
+      TariffPlansApi.listTariffPlans(
+        { page: currentPage, pageSize: itemsPerPage, type: "CIRCULATION", status: "ACTIVE" },
+        signal
+      ),
+    enabled: tariffType === "circulation",
+    retry: false, // Don't retry on 403 errors
+  })
+
+  // Create Road Closure Rate Mutation
+  const createRoadClosureRateMutation = useMutation({
+    mutationFn: RoadClosureRatesApi.createRoadClosureRate,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["road-closure-rates"] })
+      toast.success("Road closure rate created successfully")
+      setIsAddDialogOpen(false)
+      resetForm()
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error))
+    },
+  })
+
+  // Create Tariff Plan Mutation
+  const createTariffPlanMutation = useMutation({
+    mutationFn: TariffPlansApi.createTariffPlan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tariff-plans"] })
+      toast.success("Circulation fee created successfully")
+      setIsAddDialogOpen(false)
+      resetCirculationForm()
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error))
+    },
+  })
+
+  const roadClosureRates = roadClosureData?.data || []
+  const circulationFees = circulationData?.data || []
+  const isLoading = tariffType === "road-closure" ? isLoadingRoadClosure : isLoadingCirculation
+  const error = tariffType === "road-closure" ? roadClosureError : circulationError
+
   // Get current tariffs based on type
-  const currentTariffs = tariffType === "road-closure" ? roadClosureTariffs : circulationFees
+  const currentTariffs = tariffType === "road-closure" ? roadClosureRates : circulationFees
+  const totalItems = tariffType === "road-closure" 
+    ? (roadClosureData?.meta?.total || 0) 
+    : (circulationData?.meta?.total || 0)
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
 
   // Form state for road closure tariffs
   const [formData, setFormData] = useState({
@@ -259,51 +331,62 @@ export function TariffsPage() {
     tertiaryRoads: ""
   })
 
-  // Pagination
-  const totalPages = Math.ceil(currentTariffs.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const paginatedTariffs = currentTariffs.slice(startIndex, endIndex)
+  // Reset forms
+  const resetForm = () => {
+    setFormData({
+      purpose: "",
+      closureType: "",
+      roadType: "",
+      rate: "",
+      effectiveDate: "",
+      notes: ""
+    })
+    setTariffRates({
+      protocolRoads: "",
+      secondaryRoads: "",
+      tertiaryRoads: ""
+    })
+  }
+
+  const resetCirculationForm = () => {
+    setCirculationFormData({
+      activity: "",
+      weightRange: "",
+      dailyFee: "",
+      monthlyFee: "",
+      effectiveDate: "",
+      notes: ""
+    })
+  }
 
   // Handle add road closure tariff
   const handleAddTariff = () => {
-    const newTariff = {
-      id: roadClosureTariffs.length + 1,
-      purpose: formData.purpose,
-      closureType: formData.closureType,
-      protocolRoads: parseInt(tariffRates.protocolRoads),
-      secondaryRoads: parseInt(tariffRates.secondaryRoads),
-      tertiaryRoads: parseInt(tariffRates.tertiaryRoads),
-      status: "Active",
-      effectiveDate: formData.effectiveDate,
-      lastUpdated: new Date().toISOString().split('T')[0]
-    }
-    setRoadClosureTariffs([...roadClosureTariffs, newTariff])
-    setIsAddDialogOpen(false)
-    setFormData({ purpose: "", closureType: "", roadType: "", rate: "", effectiveDate: "", notes: "" })
-    setTariffRates({ protocolRoads: "", secondaryRoads: "", tertiaryRoads: "" })
-    toast.success("Tariff added", {
-      description: `New tariff for ${formData.purpose} (${formData.closureType}) has been added.`
+    createRoadClosureRateMutation.mutate({
+      name: `${formData.purpose} - ${formData.closureType}`,
+      description: formData.notes,
+      roadType: formData.roadType,
+      duration: formData.closureType,
+      rate: parseFloat(formData.rate),
+      currency: "MZN",
     })
   }
 
   // Handle add circulation fee
   const handleAddCirculationFee = () => {
-    const newFee = {
-      id: circulationFees.length + 1,
-      activity: circulationFormData.activity,
-      weightRange: circulationFormData.weightRange || "N/A",
-      dailyFee: parseInt(circulationFormData.dailyFee),
-      monthlyFee: circulationFormData.monthlyFee ? parseInt(circulationFormData.monthlyFee) : null,
-      status: "Active",
-      effectiveDate: circulationFormData.effectiveDate,
-      lastUpdated: new Date().toISOString().split('T')[0]
-    }
-    setCirculationFees([...circulationFees, newFee])
-    setIsAddDialogOpen(false)
-    setCirculationFormData({ activity: "", weightRange: "", dailyFee: "", monthlyFee: "", effectiveDate: "", notes: "" })
-    toast.success("Circulation fee added", {
-      description: `New circulation fee for ${circulationFormData.activity} has been added.`
+    const weightParts = circulationFormData.weightRange.split("–").map(s => s.trim())
+    const weightMin = weightParts[0] ? parseFloat(weightParts[0].replace(/[^0-9.]/g, "")) : undefined
+    const weightMax = weightParts[1] ? parseFloat(weightParts[1].replace(/[^0-9.]/g, "")) : undefined
+
+    createTariffPlanMutation.mutate({
+      name: circulationFormData.activity,
+      description: circulationFormData.notes,
+      type: "CIRCULATION",
+      weightMin,
+      weightMax,
+      dailyRate: circulationFormData.dailyFee ? parseFloat(circulationFormData.dailyFee) : undefined,
+      monthlyRate: circulationFormData.monthlyFee ? parseFloat(circulationFormData.monthlyFee) : undefined,
+      currency: "MZN",
+      effectiveFrom: circulationFormData.effectiveDate || undefined,
     })
   }
 
@@ -311,99 +394,65 @@ export function TariffsPage() {
   const handleEditTariff = () => {
     if (!selectedTariff) return
     
-    setRoadClosureTariffs(roadClosureTariffs.map(t => 
-      t.id === selectedTariff.id 
-        ? { 
-            ...t, 
-            protocolRoads: parseInt(tariffRates.protocolRoads),
-            secondaryRoads: parseInt(tariffRates.secondaryRoads),
-            tertiaryRoads: parseInt(tariffRates.tertiaryRoads),
-            effectiveDate: formData.effectiveDate,
-            lastUpdated: new Date().toISOString().split('T')[0]
-          }
-        : t
-    ))
+    // TODO: Implement update API call when available
+    toast.info("Update functionality coming soon")
     setIsEditDialogOpen(false)
     setSelectedTariff(null)
-    setFormData({ purpose: "", closureType: "", roadType: "", rate: "", effectiveDate: "", notes: "" })
-    setTariffRates({ protocolRoads: "", secondaryRoads: "", tertiaryRoads: "" })
-    toast.success("Tariff updated", {
-      description: `Tariff for ${selectedTariff.purpose} has been updated.`
-    })
+    resetForm()
   }
 
   // Handle edit circulation fee
   const handleEditCirculationFee = () => {
     if (!selectedCirculationFee) return
     
-    setCirculationFees(circulationFees.map(f => 
-      f.id === selectedCirculationFee.id 
-        ? { 
-            ...f, 
-            dailyFee: parseInt(circulationFormData.dailyFee),
-            monthlyFee: circulationFormData.monthlyFee ? parseInt(circulationFormData.monthlyFee) : null,
-            effectiveDate: circulationFormData.effectiveDate,
-            lastUpdated: new Date().toISOString().split('T')[0]
-          }
-        : f
-    ))
+    // TODO: Implement update API call when available
+    toast.info("Update functionality coming soon")
     setIsEditDialogOpen(false)
     setSelectedCirculationFee(null)
-    setCirculationFormData({ activity: "", weightRange: "", dailyFee: "", monthlyFee: "", effectiveDate: "", notes: "" })
-    toast.success("Circulation fee updated", {
-      description: `Circulation fee for ${selectedCirculationFee.activity} has been updated.`
-    })
+    resetCirculationForm()
   }
 
   // Handle delete tariff or circulation fee
   const handleDeleteTariff = () => {
     if (!tariffToDelete) return
     
-    if (tariffType === "road-closure") {
-      setRoadClosureTariffs(roadClosureTariffs.filter(t => t.id !== tariffToDelete.id))
-      toast.error("Tariff removed", {
-        description: `Tariff for ${tariffToDelete.purpose} has been removed.`
-      })
-    } else {
-      setCirculationFees(circulationFees.filter(f => f.id !== tariffToDelete.id))
-      toast.error("Circulation fee removed", {
-        description: `Circulation fee for ${tariffToDelete.activity} has been removed.`
-      })
-    }
-    
+    // TODO: Implement delete API call when available
+    toast.info("Delete functionality coming soon")
     setDeleteDialogOpen(false)
     setTariffToDelete(null)
   }
 
   // Open edit dialog for road closure tariff
-  const openEditDialog = (tariff: typeof mockRoadClosureTariffs[0]) => {
+  const openEditDialog = (tariff: any) => {
     setSelectedTariff(tariff)
     setFormData({
-      purpose: tariff.purpose,
-      closureType: tariff.closureType,
-      roadType: "",
-      rate: "",
-      effectiveDate: tariff.effectiveDate,
-      notes: ""
+      purpose: tariff.name || "",
+      closureType: tariff.duration || "",
+      roadType: tariff.roadType || "",
+      rate: tariff.rate?.toString() || "",
+      effectiveDate: tariff.createdAt ? new Date(tariff.createdAt).toISOString().split('T')[0] : "",
+      notes: tariff.description || ""
     })
     setTariffRates({
-      protocolRoads: tariff.protocolRoads.toString(),
-      secondaryRoads: tariff.secondaryRoads.toString(),
-      tertiaryRoads: tariff.tertiaryRoads.toString()
+      protocolRoads: tariff.roadType === "Protocol" ? tariff.rate.toString() : "",
+      secondaryRoads: tariff.roadType === "Secondary" ? tariff.rate.toString() : "",
+      tertiaryRoads: tariff.roadType === "Tertiary" ? tariff.rate.toString() : ""
     })
     setIsEditDialogOpen(true)
   }
 
   // Open edit dialog for circulation fee
-  const openEditCirculationDialog = (fee: typeof mockCirculationFees[0]) => {
+  const openEditCirculationDialog = (fee: any) => {
     setSelectedCirculationFee(fee)
     setCirculationFormData({
-      activity: fee.activity,
-      weightRange: fee.weightRange,
-      dailyFee: fee.dailyFee.toString(),
-      monthlyFee: fee.monthlyFee ? fee.monthlyFee.toString() : "",
-      effectiveDate: fee.effectiveDate,
-      notes: ""
+      activity: fee.name || "",
+      weightRange: fee.weightMin && fee.weightMax 
+        ? `${fee.weightMin.toLocaleString()} kg – ${fee.weightMax.toLocaleString()} kg`
+        : "",
+      dailyFee: fee.dailyRate?.toString() || "",
+      monthlyFee: fee.monthlyRate?.toString() || "",
+      effectiveDate: fee.effectiveFrom ? new Date(fee.effectiveFrom).toISOString().split('T')[0] : "",
+      notes: fee.description || ""
     })
     setIsEditDialogOpen(true)
   }
@@ -430,7 +479,7 @@ export function TariffsPage() {
         
         <Button onClick={() => setIsAddDialogOpen(true)} className="gap-2 text-base h-11 px-6">
           <Plus className="h-5 w-5" />
-          Add {tariffType === "road-closure" ? "Tariff" : "Circulation Fee"}
+          New {tariffType === "road-closure" ? "Tariff" : "Circulation Fee"}
         </Button>
       </div>
 
@@ -460,11 +509,11 @@ export function TariffsPage() {
             <CardDescription className="text-base">
               {tariffType === "road-closure" ? "Active Tariffs" : "Active Fees"}
             </CardDescription>
-            <CardTitle className="text-4xl">{currentTariffs.length}</CardTitle>
+            <CardTitle className="text-4xl">{totalItems}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">
-              {tariffType === "road-closure" ? "Purpose categories" : "Fee categories"}
+              {tariffType === "road-closure" ? "Rate configurations" : "Fee categories"}
             </p>
           </CardContent>
         </Card>
@@ -474,7 +523,11 @@ export function TariffsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Highest Rate</CardDescription>
-                <CardTitle className="text-4xl">{Math.max(...roadClosureTariffs.map(t => t.protocolRoads)).toLocaleString()}</CardTitle>
+                <CardTitle className="text-4xl">
+                  {roadClosureRates.length > 0 
+                    ? Math.max(...roadClosureRates.map(t => t.rate)).toLocaleString()
+                    : "0"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-base text-muted-foreground">MZN per hour</p>
@@ -484,7 +537,11 @@ export function TariffsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Lowest Rate</CardDescription>
-                <CardTitle className="text-4xl">{Math.min(...roadClosureTariffs.filter(t => t.tertiaryRoads > 0).map(t => t.tertiaryRoads)).toLocaleString()}</CardTitle>
+                <CardTitle className="text-4xl">
+                  {roadClosureRates.length > 0 
+                    ? Math.min(...roadClosureRates.map(t => t.rate)).toLocaleString()
+                    : "0"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-base text-muted-foreground">MZN per hour</p>
@@ -496,7 +553,11 @@ export function TariffsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Highest Daily Fee</CardDescription>
-                <CardTitle className="text-4xl">{Math.max(...circulationFees.map(f => f.dailyFee)).toLocaleString()}</CardTitle>
+                <CardTitle className="text-4xl">
+                  {circulationFees.length > 0 
+                    ? Math.max(...circulationFees.filter(f => f.dailyRate).map(f => f.dailyRate!)).toLocaleString()
+                    : "0"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-base text-muted-foreground">MZN per day</p>
@@ -505,8 +566,12 @@ export function TariffsPage() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription className="text-base">Monthly Fee</CardDescription>
-                <CardTitle className="text-4xl">20,000</CardTitle>
+                <CardDescription className="text-base">Monthly Fee Range</CardDescription>
+                <CardTitle className="text-4xl">
+                  {circulationFees.length > 0 && circulationFees.some(f => f.monthlyRate)
+                    ? Math.max(...circulationFees.filter(f => f.monthlyRate).map(f => f.monthlyRate!)).toLocaleString()
+                    : "0"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-base text-muted-foreground">MZN (06:00-20:00)</p>
@@ -545,27 +610,63 @@ export function TariffsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedTariffs.map((tariff: any) => (
+                {isLoading ? (
+                  // Loading skeletons
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <TableRow key={index}>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-20" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : error ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <AlertCircle className="h-8 w-8 text-destructive" />
+                        <p className="text-base font-medium text-destructive">Failed to load tariffs</p>
+                        <p className="text-sm text-muted-foreground">{getApiErrorMessage(error)}</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : currentTariffs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No road closure rates found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  currentTariffs.map((tariff: any) => (
                   <TableRow key={tariff.id}>
-                    <TableCell className="font-medium text-base">{tariff.purpose}</TableCell>
+                    <TableCell className="font-medium text-base">{tariff.name}</TableCell>
                     <TableCell className="text-base">
                       <Badge 
                         variant="outline"
                         className={
-                          tariff.closureType === "Full Road Closure" 
+                          tariff.duration?.toLowerCase().includes("full") 
                             ? "!bg-green-600 !text-white !border-green-600 text-sm px-3 py-1" 
                             : "!bg-[#4A90E2] !text-white !border-[#4A90E2] text-sm px-3 py-1"
                         }
                       >
-                        {tariff.closureType}
+                        {tariff.duration || "N/A"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-base font-bold">{tariff.protocolRoads.toLocaleString()} MZN</TableCell>
-                    <TableCell className="text-base font-bold">{tariff.secondaryRoads.toLocaleString()} MZN</TableCell>
                     <TableCell className="text-base font-bold">
-                      {tariff.tertiaryRoads === 0 ? "0 MZN" : `${tariff.tertiaryRoads.toLocaleString()} MZN`}
+                      {tariff.roadType === "Protocol" ? `${tariff.rate.toLocaleString()} MZN` : "—"}
                     </TableCell>
-                    <TableCell className="text-base">{tariff.effectiveDate}</TableCell>
+                    <TableCell className="text-base font-bold">
+                      {tariff.roadType === "Secondary" ? `${tariff.rate.toLocaleString()} MZN` : "—"}
+                    </TableCell>
+                    <TableCell className="text-base font-bold">
+                      {tariff.roadType === "Tertiary" ? `${tariff.rate.toLocaleString()} MZN` : "—"}
+                    </TableCell>
+                    <TableCell className="text-base">
+                      {tariff.createdAt ? new Date(tariff.createdAt).toLocaleDateString() : "N/A"}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -590,7 +691,8 @@ export function TariffsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           ) : (
@@ -606,21 +708,56 @@ export function TariffsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedTariffs.map((fee: any) => (
+                {isLoading ? (
+                  // Loading skeletons
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <TableRow key={index}>
+                      <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-20" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : error ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <AlertCircle className="h-8 w-8 text-destructive" />
+                        <p className="text-base font-medium text-destructive">Failed to load circulation fees</p>
+                        <p className="text-sm text-muted-foreground">{getApiErrorMessage(error)}</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : currentTariffs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No circulation fees found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  currentTariffs.map((fee: any) => (
                   <TableRow key={fee.id}>
-                    <TableCell className="font-medium text-base max-w-[300px]">{fee.activity}</TableCell>
+                    <TableCell className="font-medium text-base max-w-[300px]">{fee.name}</TableCell>
                     <TableCell className="text-base">
-                      {fee.weightRange === "N/A" ? (
-                        <Badge variant="outline" className="text-sm">N/A</Badge>
+                      {fee.weightMin || fee.weightMax ? (
+                        <span className="font-medium">
+                          {fee.weightMin ? `${fee.weightMin.toLocaleString()} kg` : "0 kg"} – {fee.weightMax ? `${fee.weightMax.toLocaleString()} kg` : "∞"}
+                        </span>
                       ) : (
-                        <span className="font-medium">{fee.weightRange}</span>
+                        <Badge variant="outline" className="text-sm">N/A</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-base font-bold">{fee.dailyFee.toLocaleString()} MZN</TableCell>
                     <TableCell className="text-base font-bold">
-                      {fee.monthlyFee ? `${fee.monthlyFee.toLocaleString()} MZN` : "—"}
+                      {fee.dailyRate ? `${fee.dailyRate.toLocaleString()} MZN` : "—"}
                     </TableCell>
-                    <TableCell className="text-base">{fee.effectiveDate}</TableCell>
+                    <TableCell className="text-base font-bold">
+                      {fee.monthlyRate ? `${fee.monthlyRate.toLocaleString()} MZN` : "—"}
+                    </TableCell>
+                    <TableCell className="text-base">
+                      {fee.effectiveFrom ? new Date(fee.effectiveFrom).toLocaleDateString() : "N/A"}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -645,16 +782,17 @@ export function TariffsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           )}
 
           {/* Pagination */}
-          {currentTariffs.length > 0 && (
+          {!isLoading && currentTariffs.length > 0 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to {Math.min(endIndex, currentTariffs.length)} of {currentTariffs.length} {tariffType === "road-closure" ? "tariffs" : "fees"}
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} {tariffType === "road-closure" ? "tariffs" : "fees"}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -841,10 +979,17 @@ export function TariffsPage() {
             </Button>
             <Button 
               onClick={handleAddTariff} 
-              disabled={!formData.purpose || !formData.closureType || !tariffRates.protocolRoads || !tariffRates.secondaryRoads || !tariffRates.tertiaryRoads || !formData.effectiveDate}
+              disabled={
+                !formData.purpose || 
+                !formData.closureType || 
+                !formData.roadType || 
+                !formData.rate || 
+                !formData.effectiveDate ||
+                createRoadClosureRateMutation.isPending
+              }
               className="text-base h-11 px-6"
             >
-              Add Tariff
+              {createRoadClosureRateMutation.isPending ? "Adding..." : "Add Tariff"}
             </Button>
           </ModalFooter>
         </Modal>
@@ -944,10 +1089,15 @@ export function TariffsPage() {
             </Button>
             <Button 
               onClick={handleAddCirculationFee} 
-              disabled={!circulationFormData.activity || !circulationFormData.dailyFee || !circulationFormData.effectiveDate}
+              disabled={
+                !circulationFormData.activity || 
+                !circulationFormData.dailyFee || 
+                !circulationFormData.effectiveDate ||
+                createTariffPlanMutation.isPending
+              }
               className="text-base h-11 px-6"
             >
-              Add Circulation Fee
+              {createTariffPlanMutation.isPending ? "Adding..." : "Add Circulation Fee"}
             </Button>
           </ModalFooter>
         </Modal>
@@ -1165,8 +1315,8 @@ export function TariffsPage() {
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base">
               Are you sure you want to delete {tariffType === "road-closure" 
-                ? `the tariff for ${tariffToDelete?.purpose}` 
-                : `the circulation fee for ${tariffToDelete?.activity}`}? This action cannot be undone.
+                ? `the tariff "${tariffToDelete?.name}"` 
+                : `the circulation fee "${tariffToDelete?.name}"`}? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">

@@ -218,10 +218,8 @@ const mockVehicleData: Record<string, any> = {
   }
 }
 
-export function EnforcementPage() {
+export function StatisticsPage() {
   const [enforcementLogs, setEnforcementLogs] = useState(mockEnforcementLogs)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [lookupResult, setLookupResult] = useState<any>(null)
   const [selectedEnforcement, setSelectedEnforcement] = useState<typeof mockEnforcementLogs[0] | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false)
@@ -239,27 +237,10 @@ export function EnforcementPage() {
     coordinates: "",
     offenceType: "",
     offenceCategory: "",
-    severity: "",
     penaltyAmount: "",
     action: "",
     notes: ""
   })
-
-  // Handle vehicle lookup
-  const handleLookup = () => {
-    const result = mockVehicleData[searchQuery.toUpperCase()]
-    if (result) {
-      setLookupResult(result)
-      toast.success("Vehicle found", {
-        description: `${result.plateNumber} - ${result.status}`
-      })
-    } else {
-      setLookupResult(null)
-      toast.error("Vehicle not found", {
-        description: "Please check the plate number and try again."
-      })
-    }
-  }
 
   // Handle log enforcement action
   const handleLogEnforcement = () => {
@@ -273,7 +254,6 @@ export function EnforcementPage() {
       coordinates: formData.coordinates,
       offenceType: formData.offenceType,
       offenceCategory: formData.offenceCategory,
-      severity: formData.severity,
       penaltyAmount: formData.penaltyAmount,
       action: formData.action,
       officer: "Current Officer",
@@ -300,7 +280,6 @@ export function EnforcementPage() {
       coordinates: "",
       offenceType: "",
       offenceCategory: "",
-      severity: "",
       penaltyAmount: "",
       action: "",
       notes: ""
@@ -308,20 +287,6 @@ export function EnforcementPage() {
     toast.success("Enforcement action logged", {
       description: `${formData.offenceType} recorded for ${formData.plateNumber}`
     })
-  }
-
-  // Pre-fill form from lookup
-  const handleUseVehicleData = () => {
-    if (lookupResult) {
-      setFormData({
-        ...formData,
-        plateNumber: lookupResult.plateNumber,
-        driverName: lookupResult.driverName,
-        driverLicense: lookupResult.driverLicense,
-        vehicleType: lookupResult.vehicleType
-      })
-      setIsLogDialogOpen(true)
-    }
   }
 
   // Filter logs
@@ -350,26 +315,12 @@ export function EnforcementPage() {
     )
   }
 
-  // Get severity badge
-  const getSeverityBadge = (severity: string) => {
-    const colors: Record<string, string> = {
-      "High": "bg-[#E5533D] text-white",
-      "Medium": "bg-[#DAA22A] text-[#1C1C1C]",
-      "Low": "bg-[#5B8C5A] text-white"
-    }
-    return (
-      <Badge className={`${colors[severity] || "bg-secondary"} text-sm px-3 py-1`}>
-        {severity}
-      </Badge>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-4xl font-semibold text-foreground">Enforcement</h1>
-        <p className="text-lg text-muted-foreground">Field enforcement and compliance monitoring</p>
+        <h1 className="text-4xl font-semibold text-foreground">Violations</h1>
+        <p className="text-lg text-muted-foreground">Track violations and compliance monitoring</p>
       </div>
 
       {/* Stats Cards */}
@@ -421,121 +372,6 @@ export function EnforcementPage() {
         </Card>
       </div>
 
-      {/* Vehicle Lookup Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Driver & Vehicle Offence Check</CardTitle>
-          <CardDescription className="text-base">Look up vehicle by plate number to check driver offence history</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Enter plate number (e.g., AAA-123-MP)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-                className="pl-11 text-base h-12"
-              />
-            </div>
-            <Button onClick={handleLookup} className="h-12 px-8 text-base">
-              Check Vehicle
-            </Button>
-          </div>
-
-          {/* Lookup Result */}
-          {lookupResult && (
-            <Card className={
-              lookupResult.status === "Clean Record" 
-                ? "border-[#D6F0E0] bg-[#D6F0E0]/10" 
-                : lookupResult.status === "Repeat Offender"
-                ? "border-[#E5533D] bg-[#E5533D]/10"
-                : "border-[#DAA22A] bg-[#DAA22A]/10"
-            }>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-2xl">{lookupResult.plateNumber}</CardTitle>
-                    <CardDescription className="text-base">{lookupResult.vehicleType} · {lookupResult.owner}</CardDescription>
-                    <CardDescription className="text-base mt-1">
-                      <User className="h-4 w-4 inline mr-1" />
-                      Driver: {lookupResult.driverName} ({lookupResult.driverLicense})
-                    </CardDescription>
-                  </div>
-                  {lookupResult.status === "Clean Record" ? (
-                    <Badge className="bg-[#D6F0E0] text-[#1C1C1C] text-base px-4 py-2">
-                      <CheckCircle className="h-5 w-5 mr-2" />
-                      Clean Record
-                    </Badge>
-                  ) : lookupResult.status === "Repeat Offender" ? (
-                    <Badge className="bg-[#E5533D] text-white text-base px-4 py-2">
-                      <AlertTriangle className="h-5 w-5 mr-2" />
-                      Repeat Offender
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-[#DAA22A] text-[#1C1C1C] text-base px-4 py-2">
-                      <Clock className="h-5 w-5 mr-2" />
-                      {lookupResult.status}
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total Offences</p>
-                    <p className="text-lg font-bold">{lookupResult.totalOffences}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total Penalties</p>
-                    <p className="text-lg font-bold text-[#E5533D]">{lookupResult.totalPenalties}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Last Offence</p>
-                    <p className="text-lg font-bold">{lookupResult.lastOffence}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Risk Level</p>
-                    <p className="text-lg font-bold">{lookupResult.riskLevel}</p>
-                  </div>
-                </div>
-
-                {/* Recent Offences History */}
-                {lookupResult.recentOffences.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-muted-foreground">Recent Offence History</h4>
-                    <div className="space-y-2">
-                      {lookupResult.recentOffences.map((offence: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
-                          <div className="flex items-center gap-3">
-                            <AlertTriangle className="h-4 w-4 text-[#E5533D]" />
-                            <div>
-                              <p className="text-sm font-medium">{offence.type}</p>
-                              <p className="text-xs text-muted-foreground">{offence.date}</p>
-                            </div>
-                          </div>
-                          <p className="text-sm font-bold text-[#E5533D]">{offence.penalty}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {lookupResult.status !== "Clean Record" && (
-                  <div className="mt-6 flex gap-3">
-                    <Button onClick={handleUseVehicleData} className="gap-2 text-base h-11 px-6">
-                      <FileText className="h-5 w-5" />
-                      Log New Offence
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Enforcement Log */}
       <Card>
         <CardHeader>
@@ -570,7 +406,6 @@ export function EnforcementPage() {
                 <TableHead className="text-base">Plate / Driver</TableHead>
                 <TableHead className="text-base">Offence Type</TableHead>
                 <TableHead className="text-base">Category</TableHead>
-                <TableHead className="text-base">Severity</TableHead>
                 <TableHead className="text-base">Penalty</TableHead>
                 <TableHead className="text-base">Action Taken</TableHead>
                 <TableHead className="text-base">Officer</TableHead>
@@ -595,7 +430,6 @@ export function EnforcementPage() {
                   </TableCell>
                   <TableCell className="text-base max-w-[200px]">{log.offenceType}</TableCell>
                   <TableCell className="text-base text-muted-foreground">{log.offenceCategory}</TableCell>
-                  <TableCell>{getSeverityBadge(log.severity)}</TableCell>
                   <TableCell className="text-base font-medium">{log.penaltyAmount}</TableCell>
                   <TableCell>{getActionBadge(log.action)}</TableCell>
                   <TableCell className="text-base">{log.officer}</TableCell>
@@ -760,20 +594,6 @@ export function EnforcementPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="severity" className="text-base">Severity *</Label>
-                  <Select value={formData.severity} onValueChange={(value) => setFormData({ ...formData, severity: value })}>
-                    <SelectTrigger className="text-base h-11">
-                      <SelectValue placeholder="Select severity" />
-                    </SelectTrigger>
-                    <SelectContent className="text-base">
-                      <SelectItem value="High" className="text-base">High</SelectItem>
-                      <SelectItem value="Medium" className="text-base">Medium</SelectItem>
-                      <SelectItem value="Low" className="text-base">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="penalty" className="text-base">Penalty Amount *</Label>
                   <Input
                     id="penalty"
@@ -863,7 +683,6 @@ export function EnforcementPage() {
                 !formData.location || 
                 !formData.offenceType || 
                 !formData.offenceCategory || 
-                !formData.severity || 
                 !formData.penaltyAmount || 
                 !formData.action || 
                 !formData.notes
@@ -894,7 +713,6 @@ export function EnforcementPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {getActionBadge(selectedEnforcement.action)}
-                  {getSeverityBadge(selectedEnforcement.severity)}
                   {selectedEnforcement.isRepeatOffender && (
                     <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1">
                       <AlertTriangle className="h-4 w-4 mr-1" />
@@ -1089,7 +907,9 @@ export function EnforcementPage() {
         </ModalBody>
 
         <ModalFooter>
-          {/* Footer can be used for additional actions if needed */}
+          <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)} className="text-base h-11 px-6">
+            Close
+          </Button>
         </ModalFooter>
       </Modal>
     </div>

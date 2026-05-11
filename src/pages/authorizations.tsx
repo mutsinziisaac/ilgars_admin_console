@@ -362,16 +362,6 @@ export function AuthorizationsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-semibold text-foreground">Authorizations</h1>
-          <p className="text-lg text-muted-foreground">
-            Manage heavy vehicle authorization requests and approvals
-          </p>
-        </div>
-      </div>
-
       {/* Summary Cards */}
       <div className="grid gap-6 md:grid-cols-4">
         <Card>
