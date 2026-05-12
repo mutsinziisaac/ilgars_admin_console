@@ -1,4 +1,4 @@
-import { useState } from "react"
+﻿import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,15 +10,95 @@ import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFoote
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Search, MapPin, AlertTriangle, CheckCircle, XCircle, Clock, Truck, FileText, Eye, User, Calendar } from "lucide-react"
+import { Search, MapPin, AlertTriangle, CheckCircle, XCircle, Clock, Truck, FileText, Eye, User, Calendar, Map, Flame, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
+import { EnforcementMap, UNENFORCED_VIOLATIONS, severityColor } from "@/components/enforcement-map"
+
+// Unenforced violations â€” detected but no action taken yet
+const mockUnenforcedViolations = [
+  {
+    id: "VIO-001",
+    plateNumber: "HHH-234-MP",
+    vehicleType: "Heavy Truck",
+    owner: "Beira Freight Co.",
+    violationType: "Overweight Vehicle",
+    severity: "High",
+    location: "Av. Julius Nyerere & Av. Mao Tse Tung",
+    detectedAt: "2026-05-12 09:14",
+    detectedBy: "CAM-001 (ANPR)",
+    estimatedPenalty: "25,000 MZN",
+    mapPos: { top: "32%", left: "42%" },
+  },
+  {
+    id: "VIO-002",
+    plateNumber: "III-567-MP",
+    vehicleType: "Cargo Truck",
+    owner: "Maputo Cargo Ltd",
+    violationType: "Expired RUC Payment",
+    severity: "High",
+    location: "Av. 25 de Setembro",
+    detectedAt: "2026-05-12 09:45",
+    detectedBy: "CAM-002 (ANPR)",
+    estimatedPenalty: "45,000 MZN",
+    mapPos: { top: "52%", left: "38%" },
+  },
+  {
+    id: "VIO-003",
+    plateNumber: "JJJ-890-MP",
+    vehicleType: "Bus",
+    owner: "City Transit",
+    violationType: "No Road Closure Permit",
+    severity: "Medium",
+    location: "Av. Eduardo Mondlane",
+    detectedAt: "2026-05-12 10:02",
+    detectedBy: "CAM-004 (Traffic)",
+    estimatedPenalty: "20,000 MZN",
+    mapPos: { top: "62%", left: "33%" },
+  },
+  {
+    id: "VIO-004",
+    plateNumber: "KKK-123-MP",
+    vehicleType: "Tractor",
+    owner: "Heavy Haul Services",
+    violationType: "Restricted Hours Violation",
+    severity: "High",
+    location: "Marginal Avenue",
+    detectedAt: "2026-05-12 10:30",
+    detectedBy: "GPS-003",
+    estimatedPenalty: "35,000 MZN",
+    mapPos: { top: "44%", left: "57%" },
+  },
+  {
+    id: "VIO-005",
+    plateNumber: "LLL-456-MP",
+    vehicleType: "Heavy Truck",
+    owner: "Freight Masters",
+    violationType: "Route Deviation",
+    severity: "Low",
+    location: "Av. Vladimir Lenine",
+    detectedAt: "2026-05-12 10:55",
+    detectedBy: "GPS-002",
+    estimatedPenalty: "10,000 MZN",
+    mapPos: { top: "48%", left: "46%" },
+  },
+]
+
+// Enforcement hotspot zones for the heatmap
+const heatmapZones = [
+  { top: "30%", left: "38%", size: "120px", opacity: 0.55, label: "Julius Nyerere" },
+  { top: "48%", left: "33%", size: "100px", opacity: 0.45, label: "25 de Setembro" },
+  { top: "40%", left: "52%", size: "90px",  opacity: 0.40, label: "Marginal Ave" },
+  { top: "58%", left: "28%", size: "80px",  opacity: 0.35, label: "Eduardo Mondlane" },
+  { top: "44%", left: "43%", size: "70px",  opacity: 0.30, label: "Vladimir Lenine" },
+  { top: "36%", left: "55%", size: "60px",  opacity: 0.25, label: "Mao Tse Tung" },
+]
 
 // Mock enforcement log data with offence types
 const mockEnforcementLogs = [
   {
     id: "ENF-001",
     plateNumber: "AAA-123-MP",
-    driverName: "João Silva",
+    driverName: "JoÃ£o Silva",
     driverLicense: "DL-2345678",
     vehicleType: "Cargo Truck",
     location: "Av. Julius Nyerere & Mao Tse Tung",
@@ -132,7 +212,7 @@ const mockEnforcementLogs = [
   {
     id: "ENF-007",
     plateNumber: "AAA-123-MP",
-    driverName: "João Silva",
+    driverName: "JoÃ£o Silva",
     driverLicense: "DL-2345678",
     vehicleType: "Cargo Truck",
     location: "Av. Julius Nyerere",
@@ -175,7 +255,7 @@ const mockVehicleData: Record<string, any> = {
     plateNumber: "AAA-123-MP",
     vehicleType: "Cargo Truck",
     owner: "TransMoz Logistics",
-    driverName: "João Silva",
+    driverName: "JoÃ£o Silva",
     driverLicense: "DL-2345678",
     status: "Repeat Offender",
     totalOffences: 3,
@@ -223,6 +303,9 @@ export function StatisticsPage() {
   const [selectedEnforcement, setSelectedEnforcement] = useState<typeof mockEnforcementLogs[0] | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false)
+  const [isMapOpen, setIsMapOpen] = useState(false)
+  const [hoveredViolation, setHoveredViolation] = useState<typeof mockUnenforcedViolations[0] | null>(null)
+  const [mapLayer, setMapLayer] = useState<"heatmap" | "violations" | "both">("both")
   const [actionFilter, setActionFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -318,9 +401,15 @@ export function StatisticsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-4xl font-semibold text-foreground">Violations</h1>
-        <p className="text-lg text-muted-foreground">Track violations and compliance monitoring</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-semibold text-foreground">Violations</h1>
+          <p className="text-lg text-muted-foreground">Track violations and compliance monitoring</p>
+        </div>
+        <Button className="text-base h-11 px-6" onClick={() => setIsMapOpen(true)}>
+          <Map className="h-5 w-5 mr-2" />
+          View Map
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -531,7 +620,7 @@ export function StatisticsPage() {
                   <Label htmlFor="driver-name" className="text-base">Driver Name *</Label>
                   <Input
                     id="driver-name"
-                    placeholder="e.g., João Silva"
+                    placeholder="e.g., JoÃ£o Silva"
                     value={formData.driverName}
                     onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
                     className="text-base h-11"
@@ -911,6 +1000,130 @@ export function StatisticsPage() {
             Close
           </Button>
         </ModalFooter>
+      </Modal>
+
+
+      {/* ── Enforcement Heatmap Modal ── */}
+      <Modal open={isMapOpen} onOpenChange={setIsMapOpen} className="w-[95vw] max-w-7xl">
+        <ModalHeader onClose={() => setIsMapOpen(false)}>
+          <div className="flex items-center justify-between w-full pr-4">
+            <div>
+              <ModalTitle>Enforcement Heatmap — Maputo</ModalTitle>
+              <ModalDescription>
+                Real-time enforcement activity &amp; unenforced violations
+              </ModalDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {(["both", "heatmap", "violations"] as const).map((layer) => (
+                <Button
+                  key={layer}
+                  size="sm"
+                  variant={mapLayer === layer ? "default" : "outline"}
+                  className="h-8 text-sm capitalize"
+                  onClick={() => setMapLayer(layer)}
+                >
+                  {layer === "both" ? "All Layers" : layer === "heatmap" ? "Heatmap" : "Violations"}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </ModalHeader>
+
+        <ModalBody className="p-0">
+          <div className="flex h-[75vh]">
+            {/* Real Leaflet map */}
+            <div className="relative flex-1 overflow-hidden">
+              {isMapOpen && (
+                <EnforcementMap
+                  layer={mapLayer}
+                  hoveredId={hoveredViolation?.id ?? null}
+                  onHover={(id) =>
+                    setHoveredViolation(
+                      id ? (UNENFORCED_VIOLATIONS.find((v) => v.id === id) ?? null) : null
+                    )
+                  }
+                />
+              )}
+            </div>
+
+            {/* Side panel */}
+            <div className="w-80 border-l border-border bg-card flex flex-col">
+              <div className="p-4 border-b border-border">
+                <p className="font-semibold text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
+                  Unenforced Violations
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {UNENFORCED_VIOLATIONS.length} awaiting action — hover to highlight on map
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-border">
+                {UNENFORCED_VIOLATIONS.map((vio) => {
+                  const color = severityColor(vio.severity)
+                  const isActive = hoveredViolation?.id === vio.id
+                  return (
+                    <div
+                      key={vio.id}
+                      className={`p-3 cursor-pointer transition-colors ${isActive ? "bg-muted" : "hover:bg-muted/50"}`}
+                      onMouseEnter={() => setHoveredViolation(vio)}
+                      onMouseLeave={() => setHoveredViolation(null)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm font-mono">{vio.plateNumber}</span>
+                            <Badge
+                              className="text-xs px-1.5 py-0 border-0"
+                              style={{ backgroundColor: color + "22", color }}
+                            >
+                              {vio.severity}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-foreground mt-0.5 truncate">{vio.violationType}</p>
+                          <p className="text-xs text-muted-foreground truncate">{vio.location}</p>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-muted-foreground">{vio.detectedAt}</span>
+                            <span className="text-xs font-semibold" style={{ color }}>{vio.estimatedPenalty}</span>
+                          </div>
+                        </div>
+                        <div
+                          className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 animate-pulse"
+                          style={{ backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="p-3 border-t border-border space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Legend</p>
+                <div className="space-y-1.5">
+                  {[
+                    { color: "#E5533D", label: "Vehicle Impounded / High" },
+                    { color: "#5B8C5A", label: "Fine Issued" },
+                    { color: "#DAA22A", label: "Warning / Medium" },
+                  ].map(({ color, label }) => (
+                    <div key={label} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full border border-white shadow-sm flex-shrink-0" style={{ backgroundColor: color }} />
+                      <span className="text-xs text-muted-foreground">{label}</span>
+                    </div>
+                  ))}
+                  <Separator className="my-1" />
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-3 h-3 flex-shrink-0">
+                      <div className="absolute inset-0 rounded-full bg-[#E5533D] opacity-40 animate-ping" />
+                      <div className="w-3 h-3 rounded-full bg-[#E5533D] border border-white" />
+                    </div>
+                    <span className="text-xs text-muted-foreground">Pulsing = unenforced violation</span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground text-center pt-1">
+                  {mockEnforcementLogs.length} enforcement actions today
+                </p>
+              </div>
+            </div>
+          </div>
+        </ModalBody>
       </Modal>
     </div>
   )
