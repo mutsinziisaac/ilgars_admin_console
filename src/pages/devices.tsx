@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,8 +9,14 @@ import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFoote
 import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
+import L from "leaflet"
+import "leaflet/dist/leaflet.css"
 
-// Mock GPS tracking devices data
+// Maputo center coordinates
+const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
+const DEFAULT_ZOOM = 14
+
+// Mock GPS tracking devices data with real Maputo coordinates
 const mockTrackingDevices = [
   {
     id: "GPS-001",
@@ -19,7 +25,8 @@ const mockTrackingDevices = [
     owner: "TransMoz Logistics",
     status: "Active",
     location: "Av. Julius Nyerere & Mao Tse Tung",
-    coordinates: "-25.9655, 32.5892",
+    coordinates: "-25.9612, 32.5823",
+    latlng: [-25.9612, 32.5823] as [number, number],
     speed: "45 km/h",
     battery: "85%",
     signal: "Strong",
@@ -32,7 +39,8 @@ const mockTrackingDevices = [
     owner: "Cargo Express Ltd",
     status: "Active",
     location: "Av. 25 de Setembro",
-    coordinates: "-25.9612, 32.5731",
+    coordinates: "-25.9655, 32.5731",
+    latlng: [-25.9655, 32.5731] as [number, number],
     speed: "32 km/h",
     battery: "92%",
     signal: "Strong",
@@ -46,6 +54,7 @@ const mockTrackingDevices = [
     status: "Idle",
     location: "Marginal Avenue",
     coordinates: "-25.9701, 32.5945",
+    latlng: [-25.9701, 32.5945] as [number, number],
     speed: "0 km/h",
     battery: "67%",
     signal: "Medium",
@@ -58,7 +67,8 @@ const mockTrackingDevices = [
     owner: "Maputo Transport",
     status: "Active",
     location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5823",
+    coordinates: "-25.9588, 32.5680",
+    latlng: [-25.9588, 32.5680] as [number, number],
     speed: "28 km/h",
     battery: "78%",
     signal: "Strong",
@@ -72,6 +82,7 @@ const mockTrackingDevices = [
     status: "Offline",
     location: "Last: Av. Acordos de Lusaka",
     coordinates: "-25.9723, 32.5834",
+    latlng: [-25.9723, 32.5834] as [number, number],
     speed: "N/A",
     battery: "12%",
     signal: "Weak",
@@ -79,14 +90,15 @@ const mockTrackingDevices = [
   },
 ]
 
-// Mock camera data
+// Mock camera data with real Maputo coordinates
 const mockCameras = [
   {
     id: "CAM-001",
     name: "North Gate - Julius Nyerere",
     type: "ANPR",
     location: "Av. Julius Nyerere",
-    coordinates: "-25.9655, 32.5892",
+    coordinates: "-25.9612, 32.5823",
+    latlng: [-25.9612, 32.5823] as [number, number],
     status: "Online",
     resolution: "4K",
     fps: "30",
@@ -98,7 +110,8 @@ const mockCameras = [
     name: "South Gate - 25 de Setembro",
     type: "ANPR",
     location: "Av. 25 de Setembro",
-    coordinates: "-25.9612, 32.5731",
+    coordinates: "-25.9655, 32.5731",
+    latlng: [-25.9655, 32.5731] as [number, number],
     status: "Online",
     resolution: "4K",
     fps: "30",
@@ -111,6 +124,7 @@ const mockCameras = [
     type: "ANPR",
     location: "Marginal Avenue",
     coordinates: "-25.9701, 32.5945",
+    latlng: [-25.9701, 32.5945] as [number, number],
     status: "Offline",
     resolution: "4K",
     fps: "0",
@@ -122,7 +136,8 @@ const mockCameras = [
     name: "West Gate - Eduardo Mondlane",
     type: "Traffic",
     location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5823",
+    coordinates: "-25.9588, 32.5680",
+    latlng: [-25.9588, 32.5680] as [number, number],
     status: "Online",
     resolution: "1080p",
     fps: "25",
@@ -135,6 +150,7 @@ const mockCameras = [
     type: "ANPR",
     location: "Av. Vladimir Lenine",
     coordinates: "-25.9634, 32.5789",
+    latlng: [-25.9634, 32.5789] as [number, number],
     status: "Online",
     resolution: "4K",
     fps: "30",
@@ -146,10 +162,56 @@ const mockCameras = [
 type TrackingDevice = typeof mockTrackingDevices[0]
 type Camera = typeof mockCameras[0]
 
+// Helper function to create device icon for Leaflet
+function deviceIcon(status: string) {
+  const color = status === "Active" ? "#5B8C5A" : status === "Idle" ? "#DAA22A" : "#E5533D"
+  const pulse = status === "Active"
+  
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      ${pulse ? `<circle cx="14" cy="14" r="13" fill="${color}" opacity="0.25">
+        <animate attributeName="r" values="10;14;10" dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" repeatCount="indefinite"/>
+      </circle>` : ""}
+      <circle cx="14" cy="14" r="9" fill="${color}" stroke="white" stroke-width="2.5"/>
+      <circle cx="14" cy="14" r="4" fill="white" opacity="0.8"/>
+    </svg>`
+  
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  })
+}
+
+// Helper function to create camera icon for Leaflet
+function cameraIcon(status: string) {
+  const color = status === "Online" ? "#5B8C5A" : "#E5533D"
+  
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="9" fill="${color}" stroke="white" stroke-width="2.5"/>
+      <path d="M10 11h4l1-2h2l1 2h4v6H10v-6z" fill="white" opacity="0.9"/>
+      <circle cx="16" cy="14" r="2" fill="${color}"/>
+    </svg>`
+  
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  })
+}
+
 export function DevicesPage() {
   const [activeTab, setActiveTab] = useState("tracking")
   const [searchQuery, setSearchQuery] = useState("")
   const [isMapOpen, setIsMapOpen] = useState(false)
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<L.Map | null>(null)
 
   // Tracking device state
   const [trackingDevices, setTrackingDevices] = useState(mockTrackingDevices)
@@ -199,6 +261,7 @@ export function DevicesPage() {
       status: "Offline",
       location: "Not yet assigned",
       coordinates: "N/A",
+      latlng: MAPUTO_CENTER, // Default to Maputo center
       speed: "N/A",
       battery: "N/A",
       signal: "Weak",
@@ -280,6 +343,115 @@ export function DevicesPage() {
 
   const onlineCameras = cameras.filter(c => c.status === "Online").length
   const offlineCameras = cameras.filter(c => c.status === "Offline").length
+
+  // Initialize Leaflet map when modal opens
+  useEffect(() => {
+    if (!isMapOpen || !mapContainerRef.current || mapRef.current) return
+
+    try {
+      // Create map
+      const map = L.map(mapContainerRef.current, {
+        center: MAPUTO_CENTER,
+        zoom: DEFAULT_ZOOM,
+        zoomControl: true,
+        attributionControl: true,
+      })
+
+      // Add OpenStreetMap tiles
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      }).addTo(map)
+
+      // Add GPS device markers
+      trackingDevices.forEach((device) => {
+        const marker = L.marker(device.latlng, { icon: deviceIcon(device.status) })
+        
+        const color = device.status === "Active" ? "#5B8C5A" : device.status === "Idle" ? "#DAA22A" : "#E5533D"
+        
+        marker.bindPopup(`
+          <div style="min-width:220px;font-family:inherit">
+            <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px">
+              <strong>${device.plateNumber}</strong>
+              <span style="float:right;font-size:11px;opacity:.85">${device.lastUpdate}</span>
+            </div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">${device.vehicleType}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#555;margin-bottom:6px">
+              <div><span style="color:#999">Owner</span><br/>${device.owner}</div>
+              <div><span style="color:#999">Speed</span><br/>${device.speed}</div>
+              <div><span style="color:#999">Battery</span><br/>${device.battery}</div>
+              <div><span style="color:#999">Signal</span><br/>${device.signal}</div>
+            </div>
+            <div style="font-size:11px;color:#555;margin-bottom:6px">📍 ${device.location}</div>
+            <div style="margin-top:6px">
+              <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${device.status}</span>
+            </div>
+          </div>
+        `, { maxWidth: 280 })
+        
+        // Show popup on hover instead of click
+        marker.on('mouseover', function() {
+          this.openPopup()
+        })
+        marker.on('mouseout', function() {
+          this.closePopup()
+        })
+        
+        marker.addTo(map)
+      })
+
+      // Add camera markers
+      cameras.forEach((camera) => {
+        const marker = L.marker(camera.latlng, { icon: cameraIcon(camera.status) })
+        
+        const color = camera.status === "Online" ? "#5B8C5A" : "#E5533D"
+        
+        marker.bindPopup(`
+          <div style="min-width:220px;font-family:inherit">
+            <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px">
+              <strong>${camera.name}</strong>
+            </div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">${camera.type} Camera</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#555;margin-bottom:6px">
+              <div><span style="color:#999">Resolution</span><br/>${camera.resolution}</div>
+              <div><span style="color:#999">FPS</span><br/>${camera.fps}</div>
+              <div><span style="color:#999">Detections</span><br/>${camera.detections}</div>
+              <div><span style="color:#999">Last</span><br/>${camera.lastDetection}</div>
+            </div>
+            <div style="font-size:11px;color:#555;margin-bottom:6px">📍 ${camera.location}</div>
+            <div style="margin-top:6px">
+              <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${camera.status}</span>
+            </div>
+          </div>
+        `, { maxWidth: 280 })
+        
+        // Show popup on hover instead of click
+        marker.on('mouseover', function() {
+          this.openPopup()
+        })
+        marker.on('mouseout', function() {
+          this.closePopup()
+        })
+        
+        marker.addTo(map)
+      })
+
+      mapRef.current = map
+    } catch (error) {
+      console.error("Error initializing map:", error)
+    }
+
+    return () => {
+      if (mapRef.current) {
+        try {
+          mapRef.current.remove()
+          mapRef.current = null
+        } catch (error) {
+          console.error("Error removing map:", error)
+        }
+      }
+    }
+  }, [isMapOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-6">
@@ -633,61 +805,40 @@ export function DevicesPage() {
         <ModalHeader onClose={() => setIsMapOpen(false)}>
           <ModalTitle>Device Location Map - Maputo</ModalTitle>
         </ModalHeader>
+        
         <ModalBody>
-          <div className="relative w-full h-[70vh] bg-muted rounded-lg overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-blue-100">
-              <svg className="absolute inset-0 w-full h-full opacity-20">
-                <defs>
-                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="gray" strokeWidth="0.5"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
-              </svg>
-              <div className="absolute bottom-0 right-0 w-1/3 h-2/3 bg-blue-200 opacity-40 rounded-tl-full"></div>
-              <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg z-10">
-                <h3 className="font-semibold text-sm mb-3">Device Status</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div><span className="text-sm">Active ({activeDevices})</span></div>
-                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-[#DAA22A]"></div><span className="text-sm">Idle ({idleDevices})</span></div>
-                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-[#E5533D]"></div><span className="text-sm">Offline ({offlineDevices})</span></div>
+          <div className="relative w-full h-[70vh] rounded-lg overflow-hidden">
+            {/* Leaflet Map Container */}
+            <div ref={mapContainerRef} className="w-full h-full" />
+            
+            {/* Legend */}
+            <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg z-[1000]">
+              <h3 className="font-semibold text-sm mb-3">Legend</h3>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-gray-600 mb-1">GPS Devices</div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div>
+                  <span className="text-sm">Active ({activeDevices})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-[#DAA22A]"></div>
+                  <span className="text-sm">Idle ({idleDevices})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-[#E5533D]"></div>
+                  <span className="text-sm">Offline ({offlineDevices})</span>
+                </div>
+                <div className="border-t border-gray-200 my-2"></div>
+                <div className="text-xs font-semibold text-gray-600 mb-1">Cameras</div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div>
+                  <span className="text-sm">Online ({onlineCameras})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-[#E5533D]"></div>
+                  <span className="text-sm">Offline ({offlineCameras})</span>
                 </div>
               </div>
-              {trackingDevices.map((device, index) => {
-                const positions = [
-                  { top: '35%', left: '45%' },
-                  { top: '50%', left: '40%' },
-                  { top: '45%', left: '55%' },
-                  { top: '60%', left: '35%' },
-                  { top: '40%', left: '50%' },
-                ]
-                const position = positions[index] || { top: '50%', left: '50%' }
-                const markerColor = device.status === 'Active' ? 'bg-[#5B8C5A]' : device.status === 'Idle' ? 'bg-[#DAA22A]' : 'bg-[#E5533D]'
-                const pulseColor = device.status === 'Active' ? 'bg-[#5B8C5A]' : device.status === 'Idle' ? 'bg-[#DAA22A]' : 'bg-[#E5533D]'
-                return (
-                  <div key={device.id} className="absolute transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer" style={{ top: position.top, left: position.left }}>
-                    {device.status === 'Active' && (<div className={`absolute inset-0 ${pulseColor} rounded-full opacity-75 animate-ping`}></div>)}
-                    <div className={`relative w-6 h-6 ${markerColor} rounded-full border-2 border-white shadow-lg z-10`}>
-                      <div className="absolute inset-0 flex items-center justify-center"><Radio className="h-3 w-3 text-white" /></div>
-                    </div>
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <div className="bg-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap text-sm">
-                        <div className="font-bold">{device.plateNumber}</div>
-                        <div className="text-xs text-muted-foreground">{device.vehicleType}</div>
-                        <div className="text-xs mt-1">{device.location}</div>
-                        <div className="text-xs font-semibold mt-1">Speed: {device.speed}</div>
-                        <div className="text-xs">Battery: {device.battery} | Signal: {device.signal}</div>
-                      </div>
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1"><div className="w-2 h-2 bg-white rotate-45"></div></div>
-                    </div>
-                  </div>
-                )
-              })}
-              <div className="absolute top-[35%] left-[30%] text-xs font-semibold text-gray-600 bg-white/80 px-2 py-1 rounded">Av. Julius Nyerere</div>
-              <div className="absolute top-[50%] left-[25%] text-xs font-semibold text-gray-600 bg-white/80 px-2 py-1 rounded">Av. 25 de Setembro</div>
-              <div className="absolute top-[45%] left-[65%] text-xs font-semibold text-gray-600 bg-white/80 px-2 py-1 rounded">Marginal Avenue</div>
-              <div className="absolute top-[60%] left-[20%] text-xs font-semibold text-gray-600 bg-white/80 px-2 py-1 rounded">Av. Eduardo Mondlane</div>
-              <div className="absolute bottom-4 left-4 text-2xl font-bold text-gray-700 bg-white/90 px-4 py-2 rounded-lg shadow">Maputo, Mozambique</div>
             </div>
           </div>
         </ModalBody>

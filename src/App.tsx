@@ -10,10 +10,19 @@ import { AuthorizationsPage } from "@/pages/authorizations"
 import { AlertsPage } from "@/pages/alerts"
 import { StatisticsPage } from "@/pages/statistics"
 import { VehiclesPage } from "@/pages/vehicles"
-import { DevicesPage } from "@/pages/devices"
+import { GPSTrackingPage } from "@/pages/gps-tracking"
+import { CamerasPage } from "@/pages/cameras"
 import { ReportsPage } from "@/pages/reports"
-import { TariffsPage } from "@/pages/tariffs"
-// import { ConfigsPage } from "@/pages/configs"
+import { MunicipalityPage } from "@/pages/municipality"
+import { TariffPlansPage } from "@/pages/tariff-plans"
+import { RUCPolicyPage } from "@/pages/ruc-policy"
+import { RoutesPage } from "@/pages/routes"
+import { RoadClosureRatesPage } from "@/pages/road-closure-rates"
+import { FinesConfigurationPage } from "@/pages/fines-configuration"
+import { GeofencingZonesPage } from "@/pages/geofencing-zones"
+import { VehicleClassificationPage } from "@/pages/vehicle-classification"
+import { WeightCategoriesPage } from "@/pages/weight-categories"
+import { TimeWindowsPage } from "@/pages/time-windows"
 import { Toaster } from "@/components/ui/sonner"
 
 // Callback handler component for Keycloak redirect
@@ -59,7 +68,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Main App Component
 function AppContent() {
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "devices" | "reports" | "tariffs" | "configs">("dashboard")
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows">("dashboard")
 
   const renderPage = () => {
     switch (currentPage) {
@@ -77,21 +86,39 @@ function AppContent() {
         return <StatisticsPage />
       case "vehicles":
         return <VehiclesPage />
-      case "devices":
-        return <DevicesPage />
+      case "gps-tracking":
+        return <GPSTrackingPage />
+      case "cameras":
+        return <CamerasPage />
       case "reports":
         return <ReportsPage />
-      case "tariffs":
-        return <TariffsPage />
-      // case "configs":
-      //   return <ConfigsPage />
+      case "municipality":
+        return <MunicipalityPage />
+      case "tariff-plans":
+        return <TariffPlansPage />
+      case "ruc-policy":
+        return <RUCPolicyPage />
+      case "routes":
+        return <RoutesPage />
+      case "road-closure-rates":
+        return <RoadClosureRatesPage />
+      case "fines-configuration":
+        return <FinesConfigurationPage />
+      case "geofencing-zones":
+        return <GeofencingZonesPage />
+      case "vehicle-classification":
+        return <VehicleClassificationPage />
+      case "weight-categories":
+        return <WeightCategoriesPage />
+      case "time-windows":
+        return <TimeWindowsPage />
       default:
         return <DashboardPage />
     }
   }
 
   return (
-    <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
+    <Layout currentPage={currentPage} onNavigate={(page) => setCurrentPage(page)}>
       {renderPage()}
     </Layout>
   )

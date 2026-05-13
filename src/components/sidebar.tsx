@@ -4,12 +4,12 @@ import {
   FileText, 
   Truck, 
   BarChart3, 
-  DollarSign,
   ChevronDown,
   ShieldAlert,
   LogOut,
   Languages,
-  Smartphone
+  Smartphone,
+  Settings
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "react-oidc-context"
@@ -26,15 +26,17 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface SidebarProps {
-  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "devices" | "reports" | "tariffs" | "configs"
-  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "devices" | "reports" | "tariffs" | "configs") => void
+  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
 }
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const auth = useAuth()
   const [locale, setLocale] = useState<"en" | "pt">("en")
-  const [permitsOpen, setPermitsOpen] = useState(false)
-  const [violationsOpen, setViolationsOpen] = useState(false)
+  const [permitsOpen, setPermitsOpen] = useState(true) // Open by default
+  const [devicesOpen, setDevicesOpen] = useState(true) // Open by default
+  const [violationsOpen, setViolationsOpen] = useState(true) // Open by default
+  const [configurationsOpen, setConfigurationsOpen] = useState(false) // Keep closed by default as it has many items
   
   const handleLogout = () => {
     auth.signoutRedirect()
@@ -50,13 +52,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const userName = auth.user?.profile?.name || auth.user?.profile?.preferred_username || "Joana Macavel"
   
   const menuItems = [
-    { icon: LayoutDashboard, label: "Overview", page: "dashboard" as const, badge: undefined },
-    { icon: Receipt, label: "Transactions", page: "transactions" as const, badge: undefined },
-    { icon: Truck, label: "Vehicles", page: "vehicles" as const, badge: undefined },
-    { icon: Smartphone, label: "Devices", page: "devices" as const, badge: undefined },
-    { icon: BarChart3, label: "Reports", page: "reports" as const, badge: undefined },
-    { icon: DollarSign, label: "Tariffs", page: "tariffs" as const, badge: undefined },
-    // { icon: Settings, label: "Configs", page: "configs" as const, badge: undefined },
+    { icon: LayoutDashboard, label: "Overview", page: "dashboard" as const, badge: undefined, action: () => onNavigate("dashboard") },
+    { icon: Receipt, label: "Transactions", page: "transactions" as const, badge: undefined, action: () => onNavigate("transactions") },
+    { icon: Truck, label: "Vehicles", page: "vehicles" as const, badge: undefined, action: () => onNavigate("vehicles") },
+    { icon: BarChart3, label: "Reports", page: "reports" as const, badge: undefined, action: () => onNavigate("reports") },
   ]
 
   const permitsSubItems = [
@@ -64,13 +63,33 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { label: "Heavy Truck Permits", page: "heavy-truck-permits" as const, badge: 5 },
   ]
 
+  const devicesSubItems = [
+    { label: "GPS Tracking", page: "gps-tracking" as const, badge: undefined },
+    { label: "Cameras", page: "cameras" as const, badge: undefined },
+  ]
+
   const violationsSubItems = [
     { label: "Alerts", page: "alerts" as const, badge: 7 },
     { label: "Enforcement", page: "enforcement" as const, badge: 12 },
   ]
 
+  const configurationsSubItems = [
+    { label: "Municipality", page: "municipality" as const },
+    { label: "Tariff Plans", page: "tariff-plans" as const },
+    { label: "RUC Policy", page: "ruc-policy" as const },
+    { label: "Routes", page: "routes" as const },
+    { label: "Road Closure Rates", page: "road-closure-rates" as const },
+    { label: "Fines Configuration", page: "fines-configuration" as const },
+    { label: "Geofencing Zones", page: "geofencing-zones" as const },
+    { label: "Vehicle Classification", page: "vehicle-classification" as const },
+    { label: "Weight Categories", page: "weight-categories" as const },
+    { label: "Time Windows", page: "time-windows" as const },
+  ]
+
   const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "heavy-truck-permits"
+  const isDevicesActive = currentPage === "gps-tracking" || currentPage === "cameras"
   const isViolationsActive = currentPage === "alerts" || currentPage === "enforcement"
+  const isConfigurationsActive = currentPage === "municipality" || currentPage === "tariff-plans" || currentPage === "ruc-policy" || currentPage === "routes" || currentPage === "road-closure-rates" || currentPage === "fines-configuration" || currentPage === "geofencing-zones" || currentPage === "vehicle-classification" || currentPage === "weight-categories" || currentPage === "time-windows"
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-sidebar-border bg-card">
       {/* Logo */}
@@ -97,49 +116,19 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           Operations
         </div>
         
-        {/* Overview */}
-        {menuItems.slice(0, 1).map((item) => {
+        {/* Main Menu Items */}
+        {menuItems.map((item) => {
           const Icon = item.icon
           const isActive = item.page === currentPage
           return (
             <button
               key={item.label}
-              onClick={() => item.page && onNavigate(item.page)}
-              disabled={!item.page}
+              onClick={() => item.action()}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
                 isActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                !item.page && "cursor-not-allowed opacity-50"
-              )}
-            >
-              <Icon className="h-5 w-5" />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.badge && (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          )
-        })}
-
-        {/* Transactions */}
-        {menuItems.slice(1, 2).map((item) => {
-          const Icon = item.icon
-          const isActive = item.page === currentPage
-          return (
-            <button
-              key={item.label}
-              onClick={() => item.page && onNavigate(item.page)}
-              disabled={!item.page}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                !item.page && "cursor-not-allowed opacity-50"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -247,33 +236,91 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           )}
         </div>
 
-        {/* Rest of menu items (Vehicles, Devices, Reports, Tariffs) */}
-        {menuItems.slice(2).map((item) => {
-          const Icon = item.icon
-          const isActive = item.page === currentPage
-          return (
-            <button
-              key={item.label}
-              onClick={() => item.page && onNavigate(item.page)}
-              disabled={!item.page}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                !item.page && "cursor-not-allowed opacity-50"
-              )}
-            >
-              <Icon className="h-5 w-5" />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.badge && (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          )
-        })}
+        {/* Devices Dropdown */}
+        <div>
+          <button
+            onClick={() => setDevicesOpen(!devicesOpen)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
+              isDevicesActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            )}
+          >
+            <Smartphone className="h-5 w-5" />
+            <span className="flex-1 text-left">Devices</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", devicesOpen && "rotate-180")} />
+          </button>
+          
+          {devicesOpen && (
+            <div className="mt-1 space-y-1 pl-8">
+              {devicesSubItems.map((subItem) => {
+                const isActive = subItem.page === currentPage
+                return (
+                  <button
+                    key={subItem.label}
+                    onClick={() => onNavigate(subItem.page)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <span className="flex-1 text-left">{subItem.label}</span>
+                    {subItem.badge && (
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DAA22A] text-xs text-[#1C1C1C] font-semibold">
+                        {subItem.badge}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Rest of menu items (Reports) */}
+        {/* Reports is now handled in the main menu items loop above */}
+
+        {/* Configurations Dropdown */}
+        <div>
+          <button
+            onClick={() => setConfigurationsOpen(!configurationsOpen)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
+              isConfigurationsActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            )}
+          >
+            <Settings className="h-5 w-5" />
+            <span className="flex-1 text-left">Configurations</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", configurationsOpen && "rotate-180")} />
+          </button>
+          
+          {configurationsOpen && (
+            <div className="mt-1 space-y-1 pl-8">
+              {configurationsSubItems.map((subItem) => {
+                const isActive = subItem.page === currentPage
+                return (
+                  <button
+                    key={subItem.label}
+                    onClick={() => onNavigate(subItem.page)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <span className="flex-1 text-left">{subItem.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* User Profile at Bottom */}

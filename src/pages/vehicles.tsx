@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,113 +11,33 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Truck, Search, Eye, CheckCircle, XCircle, AlertCircle } from "lucide-react"
+import { Truck, Search, Eye, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { toast } from "sonner"
-import { VehiclesApi, getApiErrorMessage } from "@/lib/api"
+import { useVehiclesList } from "@/lib/api/vehicles/hooks"
 import type { Vehicle } from "@/lib/api"
-
-// Mock vehicle data
-const mockVehicles = [
-  {
-    id: 1,
-    plate: "MZB 5678 B",
-    owner: "Moza Transportes Lda",
-    ownerContact: "+258 84 123 4567",
-    ownerEmail: "contact@mozatransportes.co.mz",
-    ownerAddress: "Av. Julius Nyerere, 1234, Maputo",
-    vehicleType: "Cargo Truck",
-    weightClass: "16,001–25,000 kg",
-    dailyRate: 2000,
-    status: "Active",
-    lastPayment: "2026-04-20",
-    registrationDate: "2026-01-15",
-    compliance: "Non-compliant"
-  },
-  {
-    id: 2,
-    plate: "MZB 0011 E",
-    owner: "TransMoz Logistics",
-    ownerContact: "+258 82 987 6543",
-    ownerEmail: "info@transmoz.co.mz",
-    ownerAddress: "Av. 25 de Setembro, 567, Maputo",
-    vehicleType: "Tractor",
-    weightClass: "10,001–16,000 kg",
-    dailyRate: 1500,
-    status: "Active",
-    lastPayment: "2026-05-04",
-    registrationDate: "2023-08-22",
-    compliance: "Compliant"
-  },
-  {
-    id: 3,
-    plate: "MZB 3344 F",
-    owner: "Cargo Express Ltd",
-    ownerContact: "+258 84 555 7890",
-    ownerEmail: "operations@cargoexpress.co.mz",
-    ownerAddress: "Av. Mártires de Inhaminga, 890, Maputo",
-    vehicleType: "Heavy Truck",
-    weightClass: "25,001–35,000 kg",
-    dailyRate: 3000,
-    status: "Active",
-    lastPayment: "2026-05-03",
-    registrationDate: "2026-03-10",
-    compliance: "Compliant"
-  },
-  {
-    id: 4,
-    plate: "MZB 7788 G",
-    owner: "Freight Solutions",
-    vehicleType: "Cargo Truck",
-    weightClass: "16,001–25,000 kg",
-    dailyRate: 2000,
-    status: "Active",
-    lastPayment: "2026-03-15",
-    registrationDate: "2023-11-05",
-    compliance: "Non-compliant"
-  },
-  {
-    id: 5,
-    plate: "MZB 9900 J",
-    owner: "Swift Transport",
-    vehicleType: "Tractor",
-    weightClass: "10,001–16,000 kg",
-    dailyRate: 1500,
-    status: "Active",
-    lastPayment: "2026-05-02",
-    registrationDate: "2026-02-18",
-    compliance: "Compliant"
-  },
-]
 
 export function VehiclesPage(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  // Fetch vehicles from API
-  const { data: vehiclesResponse, isLoading, error } = useQuery({
-    queryKey: ["fleet-vehicles", { page: currentPage, pageSize: itemsPerPage, plateNumber: searchQuery, status: statusFilter }],
-    queryFn: ({ signal }) =>
-      VehiclesApi.getFleetVehicles(
-        {
-          page: currentPage,
-          pageSize: itemsPerPage,
-          plateNumber: searchQuery || undefined,
-          status: statusFilter !== "all" ? statusFilter : undefined,
-        },
-        signal
-      ),
-    enabled: true, // Always fetch
+  // Fetch vehicles from API using the new hooks
+  const { data, isLoading, error, refetch } = useVehiclesList({
+    page: currentPage,
+    pageSize: itemsPerPage,
+    plateNumber: searchQuery || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
   })
 
-  const vehicles = vehiclesResponse?.data || []
-  const totalItems = vehiclesResponse?.meta?.total || 0
+  // Extract data from API response
+  const vehicles = (data?.data || data?.content || []) as any[]
+  const totalItems = data?.meta?.total || vehicles.length
   const totalPages = Math.ceil(totalItems / itemsPerPage)
 
   // Form state
@@ -141,7 +60,7 @@ export function VehiclesPage(): JSX.Element {
   const compliantCount = vehicles.length // Adjust based on your compliance logic
 
   // Handle view details
-  const handleViewDetails = (vehicle: Vehicle) => {
+  const handleViewDetails = (vehicle: any) => {
     setSelectedVehicle(vehicle)
     setIsDetailsDialogOpen(true)
   }
@@ -158,12 +77,6 @@ export function VehiclesPage(): JSX.Element {
   // Handle search
   const handleSearch = () => {
     setCurrentPage(1) // Reset to first page on search
-  }
-
-  // Show error message if API call fails
-  if (error) {
-    const errorMessage = getApiErrorMessage(error)
-    toast.error(errorMessage)
   }
 
   // Handle delete vehicle
@@ -185,7 +98,7 @@ export function VehiclesPage(): JSX.Element {
   }
 
   // Open edit dialog
-  const openEditDialog = (vehicle: Vehicle) => {
+  const openEditDialog = (vehicle: any) => {
     setSelectedVehicle(vehicle)
     setFormData({
       plate: vehicle.plateNumber,
@@ -199,7 +112,7 @@ export function VehiclesPage(): JSX.Element {
 
   // Simulate loading
   const handleRefresh = () => {
-    // Refetch data
+    refetch()
     toast.info("Data refreshed", {
       description: "Vehicle list has been updated."
     })
@@ -256,18 +169,41 @@ export function VehiclesPage(): JSX.Element {
               placeholder="Search vehicles..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="pl-11 text-base h-12 w-80"
             />
           </div>
         </div>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              <div className="flex-1">
+                <p className="font-semibold">Failed to load vehicles</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {error instanceof Error ? error.message : "An error occurred"}
+                </p>
+              </div>
+              <Button onClick={() => refetch()} variant="outline" size="sm">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Total Vehicles</CardDescription>
-            <CardTitle className="text-4xl">{vehicles.length}</CardTitle>
+            <CardTitle className="text-4xl">
+              {isLoading ? <Skeleton className="h-10 w-20" /> : totalItems}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">Registered in system</p>
@@ -277,7 +213,9 @@ export function VehiclesPage(): JSX.Element {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Active</CardDescription>
-            <CardTitle className="text-4xl text-[#D6F0E0]">{activeCount}</CardTitle>
+            <CardTitle className="text-4xl text-[#D6F0E0]">
+              {isLoading ? <Skeleton className="h-10 w-20" /> : activeCount}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">Currently operational</p>
@@ -287,11 +225,13 @@ export function VehiclesPage(): JSX.Element {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Compliant</CardDescription>
-            <CardTitle className="text-4xl text-[#D6F0E0]">{compliantCount}</CardTitle>
+            <CardTitle className="text-4xl text-[#D6F0E0]">
+              {isLoading ? <Skeleton className="h-10 w-20" /> : compliantCount}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">
-              {Math.round((compliantCount / vehicles.length) * 100)}% compliance rate
+              {vehicles.length > 0 ? `${Math.round((compliantCount / vehicles.length) * 100)}% compliance rate` : "N/A"}
             </p>
           </CardContent>
         </Card>
@@ -412,7 +352,7 @@ export function VehiclesPage(): JSX.Element {
           {!isLoading && filteredVehicles.length > 0 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to {Math.min(endIndex, filteredVehicles.length)} of {filteredVehicles.length} vehicles
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} vehicles
               </p>
               <div className="flex items-center gap-2">
                 <Button

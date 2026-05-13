@@ -12,6 +12,7 @@ export default defineConfig({
     },
   },
   server: {
+    port: 5173,
     proxy: {
       // Proxy API requests to avoid CORS issues in development
       '/api/core': {
@@ -24,6 +25,12 @@ export default defineConfig({
         target: 'https://ilgars.ayinza.dev',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/motorvehicle/, '/motorvehicle/api'),
+        secure: false,
+      },
+      '/api/devices': {
+        target: 'https://ilgars.ayinza.dev',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/devices/, '/devices/api'),
         secure: false,
       },
     },
