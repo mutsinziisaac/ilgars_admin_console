@@ -1,5 +1,5 @@
 // Export HTTP clients
-export { coreHttpClient, motorVehicleHttpClient, coreRequest, motorVehicleRequest } from "./httpClient";
+export { coreHttpClient, motorVehicleHttpClient, devicesHttpClient, coreRequest, motorVehicleRequest, devicesRequest } from "./httpClient";
 
 // Export error utilities
 export { ApiError, NetworkError, ValidationError, toApiError, getApiErrorMessage } from "./errors";
@@ -9,8 +9,14 @@ export type { ApiResponse, PaginatedResponse, ApiErrorShape, RequestConfig } fro
 
 // Export API services
 export { VehiclesApi } from "./vehicles/api";
-export { TariffPlansApi } from "./tariffs/api";
-export { RoadClosureRatesApi, RoadClosurePermitsApi } from "./permits/api";
+export { TariffPlansApi } from "./tariff-plans/api";
+export { RUCPoliciesApi } from "./ruc-policies/api";
+export { RoadClosureRatesApi } from "./road-closure-rates/api";
+export { RoadClosurePermitsApi } from "./permits/api";
+export { MunicipalRoutesApi } from "./municipal-routes/api";
+export { MunicipalitiesApi } from "./municipalities/api";
+export { FinePoliciesApi } from "./fine-policies/api";
+export { DevicesApi } from "./devices/api";
 
 // Export schemas and types
 export type { Vehicle, VehicleListResponse, VehicleDetailResponse } from "./vehicles/schemas";
@@ -20,14 +26,52 @@ export type {
   TariffPlanDetailResponse,
   CreateTariffPlanRequest,
   UpdateTariffPlanRequest,
-} from "./tariffs/schemas";
+} from "./tariff-plans/schemas";
+export type {
+  RUCPolicy,
+  RUCPolicyListResponse,
+  RUCPolicyDetailResponse,
+  CreateRUCPolicyRequest,
+  UpdateRUCPolicyRequest,
+} from "./ruc-policies/schemas";
 export type {
   RoadClosureRate,
   RoadClosureRateListResponse,
   RoadClosureRateDetailResponse,
   CreateRoadClosureRateRequest,
+  UpdateRoadClosureRateRequest,
+} from "./road-closure-rates/schemas";
+export type {
   RoadClosurePermit,
   RoadClosurePermitListResponse,
   RoadClosurePermitDetailResponse,
   CreateRoadClosurePermitRequest,
+  RoadClosurePermitApprovalRequest,
 } from "./permits/schemas";
+export type {
+  MunicipalRoute,
+  MunicipalRouteListResponse,
+  MunicipalRouteDetailResponse,
+  CreateMunicipalRouteRequest,
+} from "./municipal-routes/schemas";
+export type {
+  Municipality,
+  BoundaryVersion,
+  MunicipalityDetailResponse,
+  BoundaryVersionDetailResponse,
+  CreateMunicipalityRequest,
+  CreateBoundaryVersionRequest,
+} from "./municipalities/schemas";
+export type {
+  FinePolicy,
+  FinePolicyListResponse,
+  FinePolicyDetailResponse,
+  CreateFinePolicyRequest,
+} from "./fine-policies/schemas";
+export type {
+  Device,
+  DeviceAssignment,
+  ActiveDeviceResponse,
+  RegisterDeviceRequest,
+  AssignDeviceRequest,
+} from "./devices/schemas";

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,123 +6,151 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Eye, Search, Map, Plus } from "lucide-react"
+import { Eye, Search, Plus, Loader2 } from "lucide-react"
+import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
+import { DevicesApi } from "@/lib/api/devices/api"
+import { useRegisterDevice } from "@/lib/api/devices/hooks"
+import { devicesKeys } from "@/lib/api/devices/queryKeys"
+import type { ActiveDeviceResponse, Device, RegisterDeviceRequest } from "@/lib/api/devices/schemas"
+import { VehiclesApi } from "@/lib/api/vehicles/api"
+import { useVehiclesList } from "@/lib/api/vehicles/hooks"
+import type { Vehicle } from "@/lib/api/vehicles/schemas"
+import { ApiError } from "@/lib/api/errors"
 
-// Maputo center coordinates
-const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
-const DEFAULT_ZOOM = 14
+type TrackingDevice = {
+  id: string
+  plateNumber: string
+  vehicleType: string
+  owner: string
+  status: string
+  lastUpdate: string
+  vehicleId?: string
+  backendDeviceId?: string
+  assignmentId?: string
+}
 
-// Mock GPS tracking devices data with real Maputo coordinates
-const mockTrackingDevices = [
-  {
-    id: "GPS-001",
-    plateNumber: "AAA-123-MP",
-    vehicleType: "Cargo Truck",
-    owner: "TransMoz Logistics",
-    status: "Active",
-    location: "Av. Julius Nyerere & Mao Tse Tung",
-    coordinates: "-25.9612, 32.5823",
-    latlng: [-25.9612, 32.5823] as [number, number],
-    speed: "45 km/h",
-    battery: "85%",
-    signal: "Strong",
-    lastUpdate: "2 mins ago"
-  },
-  {
-    id: "GPS-002",
-    plateNumber: "BBB-456-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Cargo Express Ltd",
-    status: "Active",
-    location: "Av. 25 de Setembro",
-    coordinates: "-25.9655, 32.5731",
-    latlng: [-25.9655, 32.5731] as [number, number],
-    speed: "32 km/h",
-    battery: "92%",
-    signal: "Strong",
-    lastUpdate: "1 min ago"
-  },
-  {
-    id: "GPS-003",
-    plateNumber: "CCC-789-MP",
-    vehicleType: "Tractor",
-    owner: "Heavy Haul Services",
-    status: "Idle",
-    location: "Marginal Avenue",
-    coordinates: "-25.9701, 32.5945",
-    latlng: [-25.9701, 32.5945] as [number, number],
-    speed: "0 km/h",
-    battery: "67%",
-    signal: "Medium",
-    lastUpdate: "5 mins ago"
-  },
-  {
-    id: "GPS-004",
-    plateNumber: "DDD-012-MP",
-    vehicleType: "Bus",
-    owner: "Maputo Transport",
-    status: "Active",
-    location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5680",
-    latlng: [-25.9588, 32.5680] as [number, number],
-    speed: "28 km/h",
-    battery: "78%",
-    signal: "Strong",
-    lastUpdate: "3 mins ago"
-  },
-  {
-    id: "GPS-005",
-    plateNumber: "EEE-345-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Freight Masters",
-    status: "Offline",
-    location: "Last: Av. Acordos de Lusaka",
-    coordinates: "-25.9723, 32.5834",
-    latlng: [-25.9723, 32.5834] as [number, number],
-    speed: "N/A",
-    battery: "12%",
-    signal: "Weak",
-    lastUpdate: "2 hours ago"
-  },
-]
+const formatDeviceTimestamp = (value?: string | null) => {
+  if (!value) return "N/A"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
 
-// Helper function to create device icon for Leaflet
-function deviceIcon(status: string) {
-  const color = status === "Active" ? "#5B8C5A" : status === "Idle" ? "#DAA22A" : "#E5533D"
-  const pulse = status === "Active"
-  
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      ${pulse ? `<circle cx="14" cy="14" r="13" fill="${color}" opacity="0.25">
-        <animate attributeName="r" values="10;14;10" dur="1.6s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" repeatCount="indefinite"/>
-      </circle>` : ""}
-      <circle cx="14" cy="14" r="9" fill="${color}" stroke="white" stroke-width="2.5"/>
-      <circle cx="14" cy="14" r="4" fill="white" opacity="0.8"/>
-    </svg>`
-  
-  return L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
-  })
+  return date.toLocaleString()
+}
+
+const toVehicleDisplayName = (vehicle: Vehicle) =>
+  vehicle.vehicleType ||
+  [vehicle.make, vehicle.model].filter(Boolean).join(" ") ||
+  vehicle.serviceType ||
+  "Vehicle"
+
+const toVehicleOwner = (vehicle: Vehicle) =>
+  vehicle.ownerName || vehicle.operatorName || vehicle.ownerId || "Unknown owner"
+
+const mapVehicleToTrackingDevice = (
+  vehicle: Vehicle,
+  activeDevice?: ActiveDeviceResponse | null,
+): TrackingDevice | null => {
+  const tracker = activeDevice?.device
+  const assignment = activeDevice?.assignment
+  const trackerId = tracker?.deviceUid || tracker?.id
+  const hasActiveTracker = Boolean(trackerId && assignment)
+
+  if (!hasActiveTracker || !trackerId) {
+    return null
+  }
+
+  return {
+    id: trackerId,
+    backendDeviceId: tracker?.id || tracker?.deviceUid || undefined,
+    assignmentId: assignment?.id || undefined,
+    vehicleId: vehicle.id,
+    plateNumber: vehicle.plateNumber,
+    vehicleType: toVehicleDisplayName(vehicle),
+    owner: toVehicleOwner(vehicle),
+    status: assignment?.status || tracker?.status || "ACTIVE",
+    lastUpdate: formatDeviceTimestamp(assignment?.assignedAt || tracker?.updatedAt || tracker?.createdAt || vehicle.updatedAt),
+  }
+}
+
+function buildRegisterDevicePayload(form: {
+  deviceId: string
+  imei: string
+  simCard: string
+}): RegisterDeviceRequest {
+  const timestamp = Date.now()
+  const deviceUid = form.deviceId.trim()
+  const simMsisdn = form.simCard.trim().replace(/\s+/g, "") || `+25884${String(timestamp).slice(-7)}`
+
+  return {
+    deviceUid,
+    serialNumber: `SER-${deviceUid || timestamp}`,
+    imei: form.imei.trim() || `356000${timestamp}`,
+    simIccid: `892580${timestamp}`,
+    simMsisdn,
+    vendor: "BMC",
+    model: "A1000",
+    providerKey: "bmc",
+    providerDeviceRef: `BMC-${deviceUid || timestamp}`,
+    protocol: "TCP",
+    firmwareVersion: "uat-1.0",
+    status: "REGISTERED",
+  }
 }
 
 export function GPSTrackingPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [isMapOpen, setIsMapOpen] = useState(false)
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
-  const mapContainerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const [trackingDevices, setTrackingDevices] = useState(mockTrackingDevices)
+  const queryClient = useQueryClient()
+  const registerDeviceMutation = useRegisterDevice()
+  const {
+    data: vehiclesResponse,
+    isLoading: isVehiclesLoading,
+    error: vehiclesError,
+    refetch: refetchVehicles,
+  } = useVehiclesList({ page: 0, size: 100 })
+  const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
+  const activeDeviceQueries = useQueries({
+    queries: vehicles.map((vehicle) => ({
+      queryKey: vehicle.id
+        ? devicesKeys.activeByVehicle(vehicle.id)
+        : ["devices", "active-by-vehicle", "missing-id", vehicle.plateNumber],
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
+        if (!vehicle.id) return null
+
+        try {
+          return await DevicesApi.getActiveDeviceByVehicle(vehicle.id, signal)
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) {
+            return null
+          }
+
+          throw error
+        }
+      },
+      enabled: Boolean(vehicle.id),
+      staleTime: 30_000,
+    })),
+  })
+  const [locallyAddedDevices, setLocallyAddedDevices] = useState<TrackingDevice[]>([])
+  const trackingDevices = useMemo<TrackingDevice[]>(
+    () => [
+      ...vehicles
+        .map((vehicle, index) =>
+          mapVehicleToTrackingDevice(
+            vehicle,
+            activeDeviceQueries[index]?.data ?? null,
+          )
+        )
+        .filter((device): device is TrackingDevice => Boolean(device)),
+      ...locallyAddedDevices,
+    ],
+    [activeDeviceQueries, locallyAddedDevices, vehicles],
+  )
   
   const [deviceForm, setDeviceForm] = useState({
     deviceId: "",
+    vehicleId: "",
     plateNumber: "",
     vehicleType: "",
     owner: "",
@@ -131,32 +159,80 @@ export function GPSTrackingPage() {
   })
 
   const handleAddDevice = () => {
-    const newDevice = {
-      id: deviceForm.deviceId,
-      plateNumber: deviceForm.plateNumber,
-      vehicleType: deviceForm.vehicleType,
-      owner: deviceForm.owner,
-      status: "Offline" as const,
-      location: "Not yet tracked",
-      coordinates: "-25.9692, 32.5732",
-      latlng: [-25.9692, 32.5732] as [number, number],
-      speed: "N/A",
-      battery: "N/A",
-      signal: "N/A",
-      lastUpdate: "Never"
+    if (!deviceForm.deviceId.trim() || !deviceForm.plateNumber.trim()) {
+      toast.error("Device ID and plate number are required")
+      return
     }
-    
-    setTrackingDevices([...trackingDevices, newDevice])
-    setIsAddDeviceOpen(false)
-    setDeviceForm({
-      deviceId: "",
-      plateNumber: "",
-      vehicleType: "",
-      owner: "",
-      imei: "",
-      simCard: ""
+
+    registerDeviceMutation.mutate(buildRegisterDevicePayload(deviceForm), {
+      onSuccess: async (registeredDevice: Device) => {
+        const backendDeviceId = registeredDevice.id || registeredDevice.deviceUid || deviceForm.deviceId.trim()
+        const deviceId = registeredDevice.deviceUid || backendDeviceId
+        const plateNumber = deviceForm.plateNumber.trim()
+        let vehicleId = deviceForm.vehicleId.trim()
+        let resolvedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId || vehicle.plateNumber === plateNumber)
+        let assignmentSucceeded = false
+
+        if (!vehicleId) {
+          try {
+            const vehicleResponse = await VehiclesApi.lookupByPlate(plateNumber)
+            const vehicle = vehicleResponse.data as Vehicle
+            resolvedVehicle = vehicle
+            vehicleId = vehicle.id ?? ""
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Device registered, but no vehicle was found for that plate")
+          }
+        }
+
+        if (vehicleId) {
+          try {
+            await DevicesApi.assignDevice(backendDeviceId, {
+              vehicleId,
+              vehiclePlateSnapshot: plateNumber,
+              vehicleTruckNumberSnapshot: `TRK-${plateNumber}`,
+              assignedBy: "admin-console",
+              reason: "Tracker assignment from admin console",
+            })
+            assignmentSucceeded = true
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Device registered, but assignment failed")
+          }
+        }
+
+        if (vehicleId) {
+          await queryClient.invalidateQueries({ queryKey: devicesKeys.activeByVehicle(vehicleId) })
+          await refetchVehicles()
+        }
+        if (vehicleId && assignmentSucceeded) {
+          const newDevice = {
+            id: deviceId,
+            backendDeviceId,
+            vehicleId,
+            plateNumber,
+            vehicleType: resolvedVehicle ? toVehicleDisplayName(resolvedVehicle) : deviceForm.vehicleType.trim() || "Vehicle",
+            owner: resolvedVehicle ? toVehicleOwner(resolvedVehicle) : deviceForm.owner.trim() || "Unknown owner",
+            status: "ACTIVE",
+            lastUpdate: formatDeviceTimestamp(new Date().toISOString()),
+          }
+
+          setLocallyAddedDevices((currentDevices) => [...currentDevices, newDevice])
+        }
+        setIsAddDeviceOpen(false)
+        setDeviceForm({
+          deviceId: "",
+          vehicleId: "",
+          plateNumber: "",
+          vehicleType: "",
+          owner: "",
+          imei: "",
+          simCard: ""
+        })
+        toast.success(vehicleId && assignmentSucceeded ? "GPS device registered and assigned successfully" : "GPS device registered. Assign it to a vehicle to show it here.")
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to register GPS device")
+      },
     })
-    toast.success("GPS device added successfully")
   }
 
   // Filter tracking devices
@@ -164,11 +240,14 @@ export function GPSTrackingPage() {
     device.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     device.owner.toLowerCase().includes(searchQuery.toLowerCase())
   )
+  const activeDeviceLookupError = activeDeviceQueries.find((query) => query.isError)?.error
 
   // Get status badge
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
       "Active": "bg-[#5B8C5A] text-white",
+      "ACTIVE": "bg-[#5B8C5A] text-white",
+      "REGISTERED": "bg-[#5B8C5A] text-white",
       "Idle": "bg-[#DAA22A] text-[#1C1C1C]",
       "Offline": "bg-[#E5533D] text-white",
     }
@@ -179,92 +258,9 @@ export function GPSTrackingPage() {
     )
   }
 
-  // Get signal icon
-  const getSignalIcon = (signal: string) => {
-    if (signal === "Strong") return <SignalHigh className="h-5 w-5 text-[#5B8C5A]" />
-    if (signal === "Medium") return <Signal className="h-5 w-5 text-[#DAA22A]" />
-    return <SignalLow className="h-5 w-5 text-[#E5533D]" />
-  }
-
-  // Get battery icon
-  const getBatteryIcon = (battery: string) => {
-    const level = parseInt(battery)
-    if (level > 50) return <Battery className="h-5 w-5 text-[#5B8C5A]" />
-    return <BatteryLow className="h-5 w-5 text-[#E5533D]" />
-  }
-
-  const activeDevices = trackingDevices.filter(d => d.status === "Active").length
-  const idleDevices = trackingDevices.filter(d => d.status === "Idle").length
-  const offlineDevices = trackingDevices.filter(d => d.status === "Offline").length
-  const lowBatteryDevices = trackingDevices.filter(d => parseInt(d.battery) < 20).length
-
-  // Initialize Leaflet map when modal opens
-  useEffect(() => {
-    if (!isMapOpen || !mapContainerRef.current || mapRef.current) return
-
-    try {
-      const map = L.map(mapContainerRef.current, {
-        center: MAPUTO_CENTER,
-        zoom: DEFAULT_ZOOM,
-        zoomControl: true,
-        attributionControl: true,
-      })
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map)
-
-      trackingDevices.forEach((device) => {
-        const marker = L.marker(device.latlng, { icon: deviceIcon(device.status) })
-        const color = device.status === "Active" ? "#5B8C5A" : device.status === "Idle" ? "#DAA22A" : "#E5533D"
-        
-        marker.bindPopup(`
-          <div style="min-width:220px;font-family:inherit">
-            <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px">
-              <strong>${device.plateNumber}</strong>
-              <span style="float:right;font-size:11px;opacity:.85">${device.lastUpdate}</span>
-            </div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px">${device.vehicleType}</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#555;margin-bottom:6px">
-              <div><span style="color:#999">Owner</span><br/>${device.owner}</div>
-              <div><span style="color:#999">Speed</span><br/>${device.speed}</div>
-              <div><span style="color:#999">Battery</span><br/>${device.battery}</div>
-              <div><span style="color:#999">Signal</span><br/>${device.signal}</div>
-            </div>
-            <div style="font-size:11px;color:#555;margin-bottom:6px">📍 ${device.location}</div>
-            <div style="margin-top:6px">
-              <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${device.status}</span>
-            </div>
-          </div>
-        `, { maxWidth: 280 })
-        
-        marker.on('mouseover', function() {
-          this.openPopup()
-        })
-        marker.on('mouseout', function() {
-          this.closePopup()
-        })
-        
-        marker.addTo(map)
-      })
-
-      mapRef.current = map
-    } catch (error) {
-      console.error("Error initializing map:", error)
-    }
-
-    return () => {
-      if (mapRef.current) {
-        try {
-          mapRef.current.remove()
-          mapRef.current = null
-        } catch (error) {
-          console.error("Error removing map:", error)
-        }
-      }
-    }
-  }, [isMapOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeDevices = trackingDevices.length
+  const checkedVehicles = vehicles.length
+  const assignmentLookupsLoading = activeDeviceQueries.some((query) => query.isLoading || query.isFetching)
 
   return (
     <div className="space-y-6">
@@ -272,7 +268,7 @@ export function GPSTrackingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold text-foreground">GPS Tracking</h1>
-          <p className="text-lg text-muted-foreground">Real-time vehicle location tracking</p>
+          <p className="text-lg text-muted-foreground">Vehicles with active GPS tracker assignments</p>
         </div>
         <Button onClick={() => setIsAddDeviceOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -281,44 +277,34 @@ export function GPSTrackingPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">Active Tracking</CardDescription>
+            <CardDescription className="text-base">Active Tracker Assignments</CardDescription>
             <CardTitle className="text-4xl text-[#5B8C5A]">{activeDevices}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Vehicles moving</p>
+            <p className="text-base text-muted-foreground">Devices assigned to vehicles</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">Idle</CardDescription>
-            <CardTitle className="text-4xl text-[#DAA22A]">{idleDevices}</CardTitle>
+            <CardDescription className="text-base">Vehicles Checked</CardDescription>
+            <CardTitle className="text-4xl">{checkedVehicles}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Stationary</p>
+            <p className="text-base text-muted-foreground">From Motorvehicle API</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">Offline</CardDescription>
-            <CardTitle className="text-4xl text-[#E5533D]">{offlineDevices}</CardTitle>
+            <CardDescription className="text-base">Lookup Status</CardDescription>
+            <CardTitle className="text-4xl text-[#DAA22A]">{assignmentLookupsLoading ? "Loading" : "Ready"}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">No signal</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-base">Low Battery</CardDescription>
-            <CardTitle className="text-4xl text-[#E5533D]">{lowBatteryDevices}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-base text-muted-foreground">Need charging</p>
+            <p className="text-base text-muted-foreground">Devices active-assignment API</p>
           </CardContent>
         </Card>
       </div>
@@ -329,12 +315,8 @@ export function GPSTrackingPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-2xl">GPS Tracking Devices</CardTitle>
-              <CardDescription className="text-base">Real-time vehicle location tracking</CardDescription>
+              <CardDescription className="text-base">Vehicles enriched with active tracker assignments</CardDescription>
             </div>
-            <Button className="text-base h-11 px-6" onClick={() => setIsMapOpen(true)}>
-              <Map className="h-5 w-5 mr-2" />
-              View Map
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -357,44 +339,51 @@ export function GPSTrackingPage() {
                 <TableHead className="text-base">Device ID</TableHead>
                 <TableHead className="text-base">Plate Number</TableHead>
                 <TableHead className="text-base">Vehicle Type</TableHead>
-                <TableHead className="text-base">Location</TableHead>
-                <TableHead className="text-base">Speed</TableHead>
-                <TableHead className="text-base">Battery</TableHead>
-                <TableHead className="text-base">Signal</TableHead>
+                <TableHead className="text-base">Owner</TableHead>
+                <TableHead className="text-base">Assigned At</TableHead>
                 <TableHead className="text-base">Status</TableHead>
                 <TableHead className="text-right text-base">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
+              {(isVehiclesLoading || assignmentLookupsLoading) && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-10 text-center text-base text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Loading active tracker assignments
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isVehiclesLoading && Boolean(vehiclesError) && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-10 text-center text-base text-destructive">
+                    Failed to load vehicles for device tracking
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isVehiclesLoading && !vehiclesError && Boolean(activeDeviceLookupError) && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-4 text-center text-sm text-[#B7791F]">
+                    Some tracker assignments could not be loaded.
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isVehiclesLoading && !assignmentLookupsLoading && !vehiclesError && filteredDevices.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-10 text-center text-base text-muted-foreground">
+                    No active tracker assignments found.
+                  </TableCell>
+                </TableRow>
+              )}
               {filteredDevices.map((device) => (
                 <TableRow key={device.id}>
                   <TableCell className="font-medium text-base">{device.id}</TableCell>
                   <TableCell className="font-mono font-bold text-base">{device.plateNumber}</TableCell>
                   <TableCell className="text-base">{device.vehicleType}</TableCell>
-                  <TableCell className="text-base max-w-[200px]">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                      <span>{device.location}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-base">
-                    <div className="flex items-center gap-2">
-                      <Navigation className="h-4 w-4 text-muted-foreground" />
-                      {device.speed}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-base">
-                    <div className="flex items-center gap-2">
-                      {getBatteryIcon(device.battery)}
-                      {device.battery}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getSignalIcon(device.signal)}
-                      <span className="text-sm">{device.signal}</span>
-                    </div>
-                  </TableCell>
+                  <TableCell className="text-base">{device.owner}</TableCell>
+                  <TableCell className="text-base">{device.lastUpdate}</TableCell>
                   <TableCell>{getStatusBadge(device.status)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" className="h-10 w-10">
@@ -428,6 +417,18 @@ export function GPSTrackingPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="vehicleId" className="text-base">Vehicle ID</Label>
+              <Input
+                id="vehicleId"
+                value={deviceForm.vehicleId}
+                onChange={(e) => setDeviceForm({ ...deviceForm, vehicleId: e.target.value })}
+                placeholder="Optional backend vehicle ID for assignment"
+                className="text-base h-11"
+              />
+              <p className="text-sm text-muted-foreground">Fill this when you want to assign the tracker immediately</p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="plateNumber" className="text-base">Plate Number *</Label>
               <Input
                 id="plateNumber"
@@ -455,7 +456,7 @@ export function GPSTrackingPage() {
                 id="owner"
                 value={deviceForm.owner}
                 onChange={(e) => setDeviceForm({ ...deviceForm, owner: e.target.value })}
-                placeholder="e.g., TransMoz Logistics"
+                placeholder="e.g., Maputo Logistics"
                 className="text-base h-11"
               />
             </div>
@@ -486,41 +487,21 @@ export function GPSTrackingPage() {
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button variant="outline" onClick={() => setIsAddDeviceOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddDevice}>Add Device</Button>
+          <Button variant="outline" onClick={() => setIsAddDeviceOpen(false)} disabled={registerDeviceMutation.isPending}>Cancel</Button>
+          <Button onClick={handleAddDevice} disabled={registerDeviceMutation.isPending || !deviceForm.deviceId.trim() || !deviceForm.plateNumber.trim()}>
+            {registerDeviceMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Registering
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Device
+              </>
+            )}
+          </Button>
         </ModalFooter>
-      </Modal>
-
-      {/* Map Modal */}
-      <Modal open={isMapOpen} onOpenChange={setIsMapOpen} className="w-[90vw] max-w-7xl">
-        <ModalHeader onClose={() => setIsMapOpen(false)}>
-          <ModalTitle>GPS Device Locations - Maputo</ModalTitle>
-        </ModalHeader>
-        
-        <ModalBody>
-          <div className="relative w-full h-[70vh] rounded-lg overflow-hidden">
-            <div ref={mapContainerRef} className="w-full h-full" />
-            
-            {/* Legend */}
-            <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg z-[1000]">
-              <h3 className="font-semibold text-sm mb-3">GPS Devices</h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div>
-                  <span className="text-sm">Active ({activeDevices})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#DAA22A]"></div>
-                  <span className="text-sm">Idle ({idleDevices})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#E5533D]"></div>
-                  <span className="text-sm">Offline ({offlineDevices})</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ModalBody>
       </Modal>
     </div>
   )

@@ -7,7 +7,7 @@ export const TariffRateSchema = z.object({
   minimumCapacity: z.number().optional().nullable(),
   maximumCapacity: z.number().optional().nullable(),
   amountPerDay: z.number(),
-  amountPerMonth: z.number().optional().default(0),
+  amountPerMonth: z.number().optional(),
   minimumCharge: z.number().optional().default(0),
 })
 
@@ -19,8 +19,8 @@ export const TariffPlanSchema = z.object({
   name: z.string(),
   tariffType: z.string(),
   description: z.string().optional().nullable(),
-  active: z.boolean(),
-  createdAt: z.string(),
+  active: z.boolean().optional().default(false),
+  createdAt: z.string().optional().nullable(),
   updatedAt: z.string().optional().nullable(),
   activatedAt: z.string().optional().nullable(),
   rates: z.array(TariffRateSchema),
@@ -51,6 +51,7 @@ export const TariffPlanDetailResponseSchema = z.object({
 
 // Create Request Schema
 export const CreateTariffPlanRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   code: z.string(),
   name: z.string(),
   tariffType: z.string().default("CIRCULATION_LICENCE"),
@@ -60,6 +61,7 @@ export const CreateTariffPlanRequestSchema = z.object({
 
 // Update Request Schema
 export const UpdateTariffPlanRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   code: z.string(),
   name: z.string(),
   tariffType: z.string(),

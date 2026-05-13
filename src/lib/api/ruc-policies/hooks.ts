@@ -7,6 +7,7 @@ import type {
   RUCPolicyListResponse,
   RUCPolicyDetailResponse,
   CreateRUCPolicyRequest,
+  RUCPolicy,
   UpdateRUCPolicyRequest,
 } from "./schemas"
 import { rucPoliciesKeys } from "./queryKeys"
@@ -39,14 +40,14 @@ const {
 })
 
 // Create the mutation hook factory for activate
-const activateRUCPolicyMutationHook = createMutationHook<string, void>({
+const activateRUCPolicyMutationHook = createMutationHook<RUCPolicy, RUCPolicyDetailResponse>({
   mutationFn: RUCPoliciesApi.activateRUCPolicy,
   invalidateKeys: [rucPoliciesKeys.all()],
 })
 
 // Export hook that matches the pattern from createCrudHooks
 const useActivateRUCPolicy = (
-  options?: UseMutationOptions<void, unknown, string, unknown>
+  options?: UseMutationOptions<RUCPolicyDetailResponse, unknown, RUCPolicy, unknown>
 ) => activateRUCPolicyMutationHook(options)
 
 export {

@@ -1,43 +1,57 @@
-import { coreRequest } from "../httpClient";
+import { motorVehicleRequest } from "../httpClient";
 import {
-  FleetVehicleListResponseSchema,
-  FleetVehicleDetailResponseSchema,
-  type FleetVehicleListResponse,
-  type FleetVehicleDetailResponse,
+  VehicleListResponseSchema,
+  VehicleDetailResponseSchema,
+  type VehicleListResponse,
+  type VehicleDetailResponse,
 } from "./schemas";
 
-export interface FleetVehicleSearchParams {
+export interface VehicleSearchParams {
   page?: number;
-  pageSize?: number;
+  size?: number;
   plateNumber?: string;
   make?: string;
   model?: string;
+  fuelType?: string;
+  serviceType?: string;
   status?: string;
 }
 
 export const VehiclesApi = {
   /**
-   * Get fleet vehicles with optional filters
-   * GET /v1/fleet-vehicles
+   * Get Motorvehicle vehicles with optional filters
+   * GET /v1/vehicles
    */
-  getFleetVehicles: (params?: FleetVehicleSearchParams, signal?: AbortSignal) =>
-    coreRequest<FleetVehicleListResponse>({
+  getVehicles: (params?: VehicleSearchParams, signal?: AbortSignal) =>
+    motorVehicleRequest<VehicleListResponse>({
       method: "GET",
-      url: "/v1/fleet-vehicles",
+      url: "/v1/vehicles",
       params,
       signal,
-      schema: FleetVehicleListResponseSchema,
+      schema: VehicleListResponseSchema,
     }),
 
   /**
-   * Get fleet vehicle by ID
-   * GET /v1/fleet-vehicles/{id}
+   * Get vehicle by ID
+   * GET /v1/vehicles/{id}
    */
-  getFleetVehicleById: (id: string, signal?: AbortSignal) =>
-    coreRequest<FleetVehicleDetailResponse>({
+  getVehicleById: (id: string, signal?: AbortSignal) =>
+    motorVehicleRequest<VehicleDetailResponse>({
       method: "GET",
-      url: `/v1/fleet-vehicles/${encodeURIComponent(id)}`,
+      url: `/v1/vehicles/${encodeURIComponent(id)}`,
       signal,
-      schema: FleetVehicleDetailResponseSchema,
+      schema: VehicleDetailResponseSchema,
+    }),
+
+  /**
+   * Lookup vehicle by plate number
+   * GET /v1/vehicles/by-plate/{plateNumber}
+   */
+  lookupByPlate: (plateNumber: string, signal?: AbortSignal) =>
+    motorVehicleRequest<VehicleDetailResponse>({
+      method: "GET",
+      url: `/v1/vehicles/by-plate/${encodeURIComponent(plateNumber)}`,
+      signal,
+      schema: VehicleDetailResponseSchema,
     }),
 };

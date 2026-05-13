@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,136 +7,164 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Route, Plus, Edit, Trash2, Upload, MapPin, CheckCircle, XCircle } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Route, Plus, Upload, MapPin, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import { useCreateMunicipalRoute, useMunicipalRoutesList } from "@/lib/api/municipal-routes/hooks"
+import type { MunicipalRoute } from "@/lib/api/municipal-routes/schemas"
+import {
+  ACTIVE_MUNICIPALITY_ID_STORAGE_KEY,
+  DEFAULT_MUNICIPALITY_ID,
+} from "@/lib/api/constants"
 
-// Mock routes data
-const mockRoutes = [
-  {
-    id: "route-001",
-    code: "ROUTE-MAIN-01",
-    name: "Main Avenue Route",
-    description: "Primary route through city center",
-    allowedUses: ["Heavy Truck Permit", "Road Closure Permit"],
-    active: true,
-    createdAt: "2026-01-10",
-    geoJsonLength: 2456 // characters
-  },
-  {
-    id: "route-002",
-    code: "ROUTE-IND-01",
-    name: "Industrial Zone Route",
-    description: "Route connecting industrial areas",
-    allowedUses: ["Heavy Truck Permit"],
-    active: true,
-    createdAt: "2026-02-05",
-    geoJsonLength: 3124
-  },
-  {
-    id: "route-003",
-    code: "ROUTE-PORT-01",
-    name: "Port Access Route",
-    description: "Direct route to port facilities",
-    allowedUses: ["Heavy Truck Permit", "Road Closure Permit"],
-    active: false,
-    createdAt: "2026-03-12",
-    geoJsonLength: 1876
-  }
+const defaultRouteGeoJson =
+  "{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[32.443,-25.965],[32.529,-25.951],[32.573,-25.961]]},\"properties\":{\"name\":\"EN4 Avenida de Mocambique to Port of Maputo\"}}"
+
+const allowedUseOptions = [
+  { label: "Special Permit", value: "SPECIAL_PERMIT" },
+  { label: "Road Closure", value: "ROAD_CLOSURE" },
 ]
 
-interface RouteData {
-  id: string
-  code: string
-  name: string
-  description: string
-  allowedUses: string[]
-  active: boolean
-  createdAt: string
-  geoJsonLength: number
+const roadTypeOptions = [
+  { label: "Protocol Roads", value: "PRIMARY_ROAD" },
+  { label: "Secondary Roads", value: "SECONDARY_ROAD" },
+  { label: "Tertiary Roads", value: "TERTIARY_ROAD" },
+]
+
+const filterOptions = [
+  { label: "All", value: "all" },
+  { label: "Special Permit", value: "SPECIAL_PERMIT" },
+  { label: "Road Closure", value: "ROAD_CLOSURE" },
+] as const
+
+const getStoredMunicipalityId = () => {
+  if (typeof window === "undefined") return DEFAULT_MUNICIPALITY_ID
+
+  return localStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
 }
 
+const createDefaultRouteCode = () => `EN4-PORT-${Date.now()}`
+
 export function RoutesPage() {
-  const [routes, setRoutes] = useState<RouteData[]>(mockRoutes)
-  const [selectedRoute, setSelectedRoute] = useState<RouteData | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [activeAllowedUse, setActiveAllowedUse] = useState<(typeof filterOptions)[number]["value"]>("all")
+  const [activeMunicipalityId, setActiveMunicipalityId] = useState(getStoredMunicipalityId())
 
   const [routeForm, setRouteForm] = useState({
-    code: "",
-    name: "",
-    description: "",
-    allowedUses: [] as string[],
-    geoJsonData: ""
+    municipalityId: activeMunicipalityId,
+    code: createDefaultRouteCode(),
+    name: "EN4 Avenida de Mocambique to Port of Maputo",
+    roadType: "PRIMARY_ROAD",
+    distanceKm: "14.5",
+    allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
+    geoJson: defaultRouteGeoJson,
   })
 
-  const permitTypes = ["Heavy Truck Permit", "Road Closure Permit"]
+  const routeListParams = {
+    municipalityId: activeMunicipalityId,
+    active: true,
+    ...(activeAllowedUse === "all" ? {} : { allowedUse: activeAllowedUse }),
+  }
+
+  const { data: routesResponse, isLoading, error, refetch } = useMunicipalRoutesList(routeListParams)
+  const createMutation = useCreateMunicipalRoute()
+  const routes = routesResponse?.data || routesResponse?.content || []
+
+  const resetForm = () => {
+    const municipalityId = getStoredMunicipalityId()
+    setRouteForm({
+      municipalityId,
+      code: createDefaultRouteCode(),
+      name: "EN4 Avenida de Mocambique to Port of Maputo",
+      roadType: "PRIMARY_ROAD",
+      distanceKm: "14.5",
+      allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
+      geoJson: defaultRouteGeoJson,
+    })
+  }
+
+  const toggleAllowedUse = (allowedUse: string) => {
+    const allowedUses = routeForm.allowedUses.includes(allowedUse)
+      ? routeForm.allowedUses.filter((use) => use !== allowedUse)
+      : [...routeForm.allowedUses, allowedUse]
+
+    setRouteForm({ ...routeForm, allowedUses })
+  }
 
   const handleCreateRoute = () => {
-    const newRoute: RouteData = {
-      id: `route-${routes.length + 1}`.padStart(10, '0'),
-      code: routeForm.code,
-      name: routeForm.name,
-      description: routeForm.description,
-      allowedUses: routeForm.allowedUses,
-      active: false,
-      createdAt: new Date().toISOString().split('T')[0],
-      geoJsonLength: routeForm.geoJsonData.length
+    const municipalityId = routeForm.municipalityId.trim()
+
+    if (!municipalityId) {
+      toast.error("Municipality ID is required")
+      return
     }
-    setRoutes([...routes, newRoute])
-    setIsCreateOpen(false)
-    setRouteForm({ code: "", name: "", description: "", allowedUses: [], geoJsonData: "" })
-    toast.success("Route created successfully")
+
+    if (!routeForm.code.trim() || !routeForm.name.trim() || !routeForm.roadType.trim()) {
+      toast.error("Route code, name, and road type are required")
+      return
+    }
+
+    if (routeForm.allowedUses.length === 0) {
+      toast.error("Select at least one allowed use")
+      return
+    }
+
+    try {
+      JSON.parse(routeForm.geoJson)
+    } catch {
+      toast.error("GeoJSON route data must be valid JSON")
+      return
+    }
+
+    const distanceKm = Number(routeForm.distanceKm)
+
+    createMutation.mutate(
+      {
+        municipalityId,
+        code: routeForm.code.trim(),
+        name: routeForm.name.trim(),
+        roadType: routeForm.roadType.trim(),
+        geoJson: routeForm.geoJson,
+        distanceKm: Number.isFinite(distanceKm) ? distanceKm : undefined,
+        allowedUses: routeForm.allowedUses,
+        active: true,
+      },
+      {
+        onSuccess: () => {
+          localStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, municipalityId)
+          setActiveMunicipalityId(municipalityId)
+          setIsCreateOpen(false)
+          resetForm()
+          toast.success("Route created successfully")
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to create route")
+        },
+      },
+    )
   }
 
-  const handleUpdateRoute = () => {
-    if (!selectedRoute) return
-    setRoutes(routes.map(r => 
-      r.id === selectedRoute.id 
-        ? { 
-            ...r, 
-            code: routeForm.code,
-            name: routeForm.name,
-            description: routeForm.description,
-            allowedUses: routeForm.allowedUses,
-            geoJsonLength: routeForm.geoJsonData.length || r.geoJsonLength
-          }
-        : r
-    ))
-    setIsEditOpen(false)
-    setSelectedRoute(null)
-    toast.success("Route updated successfully")
-  }
+  const handleRouteFileUpload = async (file: File | undefined) => {
+    if (!file) return
 
-  const handleDeleteRoute = (routeId: string) => {
-    setRoutes(routes.filter(r => r.id !== routeId))
-    toast.success("Route deleted")
-  }
-
-  const handleToggleActive = (routeId: string) => {
-    setRoutes(routes.map(r => 
-      r.id === routeId ? { ...r, active: !r.active } : r
-    ))
-    const route = routes.find(r => r.id === routeId)
-    toast.success(`Route ${route?.active ? 'deactivated' : 'activated'}`)
-  }
-
-  const handleEditClick = (route: RouteData) => {
-    setSelectedRoute(route)
-    setRouteForm({
-      code: route.code,
-      name: route.name,
-      description: route.description,
-      allowedUses: [...route.allowedUses],
-      geoJsonData: ""
-    })
-    setIsEditOpen(true)
-  }
-
-  const toggleAllowedUse = (permitType: string) => {
-    const newAllowedUses = routeForm.allowedUses.includes(permitType)
-      ? routeForm.allowedUses.filter(u => u !== permitType)
-      : [...routeForm.allowedUses, permitType]
-    setRouteForm({ ...routeForm, allowedUses: newAllowedUses })
+    try {
+      const geoJson = await file.text()
+      JSON.parse(geoJson)
+      setRouteForm({
+        ...routeForm,
+        name: routeForm.name || file.name.replace(/\.(geo)?json$/i, ""),
+        geoJson,
+      })
+      toast.success("GeoJSON route loaded")
+    } catch {
+      toast.error("Upload a valid GeoJSON file")
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
   }
 
   const getStatusBadge = (active: boolean) => {
@@ -153,105 +181,163 @@ export function RoutesPage() {
     )
   }
 
+  const renderAllowedUse = (allowedUse: string) =>
+    allowedUseOptions.find((option) => option.value === allowedUse)?.label || allowedUse
+
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-semibold text-foreground">Municipal Routes</h1>
-          <p className="text-lg text-muted-foreground">Manage routes for permits and road closures</p>
+          <p className="text-lg text-muted-foreground">Create and list selectable backend routes</p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+        <Button onClick={() => setIsCreateOpen(true)} disabled={createMutation.isPending}>
+          {createMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4 mr-2" />
+          )}
           Create Route
         </Button>
       </div>
 
-      {/* Routes Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Routes</CardTitle>
-          <CardDescription className="text-base">
-            Configure municipal routes with GeoJSON data and permitted uses
-          </CardDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-2xl">Routes</CardTitle>
+              <CardDescription className="text-base">
+                Uses GET /municipal-routes with municipality, active, and allowed-use filters
+              </CardDescription>
+            </div>
+            <div className="flex rounded-md border p-1">
+              {filterOptions.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={activeAllowedUse === filter.value ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setActiveAllowedUse(filter.value)}
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-base">Route Code</TableHead>
-                <TableHead className="text-base">Route Name</TableHead>
-                <TableHead className="text-base">Description</TableHead>
-                <TableHead className="text-base">Allowed Uses</TableHead>
-                <TableHead className="text-base">Status</TableHead>
-                <TableHead className="text-right text-base">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {routes.map((route) => (
-                <TableRow key={route.id}>
-                  <TableCell className="font-medium text-base">{route.code}</TableCell>
-                  <TableCell className="text-base">{route.name}</TableCell>
-                  <TableCell className="text-base">{route.description}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {route.allowedUses.map((use) => (
-                        <Badge key={use} variant="outline" className="text-xs">
-                          {use}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(route.active)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEditClick(route)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={route.active ? "outline" : "default"}
-                        onClick={() => handleToggleActive(route.id)}
-                      >
-                        {route.active ? "Deactivate" : "Activate"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDeleteRoute(route.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <MapPin className="h-4 w-4" />
+            <span className="font-mono">{activeMunicipalityId}</span>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Failed to load routes</h3>
+              <p className="text-muted-foreground mb-4">{(error as Error)?.message || "An error occurred"}</p>
+              <Button variant="outline" onClick={() => refetch()}>
+                Try Again
+              </Button>
+            </div>
+          ) : routes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Route className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No routes found</h3>
+              <p className="text-muted-foreground">Create an active municipal route to list it here.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-base">Route Code</TableHead>
+                  <TableHead className="text-base">Route Name</TableHead>
+                  <TableHead className="text-base">Road Type</TableHead>
+                  <TableHead className="text-base">Distance</TableHead>
+                  <TableHead className="text-base">Allowed Uses</TableHead>
+                  <TableHead className="text-base">Status</TableHead>
+                  <TableHead className="text-base">Created</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {routes.map((route: MunicipalRoute) => (
+                  <TableRow key={route.id}>
+                    <TableCell className="font-medium text-base">{route.code}</TableCell>
+                    <TableCell className="text-base">{route.name}</TableCell>
+                    <TableCell className="text-base">{route.roadType}</TableCell>
+                    <TableCell className="text-base">{route.distanceKm ?? "-"} km</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {route.allowedUses.map((use) => (
+                          <Badge key={use} variant="outline" className="text-xs">
+                            {renderAllowedUse(use)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(route.active)}</TableCell>
+                    <TableCell className="text-base">{route.createdAt?.split("T")[0] || "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
-      {/* Create Route Modal */}
       <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-3xl">
         <ModalHeader onClose={() => setIsCreateOpen(false)}>
           <ModalTitle>Create Route</ModalTitle>
-          <ModalDescription>Define a new municipal route with GeoJSON data</ModalDescription>
+          <ModalDescription>POST /municipal-routes with GeoJSON LineString data</ModalDescription>
         </ModalHeader>
         <ModalBody>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="code" className="text-base">Route Code *</Label>
+              <Label htmlFor="municipalityId" className="text-base">Municipality ID *</Label>
               <Input
-                id="code"
-                value={routeForm.code}
-                onChange={(e) => setRouteForm({ ...routeForm, code: e.target.value })}
-                placeholder="e.g., ROUTE-MAIN-01"
+                id="municipalityId"
+                value={routeForm.municipalityId}
+                onChange={(event) => setRouteForm({ ...routeForm, municipalityId: event.target.value })}
+                placeholder="Backend municipality UUID"
                 className="text-base h-11"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="code" className="text-base">Route Code *</Label>
+                <Input
+                  id="code"
+                  value={routeForm.code}
+                  onChange={(event) => setRouteForm({ ...routeForm, code: event.target.value })}
+                  placeholder="e.g., EN4-PORT-UAT"
+                  className="text-base h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="roadType" className="text-base">Road Type *</Label>
+                <Select
+                  value={routeForm.roadType}
+                  onValueChange={(roadType) => setRouteForm({ ...routeForm, roadType })}
+                >
+                  <SelectTrigger id="roadType" className="text-base h-11">
+                    <SelectValue placeholder="Select road type" />
+                  </SelectTrigger>
+                  <SelectContent className="text-base">
+                    {roadTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="text-base">
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -259,62 +345,73 @@ export function RoutesPage() {
               <Input
                 id="name"
                 value={routeForm.name}
-                onChange={(e) => setRouteForm({ ...routeForm, name: e.target.value })}
-                placeholder="e.g., Main Avenue Route"
+                onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })}
+                placeholder="e.g., EN4 Avenida de Mocambique to Port of Maputo"
                 className="text-base h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-base">Description</Label>
+              <Label htmlFor="distanceKm" className="text-base">Distance (km)</Label>
               <Input
-                id="description"
-                value={routeForm.description}
-                onChange={(e) => setRouteForm({ ...routeForm, description: e.target.value })}
-                placeholder="e.g., Primary route through city center"
+                id="distanceKm"
+                type="number"
+                value={routeForm.distanceKm}
+                onChange={(event) => setRouteForm({ ...routeForm, distanceKm: event.target.value })}
+                placeholder="e.g., 14.5"
                 className="text-base h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-base">Allowed Permit Uses *</Label>
+              <Label className="text-base">Allowed Uses *</Label>
               <div className="flex flex-wrap gap-2">
-                {permitTypes.map((permitType) => (
+                {allowedUseOptions.map((option) => (
                   <button
-                    key={permitType}
+                    key={option.value}
                     type="button"
-                    onClick={() => toggleAllowedUse(permitType)}
+                    onClick={() => toggleAllowedUse(option.value)}
                     className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                      routeForm.allowedUses.includes(permitType)
+                      routeForm.allowedUses.includes(option.value)
                         ? "border-[#5B8C5A] bg-[#5B8C5A]/10 text-[#5B8C5A]"
                         : "border-border hover:border-muted-foreground"
                     }`}
                   >
-                    {permitType}
+                    {option.label}
                   </button>
                 ))}
               </div>
-              <p className="text-sm text-muted-foreground">
-                Select which permit types can use this route
-              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="geoJsonData" className="text-base">GeoJSON Route Data *</Label>
+              <Label htmlFor="geoJson" className="text-base">GeoJSON Route Data *</Label>
               <Textarea
-                id="geoJsonData"
-                value={routeForm.geoJsonData}
-                onChange={(e) => setRouteForm({ ...routeForm, geoJsonData: e.target.value })}
-                placeholder='{"type":"LineString","coordinates":[[...]]}'
+                id="geoJson"
+                value={routeForm.geoJson}
+                onChange={(event) => setRouteForm({ ...routeForm, geoJson: event.target.value })}
+                placeholder={defaultRouteGeoJson}
                 className="text-base min-h-[200px] font-mono text-sm"
               />
               <p className="text-sm text-muted-foreground">
-                Paste GeoJSON LineString or upload a .geojson file
+                Paste a GeoJSON Feature or LineString for the route.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="outline" className="w-full">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".geojson,.json,application/geo+json,application/json"
+                className="hidden"
+                onChange={(event) => handleRouteFileUpload(event.target.files?.[0])}
+              />
+              <Button
+                variant="outline"
+                className="w-full"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={createMutation.isPending}
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload GeoJSON File
               </Button>
@@ -322,87 +419,19 @@ export function RoutesPage() {
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateRoute}>Create Route</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* Edit Route Modal */}
-      <Modal open={isEditOpen} onOpenChange={setIsEditOpen} className="w-full max-w-3xl">
-        <ModalHeader onClose={() => setIsEditOpen(false)}>
-          <ModalTitle>Edit Route</ModalTitle>
-          <ModalDescription>Update route details and configuration</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-code" className="text-base">Route Code *</Label>
-              <Input
-                id="edit-code"
-                value={routeForm.code}
-                onChange={(e) => setRouteForm({ ...routeForm, code: e.target.value })}
-                placeholder="e.g., ROUTE-MAIN-01"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-name" className="text-base">Route Name *</Label>
-              <Input
-                id="edit-name"
-                value={routeForm.name}
-                onChange={(e) => setRouteForm({ ...routeForm, name: e.target.value })}
-                placeholder="e.g., Main Avenue Route"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-description" className="text-base">Description</Label>
-              <Input
-                id="edit-description"
-                value={routeForm.description}
-                onChange={(e) => setRouteForm({ ...routeForm, description: e.target.value })}
-                placeholder="e.g., Primary route through city center"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-base">Allowed Permit Uses *</Label>
-              <div className="flex flex-wrap gap-2">
-                {permitTypes.map((permitType) => (
-                  <button
-                    key={permitType}
-                    type="button"
-                    onClick={() => toggleAllowedUse(permitType)}
-                    className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                      routeForm.allowedUses.includes(permitType)
-                        ? "border-[#5B8C5A] bg-[#5B8C5A]/10 text-[#5B8C5A]"
-                        : "border-border hover:border-muted-foreground"
-                    }`}
-                  >
-                    {permitType}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-geoJsonData" className="text-base">Update GeoJSON Route Data (Optional)</Label>
-              <Textarea
-                id="edit-geoJsonData"
-                value={routeForm.geoJsonData}
-                onChange={(e) => setRouteForm({ ...routeForm, geoJsonData: e.target.value })}
-                placeholder='Leave empty to keep existing data or paste new GeoJSON'
-                className="text-base min-h-[150px] font-mono text-sm"
-              />
-            </div>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-          <Button onClick={handleUpdateRoute}>Save Changes</Button>
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateRoute} disabled={createMutation.isPending}>
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Route"
+            )}
+          </Button>
         </ModalFooter>
       </Modal>
     </div>

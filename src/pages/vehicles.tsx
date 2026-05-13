@@ -29,16 +29,49 @@ export function VehiclesPage(): JSX.Element {
 
   // Fetch vehicles from API using the new hooks
   const { data, isLoading, error, refetch } = useVehiclesList({
-    page: currentPage,
-    pageSize: itemsPerPage,
+    page: currentPage - 1,
+    size: itemsPerPage,
     plateNumber: searchQuery || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
   })
 
   // Extract data from API response
-  const vehicles = (data?.data || data?.content || []) as any[]
-  const totalItems = data?.meta?.total || vehicles.length
+  const vehicles = (data?.data || []) as any[]
+  const vehicleMeta = data?.meta as any
+  const totalItems = Number(vehicleMeta?.total || vehicleMeta?.totalElements || vehicles.length)
   const totalPages = Math.ceil(totalItems / itemsPerPage)
+
+  const getVehicleStatus = (vehicle: any) => vehicle.registryStatus || vehicle.status || "ACTIVE"
+  const isActiveVehicle = (vehicle: any) => String(getVehicleStatus(vehicle)).toUpperCase() === "ACTIVE"
+  const getVehicleOwner = (vehicle: any) => vehicle.ownerName || vehicle.operatorName || "N/A"
+  const getVehicleType = (vehicle: any) =>
+    [vehicle.make, vehicle.model].filter(Boolean).join(" ") ||
+    vehicle.vehicleType ||
+    vehicle.truckNumber ||
+    "N/A"
+  const getVehicleCapacity = (vehicle: any) => {
+    const capacity =
+      vehicle.currentLogbookCapacity ??
+      vehicle.logbookCapacityKg ??
+      vehicle.capacity ??
+      vehicle.grossWeightTotalKg
+    const unit = vehicle.capacityUnit || (vehicle.logbookCapacityKg || vehicle.grossWeightTotalKg ? "KG" : "")
+
+    return capacity ? `${capacity.toLocaleString()}${unit ? ` ${unit}` : ""}` : "N/A"
+  }
+  const getVehicleRegistrationDate = (vehicle: any) =>
+    vehicle.registrationDate || vehicle.createdAt?.split?.("T")?.[0] || "N/A"
+  const toVehicleView = (vehicle: any) => ({
+    ...vehicle,
+    plate: vehicle.plateNumber,
+    owner: getVehicleOwner(vehicle),
+    vehicleType: getVehicleType(vehicle),
+    weightClass: getVehicleCapacity(vehicle),
+    dailyRate: 0,
+    registrationDate: getVehicleRegistrationDate(vehicle),
+    lastPayment: "N/A",
+    compliance: isActiveVehicle(vehicle) ? "Compliant" : "Non-compliant",
+  })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -51,17 +84,17 @@ export function VehiclesPage(): JSX.Element {
 
   // Filter vehicles (client-side filtering for status if needed)
   const filteredVehicles = vehicles.filter(vehicle => {
-    const matchesStatus = statusFilter === "all" || vehicle.status === statusFilter
+    const matchesStatus = statusFilter === "all" || String(getVehicleStatus(vehicle)).toUpperCase() === statusFilter
     return matchesStatus
   })
 
   // Group by status
-  const activeCount = vehicles.filter(v => v.status === "Active").length
+  const activeCount = vehicles.filter(isActiveVehicle).length
   const compliantCount = vehicles.length // Adjust based on your compliance logic
 
   // Handle view details
   const handleViewDetails = (vehicle: any) => {
-    setSelectedVehicle(vehicle)
+    setSelectedVehicle(toVehicleView(vehicle))
     setIsDetailsDialogOpen(true)
   }
 
@@ -99,12 +132,12 @@ export function VehiclesPage(): JSX.Element {
 
   // Open edit dialog
   const openEditDialog = (vehicle: any) => {
-    setSelectedVehicle(vehicle)
+    setSelectedVehicle(toVehicleView(vehicle))
     setFormData({
       plate: vehicle.plateNumber,
-      owner: vehicle.ownerName || "",
-      vehicleType: vehicle.make && vehicle.model ? `${vehicle.make} ${vehicle.model}` : "",
-      weightClass: vehicle.weight ? `${vehicle.weight} kg` : "",
+      owner: getVehicleOwner(vehicle),
+      vehicleType: getVehicleType(vehicle),
+      weightClass: getVehicleCapacity(vehicle),
       notes: ""
     })
     setIsEditDialogOpen(true)
@@ -127,10 +160,10 @@ export function VehiclesPage(): JSX.Element {
 
   // Get status badge
   const getStatusBadge = (status: string) => {
-    return status === "Active" ? (
+    return String(status).toUpperCase() === "ACTIVE" ? (
       <Badge className="bg-[#4CAF50] text-white text-sm px-3 py-1">
         <CheckCircle className="h-4 w-4 mr-1" />
-        {status}
+        Active
       </Badge>
     ) : (
       <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1">
@@ -262,7 +295,7 @@ export function VehiclesPage(): JSX.Element {
               </SelectTrigger>
               <SelectContent className="text-base">
                 <SelectItem value="all" className="text-base">All ({vehicles.length})</SelectItem>
-                <SelectItem value="Active" className="text-base">Active ({activeCount})</SelectItem>
+                <SelectItem value="ACTIVE" className="text-base">Active ({activeCount})</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -324,10 +357,10 @@ export function VehiclesPage(): JSX.Element {
                   filteredVehicles.map((vehicle) => (
                   <TableRow key={vehicle.id}>
                     <TableCell className="font-mono font-medium text-base">{vehicle.plateNumber}</TableCell>
-                    <TableCell className="text-base">{vehicle.ownerName || "N/A"}</TableCell>
-                    <TableCell className="text-base">{vehicle.make && vehicle.model ? `${vehicle.make} ${vehicle.model}` : "N/A"}</TableCell>
-                    <TableCell className="text-base">{vehicle.weight ? `${vehicle.weight} kg` : "N/A"}</TableCell>
-                    <TableCell className="text-base">{vehicle.registrationDate || "N/A"}</TableCell>
+                    <TableCell className="text-base">{getVehicleOwner(vehicle)}</TableCell>
+                    <TableCell className="text-base">{getVehicleType(vehicle)}</TableCell>
+                    <TableCell className="text-base">{getVehicleCapacity(vehicle)}</TableCell>
+                    <TableCell className="text-base">{getVehicleRegistrationDate(vehicle)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -403,7 +436,7 @@ export function VehiclesPage(): JSX.Element {
                   <div className="flex-1">
                     <p className="font-semibold text-destructive">Non-Compliant Vehicle</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Payment overdue since {selectedVehicle.lastPayment}. Vehicle may be subject to enforcement action.
+                      This vehicle is not currently marked active in the registry.
                     </p>
                   </div>
                 </div>
@@ -415,7 +448,7 @@ export function VehiclesPage(): JSX.Element {
                   <div className="flex-1">
                     <p className="font-semibold text-[#4FAF7C]">Compliant Vehicle</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      All payments up to date. Last payment: {selectedVehicle.lastPayment}
+                      This vehicle is active in the registry.
                     </p>
                   </div>
                 </div>
@@ -445,7 +478,9 @@ export function VehiclesPage(): JSX.Element {
 
                 <div className="space-y-2">
                   <Label className="text-base text-muted-foreground">Daily Rate</Label>
-                  <p className="text-lg font-medium">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                  <p className="text-lg font-medium">
+                    {selectedVehicle.dailyRate ? `${selectedVehicle.dailyRate.toLocaleString()} MZN` : "N/A"}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -461,52 +496,40 @@ export function VehiclesPage(): JSX.Element {
                 <div className="space-y-2">
                   <Label className="text-base text-muted-foreground">Days Since Payment</Label>
                   <p className="text-lg font-medium">
-                    {Math.floor((new Date().getTime() - new Date(selectedVehicle.lastPayment).getTime()) / (1000 * 60 * 60 * 24))} days
+                    N/A
                   </p>
                 </div>
               </div>
 
               <Separator />
 
-              {/* Transaction History */}
+              {/* Registry Details */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Recent Transaction History</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="h-5 w-5 text-[#4FAF7C]" />
-                      <div>
-                        <p className="text-sm font-medium">Payment Received</p>
-                        <p className="text-xs text-muted-foreground">{selectedVehicle.lastPayment}</p>
-                      </div>
-                    </div>
-                    <p className="text-sm font-bold">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                <h3 className="text-lg font-semibold">Registry Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">Truck Number</p>
+                    <p className="text-sm font-medium">{selectedVehicle.truckNumber || "N/A"}</p>
                   </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="h-5 w-5 text-[#4FAF7C]" />
-                      <div>
-                        <p className="text-sm font-medium">Payment Received</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(new Date(selectedVehicle.lastPayment).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-sm font-bold">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">VIN / Chassis</p>
+                    <p className="text-sm font-medium">{selectedVehicle.vinOrChassis || selectedVehicle.vin || "N/A"}</p>
                   </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="h-5 w-5 text-[#4FAF7C]" />
-                      <div>
-                        <p className="text-sm font-medium">Payment Received</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(new Date(selectedVehicle.lastPayment).getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-sm font-bold">{selectedVehicle.dailyRate.toLocaleString()} MZN</p>
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">Fuel Type</p>
+                    <p className="text-sm font-medium">{selectedVehicle.fuelType || "N/A"}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">Service Type</p>
+                    <p className="text-sm font-medium">{selectedVehicle.serviceType || "N/A"}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">Registry Status</p>
+                    <p className="text-sm font-medium">{getVehicleStatus(selectedVehicle)}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">Logbook Number</p>
+                    <p className="text-sm font-medium">{selectedVehicle.logbookNumber || "N/A"}</p>
                   </div>
                 </div>
               </div>
@@ -520,13 +543,13 @@ export function VehiclesPage(): JSX.Element {
                   <Card>
                     <CardHeader className="pb-3">
                       <CardDescription className="text-xs">Total Paid (30 days)</CardDescription>
-                      <CardTitle className="text-xl">{(selectedVehicle.dailyRate * 4).toLocaleString()} MZN</CardTitle>
+                      <CardTitle className="text-xl">N/A</CardTitle>
                     </CardHeader>
                   </Card>
                   <Card>
                     <CardHeader className="pb-3">
                       <CardDescription className="text-xs">Total Paid (90 days)</CardDescription>
-                      <CardTitle className="text-xl">{(selectedVehicle.dailyRate * 13).toLocaleString()} MZN</CardTitle>
+                      <CardTitle className="text-xl">N/A</CardTitle>
                     </CardHeader>
                   </Card>
                   <Card>
@@ -567,8 +590,7 @@ export function VehiclesPage(): JSX.Element {
                         <div className="flex-1">
                           <p className="text-sm font-medium text-destructive">Payment Overdue</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Last payment was {Math.floor((new Date().getTime() - new Date(selectedVehicle.lastPayment).getTime()) / (1000 * 60 * 60 * 24))} days ago. 
-                            Penalties may apply.
+                            This vehicle is not currently marked active in the registry.
                           </p>
                         </div>
                       </div>
@@ -590,7 +612,9 @@ export function VehiclesPage(): JSX.Element {
         </ModalBody>
 
         <ModalFooter>
-          {/* Footer can be used for additional actions if needed */}
+          <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)}>
+            Close
+          </Button>
         </ModalFooter>
       </Modal>
 

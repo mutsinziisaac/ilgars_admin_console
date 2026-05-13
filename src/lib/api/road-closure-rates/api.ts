@@ -1,4 +1,5 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
+import { DEFAULT_MUNICIPALITY_ID } from "../constants"
 import {
   RoadClosureRateDetailResponseSchema,
   RoadClosureRateListResponseSchema,
@@ -7,8 +8,6 @@ import {
   type CreateRoadClosureRateRequest,
   type UpdateRoadClosureRateRequest,
 } from "./schemas"
-
-const MUNICIPALITY_ID = "aa73ac5e-4912-460f-a927-ba3ccbe57207"
 
 export interface ListRoadClosureRatesParams {
   municipalityId?: string
@@ -24,7 +23,7 @@ export const RoadClosureRatesApi = {
    */
   listRoadClosureRates: async (params?: ListRoadClosureRatesParams, signal?: AbortSignal): Promise<RoadClosureRateListResponse> => {
     const effectiveParams = {
-      municipalityId: MUNICIPALITY_ID,
+      municipalityId: DEFAULT_MUNICIPALITY_ID,
       ...params,
     }
     
@@ -60,7 +59,7 @@ export const RoadClosureRatesApi = {
       url: "/v1/road-closure-rates",
       data: {
         data: {
-          municipalityId: MUNICIPALITY_ID,
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -77,7 +76,7 @@ export const RoadClosureRatesApi = {
       url: `/v1/road-closure-rates/${encodeURIComponent(id)}`,
       data: {
         data: {
-          municipalityId: MUNICIPALITY_ID,
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },

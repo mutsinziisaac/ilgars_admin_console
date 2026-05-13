@@ -1,70 +1,28 @@
 import { coreRequest } from "../httpClient";
+import { DEFAULT_MUNICIPALITY_ID } from "../constants";
+import { RoadClosureRatesApi } from "../road-closure-rates/api";
 import {
-  RoadClosureRateListResponseSchema,
-  RoadClosureRateDetailResponseSchema,
-  RoadClosurePermitListResponseSchema,
   RoadClosurePermitDetailResponseSchema,
-  type RoadClosureRateListResponse,
-  type RoadClosureRateDetailResponse,
-  type CreateRoadClosureRateRequest,
-  type RoadClosurePermitListResponse,
-  type RoadClosurePermitDetailResponse,
+  RoadClosurePermitListResponseSchema,
   type CreateRoadClosurePermitRequest,
+  type RoadClosurePermitApprovalRequest,
+  type RoadClosurePermitDetailResponse,
+  type RoadClosurePermitListResponse,
 } from "./schemas";
 
-export interface RoadClosureRateSearchParams {
-  page?: number;
-  pageSize?: number;
-  status?: "ACTIVE" | "INACTIVE";
-  roadType?: string;
-}
+export { RoadClosureRatesApi };
 
 export interface RoadClosurePermitSearchParams {
+  municipalityId?: string;
   page?: number;
-  pageSize?: number;
-  status?: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
-  vehiclePlateNumber?: string;
-  startDate?: string;
-  endDate?: string;
+  size?: number;
+  status?: string;
+  routeId?: string;
 }
-
-export const RoadClosureRatesApi = {
-  /**
-   * List all road closure rates
-   * GET /v1/road-closure-rates
-   */
-  listRoadClosureRates: (
-    params?: RoadClosureRateSearchParams,
-    signal?: AbortSignal,
-  ) =>
-    coreRequest<RoadClosureRateListResponse>({
-      method: "GET",
-      url: "/v1/road-closure-rates",
-      params,
-      signal,
-      schema: RoadClosureRateListResponseSchema,
-    }),
-
-  /**
-   * Create a new road closure rate
-   * POST /v1/road-closure-rates
-   */
-  createRoadClosureRate: (
-    data: CreateRoadClosureRateRequest,
-    signal?: AbortSignal,
-  ) =>
-    coreRequest<RoadClosureRateDetailResponse>({
-      method: "POST",
-      url: "/v1/road-closure-rates",
-      data,
-      signal,
-      schema: RoadClosureRateDetailResponseSchema,
-    }),
-};
 
 export const RoadClosurePermitsApi = {
   /**
-   * List all road closure permits
+   * List road closure permit requests
    * GET /v1/road-closure-permits
    */
   listRoadClosurePermits: (
@@ -74,35 +32,73 @@ export const RoadClosurePermitsApi = {
     coreRequest<RoadClosurePermitListResponse>({
       method: "GET",
       url: "/v1/road-closure-permits",
-      params,
+      params: {
+        municipalityId: DEFAULT_MUNICIPALITY_ID,
+        ...params,
+      },
       signal,
       schema: RoadClosurePermitListResponseSchema,
     }),
 
   /**
-   * Get a specific road closure permit
+   * Get a road closure permit request
    * GET /v1/road-closure-permits/{roadClosurePermitId}
    */
   getRoadClosurePermit: (roadClosurePermitId: string, signal?: AbortSignal) =>
     coreRequest<RoadClosurePermitDetailResponse>({
       method: "GET",
-      url: `/v1/road-closure-permits/${roadClosurePermitId}`,
+      url: `/v1/road-closure-permits/${encodeURIComponent(roadClosurePermitId)}`,
       signal,
       schema: RoadClosurePermitDetailResponseSchema,
     }),
 
   /**
-   * Create a new road closure permit
+   * Create a road closure permit request
    * POST /v1/road-closure-permits
    */
   createRoadClosurePermit: (
-    data: CreateRoadClosurePermitRequest,
+    payload: CreateRoadClosurePermitRequest,
     signal?: AbortSignal,
   ) =>
     coreRequest<RoadClosurePermitDetailResponse>({
       method: "POST",
       url: "/v1/road-closure-permits",
-      data,
+      data: {
+        data: {
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
+          ...payload,
+        },
+      },
+      signal,
+      schema: RoadClosurePermitDetailResponseSchema,
+    }),
+
+  /**
+   * Approve or reject a road closure permit request
+   * POST /v1/road-closure-permits/{roadClosurePermitId}/approval
+   */
+  decideRoadClosurePermit: (
+    roadClosurePermitId: string,
+    payload: RoadClosurePermitApprovalRequest,
+    signal?: AbortSignal,
+  ) =>
+    coreRequest<RoadClosurePermitDetailResponse>({
+      method: "POST",
+      url: `/v1/road-closure-permits/${encodeURIComponent(roadClosurePermitId)}/approval`,
+      data: { data: payload },
+      signal,
+      schema: RoadClosurePermitDetailResponseSchema,
+    }),
+
+  /**
+   * Issue a road closure permit after payment
+   * POST /v1/road-closure-permits/{roadClosurePermitId}/issue
+   */
+  issueRoadClosurePermit: (roadClosurePermitId: string, signal?: AbortSignal) =>
+    coreRequest<RoadClosurePermitDetailResponse>({
+      method: "POST",
+      url: `/v1/road-closure-permits/${encodeURIComponent(roadClosurePermitId)}/issue`,
+      data: {},
       signal,
       schema: RoadClosurePermitDetailResponseSchema,
     }),

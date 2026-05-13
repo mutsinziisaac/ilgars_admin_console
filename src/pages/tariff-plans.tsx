@@ -7,35 +7,68 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DollarSign, Plus, Edit, Trash2, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { DollarSign, Plus, Edit, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
   useTariffPlansList,
   useCreateTariffPlan,
   useUpdateTariffPlan,
-  useDeleteTariffPlan,
   useActivateTariffPlan,
 } from "@/lib/api/tariff-plans/hooks"
 import type { TariffPlan, TariffRate } from "@/lib/api/tariff-plans/schemas"
+import {
+  ACTIVE_MUNICIPALITY_ID_STORAGE_KEY,
+  DEFAULT_MUNICIPALITY_ID,
+} from "@/lib/api/constants"
 
 const defaultRates: TariffRate[] = [
-  { capacityBandCode: "AGRICULTURAL_TRANSIT", capacityUnit: "KG", minimumCapacity: null, maximumCapacity: null, amountPerDay: 1000, amountPerMonth: 0, minimumCharge: 0 },
+  { capacityBandCode: "AGRICULTURAL_TRANSIT", amountPerDay: 1000, minimumCharge: 0 },
   { capacityBandCode: "CARGO_8000_16000_KG", capacityUnit: "KG", minimumCapacity: 8000, maximumCapacity: 16000, amountPerDay: 1000, amountPerMonth: 0, minimumCharge: 0 },
   { capacityBandCode: "CARGO_16001_25000_KG", capacityUnit: "KG", minimumCapacity: 16001, maximumCapacity: 25000, amountPerDay: 2000, amountPerMonth: 20000, minimumCharge: 0 },
   { capacityBandCode: "CARGO_25001_38000_KG", capacityUnit: "KG", minimumCapacity: 25001, maximumCapacity: 38000, amountPerDay: 3000, amountPerMonth: 20000, minimumCharge: 0 },
   { capacityBandCode: "CARGO_38001_48000_KG", capacityUnit: "KG", minimumCapacity: 38001, maximumCapacity: 48000, amountPerDay: 4000, amountPerMonth: 20000, minimumCharge: 0 },
   { capacityBandCode: "CARGO_ABOVE_48001_KG", capacityUnit: "KG", minimumCapacity: 48001, maximumCapacity: null, amountPerDay: 5000, amountPerMonth: 20000, minimumCharge: 0 },
-  { capacityBandCode: "NON_AUTHORISED_ROAD_DAILY", capacityUnit: "KG", minimumCapacity: null, maximumCapacity: null, amountPerDay: 1000, amountPerMonth: 0, minimumCharge: 0 },
-  { capacityBandCode: "SPECIAL_CIRCULATION_LICENCE", capacityUnit: "KG", minimumCapacity: null, maximumCapacity: null, amountPerDay: 20000, amountPerMonth: 0, minimumCharge: 0 }
+  { capacityBandCode: "NON_AUTHORISED_ROAD_DAILY", amountPerDay: 1000, minimumCharge: 0 },
+  { capacityBandCode: "SPECIAL_CIRCULATION_LICENCE", amountPerDay: 20000, minimumCharge: 0 }
 ]
 
+const getStoredMunicipalityId = () => {
+  if (typeof window === "undefined") return DEFAULT_MUNICIPALITY_ID
+
+  return localStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
+}
+
+const createDefaultPlanCode = () => `MAPUTO-CIRCULATION-2026-${Date.now()}`
+
+const cleanRate = (rate: TariffRate): TariffRate => {
+  const entries = Object.entries(rate).filter(([, value]) => value !== null && value !== undefined)
+
+  return Object.fromEntries(entries) as TariffRate
+}
+
 export function TariffPlansPage() {
+  const storedMunicipalityId = getStoredMunicipalityId()
+  const [activeMunicipalityId, setActiveMunicipalityId] = useState(storedMunicipalityId)
+  const [selectedPlan, setSelectedPlan] = useState<TariffPlan | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isViewBandsOpen, setIsViewBandsOpen] = useState(false)
+  const [activatingPlanId, setActivatingPlanId] = useState<string | null>(null)
+  const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(() => new Set())
+
   // Fetch tariff plans from API
-  const { data: tariffPlansResponse, isLoading, error, refetch } = useTariffPlansList({ status: "all" })
+  const { data: tariffPlansResponse, isLoading, error, refetch } = useTariffPlansList({
+    municipalityId: activeMunicipalityId,
+    status: "all",
+  })
   
   // Mutations
   const createMutation = useCreateTariffPlan({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      if (variables.municipalityId) {
+        localStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, variables.municipalityId)
+        setActiveMunicipalityId(variables.municipalityId)
+      }
       toast.success("Tariff plan created successfully")
       setIsCreateOpen(false)
       resetForm()
@@ -56,35 +89,29 @@ export function TariffPlansPage() {
     },
   })
 
-  const deleteMutation = useDeleteTariffPlan({
-    onSuccess: () => {
-      toast.success("Tariff plan deleted")
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to delete tariff plan: ${error.message}`)
-    },
-  })
-
   const activateMutation = useActivateTariffPlan({
-    onSuccess: () => {
+    onSuccess: (_data, planId) => {
+      setActivatedPlanIds((current) => {
+        const next = new Set(current)
+        next.add(planId)
+        return next
+      })
+      setActivatingPlanId(null)
       toast.success("Tariff plan activated")
     },
     onError: (error: any) => {
+      setActivatingPlanId(null)
       toast.error(`Failed to activate tariff plan: ${error.message}`)
     },
   })
 
   // Extract tariff plans from response
   const tariffPlans = tariffPlansResponse?.data || tariffPlansResponse?.content || []
-  
-  const [selectedPlan, setSelectedPlan] = useState<TariffPlan | null>(null)
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [isViewBandsOpen, setIsViewBandsOpen] = useState(false)
 
   const [planForm, setPlanForm] = useState({
-    code: "",
-    name: "",
+    municipalityId: storedMunicipalityId,
+    code: createDefaultPlanCode(),
+    name: "Maputo Circulation Licence Fees",
     tariffType: "CIRCULATION_LICENCE",
     description: "",
     rates: defaultRates
@@ -92,8 +119,9 @@ export function TariffPlansPage() {
 
   const resetForm = () => {
     setPlanForm({
-      code: "",
-      name: "",
+      municipalityId: getStoredMunicipalityId(),
+      code: createDefaultPlanCode(),
+      name: "Maputo Circulation Licence Fees",
       tariffType: "CIRCULATION_LICENCE",
       description: "",
       rates: defaultRates
@@ -101,42 +129,44 @@ export function TariffPlansPage() {
   }
 
   const handleCreatePlan = () => {
+    const municipalityId = planForm.municipalityId.trim()
+
+    if (!municipalityId) {
+      toast.error("Municipality ID is required")
+      return
+    }
+
     createMutation.mutate({
+      municipalityId,
       code: planForm.code,
       name: planForm.name,
       tariffType: planForm.tariffType,
-      description: planForm.description,
-      rates: planForm.rates
+      description: planForm.description || undefined,
+      rates: planForm.rates.map(cleanRate)
     })
   }
 
   const handleUpdatePlan = () => {
     if (!selectedPlan) return
     updateMutation.mutate({
+      municipalityId: planForm.municipalityId.trim() || selectedPlan.municipalityId,
       code: planForm.code,
       name: planForm.name,
       tariffType: planForm.tariffType,
-      description: planForm.description,
-      rates: planForm.rates
+      description: planForm.description || undefined,
+      rates: planForm.rates.map(cleanRate)
     })
   }
 
   const handleActivatePlan = (planId: string) => {
+    setActivatingPlanId(planId)
     activateMutation.mutate(planId)
-  }
-
-  const handleDeletePlan = (planId: string) => {
-    const plan = tariffPlans.find((p: TariffPlan) => p.id === planId)
-    if (plan?.active) {
-      toast.error("Cannot delete active tariff plan")
-      return
-    }
-    deleteMutation.mutate(planId)
   }
 
   const handleEditClick = (plan: TariffPlan) => {
     setSelectedPlan(plan)
     setPlanForm({
+      municipalityId: plan.municipalityId,
       code: plan.code,
       name: plan.name,
       tariffType: plan.tariffType,
@@ -199,32 +229,6 @@ export function TariffPlansPage() {
     )
   }
 
-  // Error state
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-semibold text-foreground">Tariff Plans</h1>
-            <p className="text-lg text-muted-foreground">Manage capacity-based tariff rate plans</p>
-          </div>
-        </div>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Failed to load tariff plans</h3>
-              <p className="text-muted-foreground mb-4">{(error as any)?.message || "An error occurred"}</p>
-              <Button onClick={() => refetch()}>
-                Try Again
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -239,7 +243,7 @@ export function TariffPlansPage() {
           ) : (
             <Plus className="h-4 w-4 mr-2" />
           )}
-          Create Tariff Plan
+          Create New Tariff
         </Button>
       </div>
 
@@ -252,15 +256,20 @@ export function TariffPlansPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {tariffPlans.length === 0 ? (
+          {error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Failed to load tariff plans</h3>
+              <p className="text-muted-foreground mb-4">{(error as any)?.message || "An error occurred"}</p>
+              <Button variant="outline" onClick={() => refetch()}>
+                Try Again
+              </Button>
+            </div>
+          ) : tariffPlans.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <DollarSign className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No tariff plans found</h3>
-              <p className="text-muted-foreground mb-4">Create your first tariff plan to get started</p>
-              <Button onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Tariff Plan
-              </Button>
+              <p className="text-muted-foreground">Create your first tariff plan to get started</p>
             </div>
           ) : (
             <Table>
@@ -280,8 +289,10 @@ export function TariffPlansPage() {
                     <TableCell className="font-medium text-base">{plan.name}</TableCell>
                     <TableCell className="text-base">{plan.description || "-"}</TableCell>
                     <TableCell className="text-base">{plan.createdAt?.split('T')[0] || "-"}</TableCell>
-                    <TableCell className="text-base">{plan.activatedAt?.split('T')[0] || "-"}</TableCell>
-                    <TableCell>{getStatusBadge(plan.active)}</TableCell>
+                    <TableCell className="text-base">
+                      {activatedPlanIds.has(plan.id) ? new Date().toISOString().split("T")[0] : plan.activatedAt?.split('T')[0] || "-"}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(plan.active || activatedPlanIds.has(plan.id))}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button
@@ -300,29 +311,17 @@ export function TariffPlansPage() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {!plan.active && (
+                        {!(plan.active || activatedPlanIds.has(plan.id)) && (
                           <>
                             <Button
                               size="sm"
                               onClick={() => handleActivatePlan(plan.id)}
-                              disabled={activateMutation.isPending}
+                              disabled={activatingPlanId === plan.id}
                             >
-                              {activateMutation.isPending ? (
+                              {activatingPlanId === plan.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 "Activate"
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeletePlan(plan.id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              {deleteMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
                               )}
                             </Button>
                           </>
@@ -346,12 +345,26 @@ export function TariffPlansPage() {
         <ModalBody>
           <div className="space-y-6">
             <div className="space-y-2">
+              <Label htmlFor="municipalityId" className="text-base">Municipality ID *</Label>
+              <Input
+                id="municipalityId"
+                value={planForm.municipalityId}
+                onChange={(e) => setPlanForm({ ...planForm, municipalityId: e.target.value })}
+                placeholder="Backend municipality UUID"
+                className="text-base h-11"
+              />
+              <p className="text-sm text-muted-foreground">
+                Uses the municipality created on the Municipality page when available.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="code" className="text-base">Plan Code *</Label>
               <Input
                 id="code"
                 value={planForm.code}
                 onChange={(e) => setPlanForm({ ...planForm, code: e.target.value })}
-                placeholder="e.g., MAPUTO-CIRCULATION-2026"
+                placeholder="e.g., MAPUTO-CIRCULATION-2026-1778687378"
                 className="text-base h-11"
               />
             </div>
@@ -362,7 +375,7 @@ export function TariffPlansPage() {
                 id="name"
                 value={planForm.name}
                 onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
-                placeholder="e.g., Standard Tariff Plan 2026"
+                placeholder="e.g., Maputo Circulation Licence Fees"
                 className="text-base h-11"
               />
             </div>
@@ -408,7 +421,7 @@ export function TariffPlansPage() {
                         <TableCell>
                           <Input
                             type="number"
-                            value={rate.amountPerMonth}
+                            value={rate.amountPerMonth ?? ""}
                             onChange={(e) => updateBandRate(index, 'amountPerMonth', e.target.value)}
                             className="text-base h-10"
                           />
@@ -446,6 +459,17 @@ export function TariffPlansPage() {
         </ModalHeader>
         <ModalBody>
           <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-municipalityId" className="text-base">Municipality ID *</Label>
+              <Input
+                id="edit-municipalityId"
+                value={planForm.municipalityId}
+                onChange={(e) => setPlanForm({ ...planForm, municipalityId: e.target.value })}
+                placeholder="Backend municipality UUID"
+                className="text-base h-11"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-code" className="text-base">Plan Code *</Label>
               <Input
@@ -509,7 +533,7 @@ export function TariffPlansPage() {
                         <TableCell>
                           <Input
                             type="number"
-                            value={rate.amountPerMonth}
+                            value={rate.amountPerMonth ?? ""}
                             onChange={(e) => updateBandRate(index, 'amountPerMonth', e.target.value)}
                             className="text-base h-10"
                           />
@@ -563,7 +587,7 @@ export function TariffPlansPage() {
                   <TableCell className="text-base">{rate.minimumCapacity?.toLocaleString() || '-'}</TableCell>
                   <TableCell className="text-base">{rate.maximumCapacity?.toLocaleString() || '-'}</TableCell>
                   <TableCell className="text-base">{rate.amountPerDay.toLocaleString()}</TableCell>
-                  <TableCell className="text-base">{rate.amountPerMonth.toLocaleString()}</TableCell>
+                  <TableCell className="text-base">{(rate.amountPerMonth ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

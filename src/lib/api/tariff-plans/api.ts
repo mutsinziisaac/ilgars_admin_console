@@ -1,4 +1,5 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
+import { DEFAULT_MUNICIPALITY_ID } from "../constants"
 import {
   TariffPlanDetailResponseSchema,
   TariffPlanListResponseSchema,
@@ -7,8 +8,6 @@ import {
   type CreateTariffPlanRequest,
   type UpdateTariffPlanRequest,
 } from "./schemas"
-
-const MUNICIPALITY_ID = "aa73ac5e-4912-460f-a927-ba3ccbe57207"
 
 export interface ListTariffPlansParams {
   municipalityId?: string
@@ -22,7 +21,7 @@ export const TariffPlansApi = {
    */
   listTariffPlans: async (params?: ListTariffPlansParams, signal?: AbortSignal): Promise<TariffPlanListResponse> => {
     const effectiveParams = {
-      municipalityId: MUNICIPALITY_ID,
+      municipalityId: DEFAULT_MUNICIPALITY_ID,
       status: "all",
       ...params,
     }
@@ -59,7 +58,7 @@ export const TariffPlansApi = {
       url: "/v1/tariff-plans",
       data: {
         data: {
-          municipalityId: MUNICIPALITY_ID,
+          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -76,7 +75,7 @@ export const TariffPlansApi = {
       url: `/v1/tariff-plans/${encodeURIComponent(id)}`,
       data: {
         data: {
-          municipalityId: MUNICIPALITY_ID,
+          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -91,7 +90,6 @@ export const TariffPlansApi = {
     coreRequest<void>({
       method: "POST",
       url: `/v1/tariff-plans/${encodeURIComponent(id)}/activate`,
-      data: {},
     }),
 
   /**

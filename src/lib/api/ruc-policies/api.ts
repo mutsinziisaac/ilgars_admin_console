@@ -1,14 +1,14 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
+import { DEFAULT_MUNICIPALITY_ID } from "../constants"
 import {
   RUCPolicyDetailResponseSchema,
   RUCPolicyListResponseSchema,
   type RUCPolicyListResponse,
   type RUCPolicyDetailResponse,
   type CreateRUCPolicyRequest,
+  type RUCPolicy,
   type UpdateRUCPolicyRequest,
 } from "./schemas"
-
-const MUNICIPALITY_ID = "aa73ac5e-4912-460f-a927-ba3ccbe57207"
 
 export interface ListRUCPoliciesParams {
   municipalityId?: string
@@ -22,7 +22,7 @@ export const RUCPoliciesApi = {
    */
   listRUCPolicies: async (params?: ListRUCPoliciesParams, signal?: AbortSignal): Promise<RUCPolicyListResponse> => {
     const effectiveParams = {
-      municipalityId: MUNICIPALITY_ID,
+      municipalityId: DEFAULT_MUNICIPALITY_ID,
       ...params,
     }
     
@@ -58,7 +58,7 @@ export const RUCPoliciesApi = {
       url: "/v1/ruc-policies",
       data: {
         data: {
-          municipalityId: MUNICIPALITY_ID,
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -75,7 +75,7 @@ export const RUCPoliciesApi = {
       url: `/v1/ruc-policies/${encodeURIComponent(id)}`,
       data: {
         data: {
-          municipalityId: MUNICIPALITY_ID,
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -83,14 +83,16 @@ export const RUCPoliciesApi = {
     }),
 
   /**
-   * Activate RUC policy
-   * POST /v1/ruc-policies/{id}/activate
+   * Activate RUC policy through update.
+   * The deployed collection exposes create/list for RUC policies and carries
+   * activation as the `active` field, not as a separate activate endpoint.
    */
-  activateRUCPolicy: (id: string) =>
-    coreRequest<void>({
-      method: "POST",
-      url: `/v1/ruc-policies/${encodeURIComponent(id)}/activate`,
-      data: {},
+  activateRUCPolicy: (policy: RUCPolicy) =>
+    RUCPoliciesApi.updateRUCPolicy(policy.id, {
+      gracePeriodHours: policy.gracePeriodHours,
+      specialPermitCapacityThreshold: policy.specialPermitCapacityThreshold,
+      specialPermitCapacityUnit: policy.specialPermitCapacityUnit,
+      active: true,
     }),
 
   /**

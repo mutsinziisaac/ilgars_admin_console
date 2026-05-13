@@ -10,8 +10,8 @@ export const RoadClosureRateSchema = z.object({
   hourlyRate: z.number(),
   currency: z.string(),
   chargeType: z.string(), // ROAD_CLOSURE
-  active: z.boolean(),
-  createdAt: z.string(),
+  active: z.boolean().optional().default(false),
+  createdAt: z.string().optional().nullable(),
   updatedAt: z.string().optional().nullable(),
   activatedAt: z.string().optional().nullable(),
 })
@@ -41,6 +41,7 @@ export const RoadClosureRateDetailResponseSchema = z.object({
 
 // Create Request Schema
 export const CreateRoadClosureRateRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   purpose: z.string(),
   roadType: z.string(),
   closureType: z.string().optional(),
@@ -52,6 +53,7 @@ export const CreateRoadClosureRateRequestSchema = z.object({
 
 // Update Request Schema
 export const UpdateRoadClosureRateRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   purpose: z.string(),
   roadType: z.string(),
   closureType: z.string().optional(),

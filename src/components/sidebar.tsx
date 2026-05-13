@@ -30,13 +30,15 @@ interface SidebarProps {
   onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
 }
 
+type Page = SidebarProps["currentPage"]
+
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const auth = useAuth()
   const [locale, setLocale] = useState<"en" | "pt">("en")
-  const [permitsOpen, setPermitsOpen] = useState(true) // Open by default
-  const [devicesOpen, setDevicesOpen] = useState(true) // Open by default
-  const [violationsOpen, setViolationsOpen] = useState(true) // Open by default
-  const [configurationsOpen, setConfigurationsOpen] = useState(false) // Keep closed by default as it has many items
+  const [permitsOpen, setPermitsOpen] = useState(false)
+  const [devicesOpen, setDevicesOpen] = useState(false)
+  const [violationsOpen, setViolationsOpen] = useState(false)
+  const [configurationsOpen, setConfigurationsOpen] = useState(false)
   
   const handleLogout = () => {
     auth.signoutRedirect()
@@ -48,14 +50,26 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     console.log("Locale changed to:", newLocale)
   }
 
+  const collapseDropdowns = () => {
+    setPermitsOpen(false)
+    setDevicesOpen(false)
+    setViolationsOpen(false)
+    setConfigurationsOpen(false)
+  }
+
+  const handleNavigate = (page: Page) => {
+    collapseDropdowns()
+    onNavigate(page)
+  }
+
   // Get user name from Keycloak profile or use default
   const userName = auth.user?.profile?.name || auth.user?.profile?.preferred_username || "Joana Macavel"
   
   const menuItems = [
-    { icon: LayoutDashboard, label: "Overview", page: "dashboard" as const, badge: undefined, action: () => onNavigate("dashboard") },
-    { icon: Receipt, label: "Transactions", page: "transactions" as const, badge: undefined, action: () => onNavigate("transactions") },
-    { icon: Truck, label: "Vehicles", page: "vehicles" as const, badge: undefined, action: () => onNavigate("vehicles") },
-    { icon: BarChart3, label: "Reports", page: "reports" as const, badge: undefined, action: () => onNavigate("reports") },
+    { icon: LayoutDashboard, label: "Overview", page: "dashboard" as const, badge: undefined },
+    { icon: Receipt, label: "Transactions", page: "transactions" as const, badge: undefined },
+    { icon: Truck, label: "Vehicles", page: "vehicles" as const, badge: undefined },
+    { icon: BarChart3, label: "Reports", page: "reports" as const, badge: undefined },
   ]
 
   const permitsSubItems = [
@@ -123,7 +137,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           return (
             <button
               key={item.label}
-              onClick={() => item.action()}
+              onClick={() => handleNavigate(item.page)}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
                 isActive
@@ -168,7 +182,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 return (
                   <button
                     key={subItem.label}
-                    onClick={() => onNavigate(subItem.page)}
+                    onClick={() => handleNavigate(subItem.page)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                       isActive
@@ -215,7 +229,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 return (
                   <button
                     key={subItem.label}
-                    onClick={() => onNavigate(subItem.page)}
+                    onClick={() => handleNavigate(subItem.page)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                       isActive
@@ -259,7 +273,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 return (
                   <button
                     key={subItem.label}
-                    onClick={() => onNavigate(subItem.page)}
+                    onClick={() => handleNavigate(subItem.page)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                       isActive
@@ -306,7 +320,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 return (
                   <button
                     key={subItem.label}
-                    onClick={() => onNavigate(subItem.page)}
+                    onClick={() => handleNavigate(subItem.page)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                       isActive

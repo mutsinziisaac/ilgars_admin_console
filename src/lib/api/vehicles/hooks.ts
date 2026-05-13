@@ -1,11 +1,11 @@
 // Read-only hooks for Vehicles entity
 import {
   VehiclesApi,
-  type FleetVehicleSearchParams,
+  type VehicleSearchParams,
 } from "./api"
 import type {
-  FleetVehicleListResponse,
-  FleetVehicleDetailResponse,
+  VehicleListResponse,
+  VehicleDetailResponse,
 } from "./schemas"
 import { vehiclesKeys } from "./queryKeys"
 import { createReadOnlyHooks } from "@/lib/api/queryHooks"
@@ -14,17 +14,17 @@ const {
   useList: useVehiclesList,
   useDetail: useVehicleDetail,
 } = createReadOnlyHooks<
-  FleetVehicleListResponse,
-  FleetVehicleDetailResponse,
-  FleetVehicleSearchParams,
+  VehicleListResponse,
+  VehicleDetailResponse,
+  VehicleSearchParams,
   string
 >({
   keys: vehiclesKeys,
-  listFn: VehiclesApi.getFleetVehicles,
-  detailFn: VehiclesApi.getFleetVehicleById,
+  listFn: VehiclesApi.getVehicles,
+  detailFn: VehiclesApi.getVehicleById,
   defaultListParams: {
-    page: 1,
-    pageSize: 10,
+    page: 0,
+    size: 10,
   },
 })
 

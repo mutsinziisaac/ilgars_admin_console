@@ -7,18 +7,24 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Settings, Edit, Info, Plus, Trash2, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { Settings, Edit, Info, Plus, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
   useRUCPoliciesList,
   useCreateRUCPolicy,
   useUpdateRUCPolicy,
-  useDeleteRUCPolicy,
   useActivateRUCPolicy,
 } from "@/lib/api/ruc-policies/hooks"
 import type { RUCPolicy } from "@/lib/api/ruc-policies/schemas"
 
 export function RUCPolicyPage() {
+  const [selectedPolicy, setSelectedPolicy] = useState<RUCPolicy | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isViewOpen, setIsViewOpen] = useState(false)
+  const [activatingPolicyId, setActivatingPolicyId] = useState<string | null>(null)
+  const [activatedPolicyIds, setActivatedPolicyIds] = useState<Set<string>>(() => new Set())
+
   // Fetch RUC policies from API
   const { data: policiesResponse, isLoading, error, refetch } = useRUCPoliciesList({ active: undefined })
   
@@ -45,32 +51,25 @@ export function RUCPolicyPage() {
     },
   })
 
-  const deleteMutation = useDeleteRUCPolicy({
-    onSuccess: () => {
-      toast.success("RUC policy deleted")
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to delete RUC policy: ${error.message}`)
-    },
-  })
-
   const activateMutation = useActivateRUCPolicy({
-    onSuccess: () => {
+    onSuccess: (_data, policy) => {
+      setActivatedPolicyIds((current) => {
+        const next = new Set(current)
+        next.add(policy.id)
+        return next
+      })
+      setActivatingPolicyId(null)
       toast.success("RUC policy activated")
     },
     onError: (error: any) => {
+      setActivatingPolicyId(null)
       toast.error(`Failed to activate RUC policy: ${error.message}`)
     },
   })
 
   // Extract policies from response
   const policies = policiesResponse?.data || policiesResponse?.content || []
-  const activePolicy = policies.find((p: RUCPolicy) => p.active)
-  
-  const [selectedPolicy, setSelectedPolicy] = useState<RUCPolicy | null>(null)
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [isViewOpen, setIsViewOpen] = useState(false)
+  const activePolicy = policies.find((p: RUCPolicy) => p.active || activatedPolicyIds.has(p.id))
   
   const [policyForm, setPolicyForm] = useState({
     specialPermitCapacityThreshold: 8000,
@@ -104,17 +103,9 @@ export function RUCPolicyPage() {
     })
   }
 
-  const handleActivatePolicy = (policyId: string) => {
-    activateMutation.mutate(policyId)
-  }
-
-  const handleDeletePolicy = (policyId: string) => {
-    const policy = policies.find((p: RUCPolicy) => p.id === policyId)
-    if (policy?.active) {
-      toast.error("Cannot delete active RUC policy")
-      return
-    }
-    deleteMutation.mutate(policyId)
+  const handleActivatePolicy = (policy: RUCPolicy) => {
+    setActivatingPolicyId(policy.id)
+    activateMutation.mutate(policy)
   }
 
   const handleEditClick = (policy: RUCPolicy) => {
@@ -173,30 +164,6 @@ export function RUCPolicyPage() {
     )
   }
 
-  // Error state
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-semibold text-foreground">RUC Policy Configuration</h1>
-            <p className="text-lg text-muted-foreground">Manage Road User Charge policy settings and thresholds</p>
-          </div>
-        </div>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Failed to load RUC policies</h3>
-              <p className="text-muted-foreground mb-4">{(error as any)?.message || "An error occurred"}</p>
-              <Button onClick={() => refetch()}>Try Again</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -211,7 +178,7 @@ export function RUCPolicyPage() {
           ) : (
             <Plus className="h-4 w-4 mr-2" />
           )}
-          Create Policy
+          Create RUC Policy
         </Button>
       </div>
 
@@ -263,15 +230,20 @@ export function RUCPolicyPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {policies.length === 0 ? (
+          {error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Failed to load RUC policies</h3>
+              <p className="text-muted-foreground mb-4">{(error as any)?.message || "An error occurred"}</p>
+              <Button variant="outline" onClick={() => refetch()}>
+                Try Again
+              </Button>
+            </div>
+          ) : policies.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Settings className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No RUC policies found</h3>
-              <p className="text-muted-foreground mb-4">Create your first RUC policy to get started</p>
-              <Button onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Policy
-              </Button>
+              <p className="text-muted-foreground">Create your first RUC policy to get started</p>
             </div>
           ) : (
             <Table>
@@ -290,7 +262,7 @@ export function RUCPolicyPage() {
                     <TableCell className="text-base">{policy.specialPermitCapacityThreshold.toLocaleString()}</TableCell>
                     <TableCell className="text-base">{policy.gracePeriodHours} ({Math.round(policy.gracePeriodHours / 24)}d)</TableCell>
                     <TableCell className="text-base">{policy.createdAt?.split('T')[0] || "-"}</TableCell>
-                    <TableCell>{getStatusBadge(policy.active)}</TableCell>
+                    <TableCell>{getStatusBadge(policy.active || activatedPolicyIds.has(policy.id))}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button
@@ -308,29 +280,17 @@ export function RUCPolicyPage() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {!policy.active && (
+                        {!(policy.active || activatedPolicyIds.has(policy.id)) && (
                           <>
                             <Button
                               size="sm"
-                              onClick={() => handleActivatePolicy(policy.id)}
-                              disabled={activateMutation.isPending}
+                              onClick={() => handleActivatePolicy(policy)}
+                              disabled={activatingPolicyId === policy.id}
                             >
-                              {activateMutation.isPending ? (
+                              {activatingPolicyId === policy.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 "Activate"
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeletePolicy(policy.id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              {deleteMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
                               )}
                             </Button>
                           </>
@@ -494,7 +454,7 @@ export function RUCPolicyPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Status</p>
-                  {getStatusBadge(selectedPolicy.active)}
+                  {getStatusBadge(selectedPolicy.active || activatedPolicyIds.has(selectedPolicy.id))}
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Municipality ID</p>
@@ -521,7 +481,11 @@ export function RUCPolicyPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Activated</p>
-                  <p className="text-base">{selectedPolicy.activatedAt?.split('T')[0] || "Not activated"}</p>
+                  <p className="text-base">
+                    {activatedPolicyIds.has(selectedPolicy.id)
+                      ? new Date().toISOString().split("T")[0]
+                      : selectedPolicy.activatedAt?.split('T')[0] || "Not activated"}
+                  </p>
                 </div>
               </div>
             </div>

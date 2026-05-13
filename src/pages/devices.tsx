@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,89 +6,24 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle } from "lucide-react"
+import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { DevicesApi } from "@/lib/api/devices/api"
+import { useRegisterDevice } from "@/lib/api/devices/hooks"
+import { devicesKeys } from "@/lib/api/devices/queryKeys"
+import type { ActiveDeviceResponse, Device, RegisterDeviceRequest } from "@/lib/api/devices/schemas"
+import { VehiclesApi } from "@/lib/api/vehicles/api"
+import { useVehiclesList } from "@/lib/api/vehicles/hooks"
+import type { Vehicle } from "@/lib/api/vehicles/schemas"
+import { ApiError } from "@/lib/api/errors"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 
 // Maputo center coordinates
 const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
 const DEFAULT_ZOOM = 14
-
-// Mock GPS tracking devices data with real Maputo coordinates
-const mockTrackingDevices = [
-  {
-    id: "GPS-001",
-    plateNumber: "AAA-123-MP",
-    vehicleType: "Cargo Truck",
-    owner: "TransMoz Logistics",
-    status: "Active",
-    location: "Av. Julius Nyerere & Mao Tse Tung",
-    coordinates: "-25.9612, 32.5823",
-    latlng: [-25.9612, 32.5823] as [number, number],
-    speed: "45 km/h",
-    battery: "85%",
-    signal: "Strong",
-    lastUpdate: "2 mins ago"
-  },
-  {
-    id: "GPS-002",
-    plateNumber: "BBB-456-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Cargo Express Ltd",
-    status: "Active",
-    location: "Av. 25 de Setembro",
-    coordinates: "-25.9655, 32.5731",
-    latlng: [-25.9655, 32.5731] as [number, number],
-    speed: "32 km/h",
-    battery: "92%",
-    signal: "Strong",
-    lastUpdate: "1 min ago"
-  },
-  {
-    id: "GPS-003",
-    plateNumber: "CCC-789-MP",
-    vehicleType: "Tractor",
-    owner: "Heavy Haul Services",
-    status: "Idle",
-    location: "Marginal Avenue",
-    coordinates: "-25.9701, 32.5945",
-    latlng: [-25.9701, 32.5945] as [number, number],
-    speed: "0 km/h",
-    battery: "67%",
-    signal: "Medium",
-    lastUpdate: "5 mins ago"
-  },
-  {
-    id: "GPS-004",
-    plateNumber: "DDD-012-MP",
-    vehicleType: "Bus",
-    owner: "Maputo Transport",
-    status: "Active",
-    location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5680",
-    latlng: [-25.9588, 32.5680] as [number, number],
-    speed: "28 km/h",
-    battery: "78%",
-    signal: "Strong",
-    lastUpdate: "3 mins ago"
-  },
-  {
-    id: "GPS-005",
-    plateNumber: "EEE-345-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Freight Masters",
-    status: "Offline",
-    location: "Last: Av. Acordos de Lusaka",
-    coordinates: "-25.9723, 32.5834",
-    latlng: [-25.9723, 32.5834] as [number, number],
-    speed: "N/A",
-    battery: "12%",
-    signal: "Weak",
-    lastUpdate: "2 hours ago"
-  },
-]
 
 // Mock camera data with real Maputo coordinates
 const mockCameras = [
@@ -159,8 +94,79 @@ const mockCameras = [
   },
 ]
 
-type TrackingDevice = typeof mockTrackingDevices[0]
+type TrackingDevice = {
+  id: string
+  plateNumber: string
+  vehicleType: string
+  owner: string
+  status: string
+  location: string
+  coordinates: string
+  latlng: [number, number]
+  speed: string
+  battery: string
+  signal: string
+  lastUpdate: string
+}
 type Camera = typeof mockCameras[0]
+
+type AdminTrackingDevice = TrackingDevice & {
+  vehicleId?: string
+  backendDeviceId?: string
+  assignmentId?: string
+}
+
+const formatDeviceTimestamp = (value?: string | null) => {
+  if (!value) return "N/A"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return date.toLocaleString()
+}
+
+const toVehicleDisplayName = (vehicle: Vehicle) =>
+  vehicle.vehicleType ||
+  [vehicle.make, vehicle.model].filter(Boolean).join(" ") ||
+  vehicle.serviceType ||
+  "Vehicle"
+
+const toVehicleOwner = (vehicle: Vehicle) =>
+  vehicle.ownerName || vehicle.operatorName || vehicle.ownerId || "Unknown owner"
+
+const mapVehicleToTrackingDevice = (
+  vehicle: Vehicle,
+  activeDevice?: ActiveDeviceResponse | null,
+  activeLookupLoading = false,
+): AdminTrackingDevice => {
+  const tracker = activeDevice?.device
+  const assignment = activeDevice?.assignment
+  const trackerId = tracker?.deviceUid || tracker?.id
+  const hasActiveTracker = Boolean(trackerId && assignment)
+  const status = activeLookupLoading ? "Idle" : hasActiveTracker ? "Active" : "Offline"
+  const vehicleId = vehicle.id
+
+  return {
+    id: trackerId || `NO-TRACKER-${vehicle.plateNumber}`,
+    backendDeviceId: tracker?.id || tracker?.deviceUid || undefined,
+    assignmentId: assignment?.id || undefined,
+    vehicleId,
+    plateNumber: vehicle.plateNumber,
+    vehicleType: toVehicleDisplayName(vehicle),
+    owner: toVehicleOwner(vehicle),
+    status,
+    location: activeLookupLoading
+      ? "Checking tracker assignment"
+      : hasActiveTracker
+        ? "Active tracker assigned"
+        : "No active tracker assigned",
+    coordinates: `${MAPUTO_CENTER[0]}, ${MAPUTO_CENTER[1]}`,
+    latlng: MAPUTO_CENTER,
+    speed: "N/A",
+    battery: "N/A",
+    signal: hasActiveTracker ? "Strong" : activeLookupLoading ? "Medium" : "Weak",
+    lastUpdate: formatDeviceTimestamp(assignment?.assignedAt || tracker?.updatedAt || tracker?.createdAt || vehicle.updatedAt),
+  }
+}
 
 // Helper function to create device icon for Leaflet
 function deviceIcon(status: string) {
@@ -206,22 +212,88 @@ function cameraIcon(status: string) {
   })
 }
 
+function buildRegisterDevicePayload(form: {
+  id: string
+}): RegisterDeviceRequest {
+  const timestamp = Date.now()
+  const deviceUid = form.id.trim()
+
+  return {
+    deviceUid,
+    serialNumber: `SER-${deviceUid || timestamp}`,
+    imei: `356000${timestamp}`,
+    simIccid: `892580${timestamp}`,
+    simMsisdn: `+25884${String(timestamp).slice(-7)}`,
+    vendor: "BMC",
+    model: "A1000",
+    providerKey: "bmc",
+    providerDeviceRef: `BMC-${deviceUid || timestamp}`,
+    protocol: "TCP",
+    firmwareVersion: "uat-1.0",
+    status: "REGISTERED",
+  }
+}
+
 export function DevicesPage() {
   const [activeTab, setActiveTab] = useState("tracking")
   const [searchQuery, setSearchQuery] = useState("")
   const [isMapOpen, setIsMapOpen] = useState(false)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const registerDeviceMutation = useRegisterDevice()
+  const queryClient = useQueryClient()
+  const {
+    data: vehiclesResponse,
+    isLoading: isVehiclesLoading,
+    error: vehiclesError,
+    refetch: refetchVehicles,
+  } = useVehiclesList({ page: 0, size: 100 })
+  const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
+  const activeDeviceQueries = useQueries({
+    queries: vehicles.map((vehicle) => ({
+      queryKey: vehicle.id
+        ? devicesKeys.activeByVehicle(vehicle.id)
+        : ["devices", "active-by-vehicle", "missing-id", vehicle.plateNumber],
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
+        if (!vehicle.id) return null
+
+        try {
+          return await DevicesApi.getActiveDeviceByVehicle(vehicle.id, signal)
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) {
+            return null
+          }
+
+          throw error
+        }
+      },
+      enabled: Boolean(vehicle.id),
+      staleTime: 30_000,
+    })),
+  })
 
   // Tracking device state
-  const [trackingDevices, setTrackingDevices] = useState(mockTrackingDevices)
-  const [selectedDevice, setSelectedDevice] = useState<TrackingDevice | null>(null)
+  const [locallyAddedDevices, setLocallyAddedDevices] = useState<AdminTrackingDevice[]>([])
+  const trackingDevices = useMemo<AdminTrackingDevice[]>(
+    () => [
+      ...vehicles.map((vehicle, index) =>
+        mapVehicleToTrackingDevice(
+          vehicle,
+          activeDeviceQueries[index]?.data ?? null,
+          Boolean(activeDeviceQueries[index]?.isLoading || activeDeviceQueries[index]?.isFetching),
+        )
+      ),
+      ...locallyAddedDevices,
+    ],
+    [activeDeviceQueries, locallyAddedDevices, vehicles],
+  )
+  const [selectedDevice, setSelectedDevice] = useState<AdminTrackingDevice | null>(null)
   const [isDeviceDetailOpen, setIsDeviceDetailOpen] = useState(false)
   const [isRestartConfirmOpen, setIsRestartConfirmOpen] = useState(false)
   const [isToggleConfirmOpen, setIsToggleConfirmOpen] = useState(false)
   const [isDeleteDeviceOpen, setIsDeleteDeviceOpen] = useState(false)
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
-  const [newDevice, setNewDevice] = useState({ id: "", plateNumber: "", vehicleType: "", owner: "" })
+  const [newDevice, setNewDevice] = useState({ id: "", vehicleId: "", plateNumber: "", vehicleType: "", owner: "" })
 
   // Camera state
   const [cameras, setCameras] = useState(mockCameras)
@@ -239,8 +311,13 @@ export function DevicesPage() {
 
   const handleToggleDevice = () => {
     if (!selectedDevice) return
+    if (!locallyAddedDevices.some((device) => device.id === selectedDevice.id)) {
+      setIsToggleConfirmOpen(false)
+      toast.info("Device activation is controlled by tracker assignments in the backend")
+      return
+    }
     const newStatus = selectedDevice.status === "Offline" ? "Active" : "Offline"
-    setTrackingDevices(prev =>
+    setLocallyAddedDevices(prev =>
       prev.map(d => d.id === selectedDevice.id ? { ...d, status: newStatus } : d)
     )
     setIsToggleConfirmOpen(false)
@@ -249,27 +326,82 @@ export function DevicesPage() {
 
   const handleDeleteDevice = () => {
     if (!selectedDevice) return
-    setTrackingDevices(prev => prev.filter(d => d.id !== selectedDevice.id))
+    if (!locallyAddedDevices.some((device) => device.id === selectedDevice.id)) {
+      setIsDeleteDeviceOpen(false)
+      toast.info("Registered backend devices cannot be removed from this screen")
+      return
+    }
+    setLocallyAddedDevices(prev => prev.filter(d => d.id !== selectedDevice.id))
     setIsDeleteDeviceOpen(false)
     toast.success(`Device ${selectedDevice.id} removed`)
   }
 
   const handleAddDevice = () => {
-    if (!newDevice.id || !newDevice.plateNumber) return
-    setTrackingDevices(prev => [...prev, {
-      ...newDevice,
-      status: "Offline",
-      location: "Not yet assigned",
-      coordinates: "N/A",
-      latlng: MAPUTO_CENTER, // Default to Maputo center
-      speed: "N/A",
-      battery: "N/A",
-      signal: "Weak",
-      lastUpdate: "Just added"
-    }])
-    setIsAddDeviceOpen(false)
-    setNewDevice({ id: "", plateNumber: "", vehicleType: "", owner: "" })
-    toast.success(`Device ${newDevice.id} added successfully`)
+    if (!newDevice.id.trim() || !newDevice.plateNumber.trim()) return
+
+    registerDeviceMutation.mutate(buildRegisterDevicePayload(newDevice), {
+      onSuccess: async (registeredDevice: Device) => {
+        const backendDeviceId = registeredDevice.id || registeredDevice.deviceUid || newDevice.id.trim()
+        const deviceId = registeredDevice.deviceUid || backendDeviceId
+        const plateNumber = newDevice.plateNumber.trim()
+        let vehicleId = newDevice.vehicleId.trim()
+        let resolvedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId || vehicle.plateNumber === plateNumber)
+        let assignmentSucceeded = false
+
+        if (!vehicleId) {
+          try {
+            const vehicleResponse = await VehiclesApi.lookupByPlate(plateNumber)
+            const vehicle = vehicleResponse.data as Vehicle
+            resolvedVehicle = vehicle
+            vehicleId = vehicle.id ?? ""
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Device registered, but no vehicle was found for that plate")
+          }
+        }
+
+        if (vehicleId) {
+          try {
+            await DevicesApi.assignDevice(backendDeviceId, {
+              vehicleId,
+              vehiclePlateSnapshot: plateNumber,
+              vehicleTruckNumberSnapshot: `TRK-${plateNumber}`,
+              assignedBy: "admin-console",
+              reason: "Tracker assignment from admin console",
+            })
+            assignmentSucceeded = true
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Device registered, but assignment failed")
+          }
+        }
+
+        setLocallyAddedDevices(prev => [...prev, {
+          id: deviceId,
+          backendDeviceId,
+          vehicleId: vehicleId || undefined,
+          plateNumber,
+          vehicleType: resolvedVehicle ? toVehicleDisplayName(resolvedVehicle) : newDevice.vehicleType.trim() || "Unassigned vehicle",
+          owner: resolvedVehicle ? toVehicleOwner(resolvedVehicle) : newDevice.owner.trim() || "Unassigned owner",
+          status: "Offline",
+          location: "Not yet assigned",
+          coordinates: "N/A",
+          latlng: MAPUTO_CENTER, // Default to Maputo center
+          speed: "N/A",
+          battery: "N/A",
+          signal: "Weak",
+          lastUpdate: "Just added"
+        }])
+        if (vehicleId) {
+          await queryClient.invalidateQueries({ queryKey: devicesKeys.activeByVehicle(vehicleId) })
+          await refetchVehicles()
+        }
+        setIsAddDeviceOpen(false)
+        setNewDevice({ id: "", vehicleId: "", plateNumber: "", vehicleType: "", owner: "" })
+        toast.success(vehicleId && assignmentSucceeded ? `Device ${deviceId} registered and assigned successfully` : `Device ${deviceId} registered successfully`)
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to register GPS device")
+      },
+    })
   }
 
   // Camera actions
@@ -300,6 +432,7 @@ export function DevicesPage() {
     device.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     device.owner.toLowerCase().includes(searchQuery.toLowerCase())
   )
+  const activeDeviceLookupError = activeDeviceQueries.find((query) => query.isError)?.error
 
   // Filter cameras
   const filteredCameras = cameras.filter(camera =>
@@ -390,12 +523,8 @@ export function DevicesPage() {
         `, { maxWidth: 280 })
         
         // Show popup on hover instead of click
-        marker.on('mouseover', function() {
-          this.openPopup()
-        })
-        marker.on('mouseout', function() {
-          this.closePopup()
-        })
+        marker.on('mouseover', () => marker.openPopup())
+        marker.on('mouseout', () => marker.closePopup())
         
         marker.addTo(map)
       })
@@ -426,12 +555,8 @@ export function DevicesPage() {
         `, { maxWidth: 280 })
         
         // Show popup on hover instead of click
-        marker.on('mouseover', function() {
-          this.openPopup()
-        })
-        marker.on('mouseout', function() {
-          this.closePopup()
-        })
+        marker.on('mouseover', () => marker.openPopup())
+        marker.on('mouseout', () => marker.closePopup())
         
         marker.addTo(map)
       })
@@ -525,7 +650,7 @@ export function DevicesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-2xl">GPS Tracking Devices</CardTitle>
-                  <CardDescription className="text-base">Real-time vehicle location tracking</CardDescription>
+                  <CardDescription className="text-base">Vehicles enriched with active tracker assignments</CardDescription>
                 </div>
               <div className="flex items-center gap-3">
                 <Button className="text-base h-11 px-6" onClick={() => setIsMapOpen(true)}>
@@ -568,9 +693,42 @@ export function DevicesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {isVehiclesLoading && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-10 text-center text-base text-muted-foreground">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          Loading vehicles and tracker assignments
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!isVehiclesLoading && Boolean(vehiclesError) && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-10 text-center text-base text-destructive">
+                        Failed to load vehicles for device tracking
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!isVehiclesLoading && !vehiclesError && Boolean(activeDeviceLookupError) && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-4 text-center text-sm text-[#B7791F]">
+                        Some tracker assignments could not be loaded. Vehicles without a readable assignment are shown as offline.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!isVehiclesLoading && !vehiclesError && filteredDevices.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="py-10 text-center text-base text-muted-foreground">
+                        No vehicles found for the current search.
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {filteredDevices.map((device) => (
                     <TableRow key={device.id}>
-                      <TableCell className="font-medium text-base">{device.id}</TableCell>
+                      <TableCell className="font-medium text-base">
+                        {device.backendDeviceId || !device.id.startsWith("NO-TRACKER-") ? device.id : "Unassigned"}
+                      </TableCell>
                       <TableCell className="font-mono font-bold text-base">{device.plateNumber}</TableCell>
                       <TableCell className="text-base">{device.vehicleType}</TableCell>
                       <TableCell className="text-base max-w-[200px]">
@@ -950,6 +1108,10 @@ export function DevicesPage() {
               <Input placeholder="e.g. GPS-006" value={newDevice.id} onChange={e => setNewDevice(p => ({ ...p, id: e.target.value }))} className="h-11 text-base" />
             </div>
             <div className="space-y-1">
+              <label className="text-sm font-medium">Vehicle ID</label>
+              <Input placeholder="Optional backend vehicle ID" value={newDevice.vehicleId} onChange={e => setNewDevice(p => ({ ...p, vehicleId: e.target.value }))} className="h-11 text-base" />
+            </div>
+            <div className="space-y-1">
               <label className="text-sm font-medium">Plate Number</label>
               <Input placeholder="e.g. FFF-678-MP" value={newDevice.plateNumber} onChange={e => setNewDevice(p => ({ ...p, plateNumber: e.target.value }))} className="h-11 text-base" />
             </div>
@@ -964,8 +1126,20 @@ export function DevicesPage() {
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button variant="outline" onClick={() => setIsAddDeviceOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddDevice} disabled={!newDevice.id || !newDevice.plateNumber}><Plus className="h-4 w-4 mr-2" />Add Device</Button>
+          <Button variant="outline" onClick={() => setIsAddDeviceOpen(false)} disabled={registerDeviceMutation.isPending}>Cancel</Button>
+          <Button onClick={handleAddDevice} disabled={registerDeviceMutation.isPending || !newDevice.id.trim() || !newDevice.plateNumber.trim()}>
+            {registerDeviceMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Registering
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Device
+              </>
+            )}
+          </Button>
         </ModalFooter>
       </Modal>
 
