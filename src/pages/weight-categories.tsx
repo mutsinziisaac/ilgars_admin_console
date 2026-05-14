@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Scale, Edit, Plus, Trash2, CheckCircle, XCircle } from "lucide-react"
+import { Edit, Plus, CheckCircle, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 // Mock weight categories data
@@ -116,16 +116,6 @@ export function WeightCategoriesPage() {
     toast.success("Weight category updated successfully")
   }
 
-  const handleDeleteCategory = (categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId)
-    if (category?.active) {
-      toast.error("Cannot delete active weight category")
-      return
-    }
-    setCategories(categories.filter(c => c.id !== categoryId))
-    toast.success("Weight category deleted")
-  }
-
   const handleToggleActive = (categoryId: string) => {
     setCategories(categories.map(c => 
       c.id === categoryId ? { ...c, active: !c.active } : c
@@ -220,15 +210,6 @@ export function WeightCategoriesPage() {
                       >
                         {category.active ? "Deactivate" : "Activate"}
                       </Button>
-                      {!category.active && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleDeleteCategory(category.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                   </TableCell>
                 </TableRow>

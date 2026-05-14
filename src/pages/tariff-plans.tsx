@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,10 +16,11 @@ import {
   useActivateTariffPlan,
 } from "@/lib/api/tariff-plans/hooks"
 import type { TariffPlan, TariffRate } from "@/lib/api/tariff-plans/schemas"
+import { TARIFF_PLANS_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
 import {
-  ACTIVE_MUNICIPALITY_ID_STORAGE_KEY,
-  DEFAULT_MUNICIPALITY_ID,
-} from "@/lib/api/constants"
+  getMunicipalityDisplayName,
+  getStoredMunicipalityId as getRegistryMunicipalityId,
+} from "@/lib/municipality-registry"
 
 const defaultRates: TariffRate[] = [
   { capacityBandCode: "AGRICULTURAL_TRANSIT", amountPerDay: 1000, minimumCharge: 0 },
@@ -33,9 +34,36 @@ const defaultRates: TariffRate[] = [
 ]
 
 const getStoredMunicipalityId = () => {
-  if (typeof window === "undefined") return DEFAULT_MUNICIPALITY_ID
+  return getRegistryMunicipalityId()
+}
 
-  return localStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
+const getTariffPlansStorageKey = (municipalityId: string) =>
+  `${TARIFF_PLANS_STORAGE_KEY_PREFIX}.${municipalityId}`
+
+const getStoredTariffPlans = (municipalityId: string): TariffPlan[] => {
+  if (typeof window === "undefined") return []
+
+  try {
+    const stored = localStorage.getItem(getTariffPlansStorageKey(municipalityId))
+    return stored ? (JSON.parse(stored) as TariffPlan[]) : []
+  } catch {
+    return []
+  }
+}
+
+const storeTariffPlans = (municipalityId: string, plans: TariffPlan[]) => {
+  if (typeof window === "undefined") return
+
+  localStorage.setItem(getTariffPlansStorageKey(municipalityId), JSON.stringify(plans))
+}
+
+const mergeTariffPlans = (incoming: TariffPlan[], fallback: TariffPlan[] = []) => {
+  const byId = new Map<string, TariffPlan>()
+
+  fallback.forEach((plan) => byId.set(plan.id, plan))
+  incoming.forEach((plan) => byId.set(plan.id, plan))
+
+  return Array.from(byId.values())
 }
 
 const createDefaultPlanCode = () => `MAPUTO-CIRCULATION-2026-${Date.now()}`
@@ -46,6 +74,15 @@ const cleanRate = (rate: TariffRate): TariffRate => {
   return Object.fromEntries(entries) as TariffRate
 }
 
+const withTariffPlanDisplayFields = (
+  plan: TariffPlan,
+  fallback: Partial<TariffPlan> = {},
+): TariffPlan => ({
+  ...plan,
+  description: plan.description ?? fallback.description ?? "",
+  createdAt: plan.createdAt ?? fallback.createdAt ?? new Date().toISOString(),
+})
+
 export function TariffPlansPage() {
   const storedMunicipalityId = getStoredMunicipalityId()
   const [activeMunicipalityId, setActiveMunicipalityId] = useState(storedMunicipalityId)
@@ -55,6 +92,19 @@ export function TariffPlansPage() {
   const [isViewBandsOpen, setIsViewBandsOpen] = useState(false)
   const [activatingPlanId, setActivatingPlanId] = useState<string | null>(null)
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(() => new Set())
+  const [cachedTariffPlans, setCachedTariffPlans] = useState<TariffPlan[]>(() =>
+    getStoredTariffPlans(storedMunicipalityId),
+  )
+
+  useEffect(() => {
+    const latestMunicipalityId = getStoredMunicipalityId()
+    setActiveMunicipalityId(latestMunicipalityId)
+    setCachedTariffPlans(getStoredTariffPlans(latestMunicipalityId))
+    setPlanForm((current) => ({
+      ...current,
+      municipalityId: latestMunicipalityId,
+    }))
+  }, [])
 
   // Fetch tariff plans from API
   const { data: tariffPlansResponse, isLoading, error, refetch } = useTariffPlansList({
@@ -64,11 +114,21 @@ export function TariffPlansPage() {
   
   // Mutations
   const createMutation = useCreateTariffPlan({
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       if (variables.municipalityId) {
-        localStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, variables.municipalityId)
         setActiveMunicipalityId(variables.municipalityId)
       }
+      const municipalityId = variables.municipalityId || getStoredMunicipalityId()
+      const nextPlans = mergeTariffPlans(
+        [
+          withTariffPlanDisplayFields(data.data, {
+            description: variables.description,
+          }),
+        ],
+        getStoredTariffPlans(municipalityId),
+      )
+      setCachedTariffPlans(nextPlans)
+      storeTariffPlans(municipalityId, nextPlans)
       toast.success("Tariff plan created successfully")
       setIsCreateOpen(false)
       resetForm()
@@ -79,7 +139,19 @@ export function TariffPlansPage() {
   })
 
   const updateMutation = useUpdateTariffPlan(selectedPlan?.id || "", {
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      const municipalityId = data.data.municipalityId || getStoredMunicipalityId()
+      const nextPlans = mergeTariffPlans(
+        [
+          withTariffPlanDisplayFields(data.data, {
+            description: variables.description,
+            createdAt: selectedPlan?.createdAt,
+          }),
+        ],
+        getStoredTariffPlans(municipalityId),
+      )
+      setCachedTariffPlans(nextPlans)
+      storeTariffPlans(municipalityId, nextPlans)
       toast.success("Tariff plan updated successfully")
       setIsEditOpen(false)
       setSelectedPlan(null)
@@ -106,7 +178,16 @@ export function TariffPlansPage() {
   })
 
   // Extract tariff plans from response
-  const tariffPlans = tariffPlansResponse?.data || tariffPlansResponse?.content || []
+  const apiTariffPlans = tariffPlansResponse?.data || tariffPlansResponse?.content || []
+  const tariffPlans = mergeTariffPlans(apiTariffPlans, cachedTariffPlans)
+
+  useEffect(() => {
+    if (!apiTariffPlans.length) return
+
+    const nextPlans = mergeTariffPlans(apiTariffPlans, getStoredTariffPlans(activeMunicipalityId))
+    setCachedTariffPlans(nextPlans)
+    storeTariffPlans(activeMunicipalityId, nextPlans)
+  }, [activeMunicipalityId, apiTariffPlans])
 
   const [planForm, setPlanForm] = useState({
     municipalityId: storedMunicipalityId,
@@ -118,8 +199,11 @@ export function TariffPlansPage() {
   })
 
   const resetForm = () => {
+    const municipalityId = getStoredMunicipalityId()
+    setActiveMunicipalityId(municipalityId)
+    setCachedTariffPlans(getStoredTariffPlans(municipalityId))
     setPlanForm({
-      municipalityId: getStoredMunicipalityId(),
+      municipalityId,
       code: createDefaultPlanCode(),
       name: "Maputo Circulation Licence Fees",
       tariffType: "CIRCULATION_LICENCE",
@@ -128,11 +212,16 @@ export function TariffPlansPage() {
     })
   }
 
+  const openCreatePlan = () => {
+    resetForm()
+    setIsCreateOpen(true)
+  }
+
   const handleCreatePlan = () => {
     const municipalityId = planForm.municipalityId.trim()
 
     if (!municipalityId) {
-      toast.error("Municipality ID is required")
+      toast.error("Create a municipality before creating a tariff plan")
       return
     }
 
@@ -202,7 +291,7 @@ export function TariffPlansPage() {
   }
 
   // Loading state
-  if (isLoading) {
+  if (isLoading && tariffPlans.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -237,7 +326,7 @@ export function TariffPlansPage() {
           <h1 className="text-4xl font-semibold text-foreground">Tariff Plans</h1>
           <p className="text-lg text-muted-foreground">Manage capacity-based tariff rate plans</p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)} disabled={createMutation.isPending}>
+        <Button onClick={openCreatePlan} disabled={createMutation.isPending}>
           {createMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -345,17 +434,10 @@ export function TariffPlansPage() {
         <ModalBody>
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="municipalityId" className="text-base">Municipality ID *</Label>
-              <Input
-                id="municipalityId"
-                value={planForm.municipalityId}
-                onChange={(e) => setPlanForm({ ...planForm, municipalityId: e.target.value })}
-                placeholder="Backend municipality UUID"
-                className="text-base h-11"
-              />
-              <p className="text-sm text-muted-foreground">
-                Uses the municipality created on the Municipality page when available.
-              </p>
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(planForm.municipalityId)}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -460,14 +542,10 @@ export function TariffPlansPage() {
         <ModalBody>
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="edit-municipalityId" className="text-base">Municipality ID *</Label>
-              <Input
-                id="edit-municipalityId"
-                value={planForm.municipalityId}
-                onChange={(e) => setPlanForm({ ...planForm, municipalityId: e.target.value })}
-                placeholder="Backend municipality UUID"
-                className="text-base h-11"
-              />
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(planForm.municipalityId)}
+              </div>
             </div>
 
             <div className="space-y-2">

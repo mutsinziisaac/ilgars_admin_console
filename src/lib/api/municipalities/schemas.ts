@@ -29,9 +29,52 @@ export const MunicipalityDetailResponseSchema = z.object({
   data: MunicipalitySchema,
 });
 
+export const MunicipalityListResponseSchema = z
+  .object({
+    data: z.array(MunicipalitySchema).optional(),
+    content: z.array(MunicipalitySchema).optional(),
+    items: z.array(MunicipalitySchema).optional(),
+    meta: z
+      .object({
+        page: z.number().optional(),
+        pageSize: z.number().optional(),
+        total: z.number().optional(),
+        pageCount: z.number().optional(),
+        totalElements: z.number().optional(),
+        totalPages: z.number().optional(),
+        size: z.number().optional(),
+        number: z.number().optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
+
 export const BoundaryVersionDetailResponseSchema = z.object({
   data: BoundaryVersionSchema,
 });
+
+export const BoundaryVersionListResponseSchema = z
+  .object({
+    data: z.array(BoundaryVersionSchema).optional(),
+    content: z.array(BoundaryVersionSchema).optional(),
+    items: z.array(BoundaryVersionSchema).optional(),
+  })
+  .passthrough();
+
+export const MunicipalityConfigurationDataSchema = z
+  .object({
+    municipality: MunicipalitySchema.optional(),
+    boundaryVersions: z.array(BoundaryVersionSchema).optional(),
+    boundaries: z.array(BoundaryVersionSchema).optional(),
+    activeBoundaryVersion: BoundaryVersionSchema.optional().nullable(),
+  })
+  .passthrough();
+
+export const MunicipalityConfigurationResponseSchema = z
+  .object({
+    data: z.union([MunicipalityConfigurationDataSchema, MunicipalitySchema]),
+  })
+  .passthrough();
 
 export const CreateMunicipalityRequestSchema = z.object({
   code: z.string(),
@@ -49,6 +92,9 @@ export const CreateBoundaryVersionRequestSchema = z.object({
 export type Municipality = z.infer<typeof MunicipalitySchema>;
 export type BoundaryVersion = z.infer<typeof BoundaryVersionSchema>;
 export type MunicipalityDetailResponse = z.infer<typeof MunicipalityDetailResponseSchema>;
+export type MunicipalityListResponse = z.infer<typeof MunicipalityListResponseSchema>;
+export type MunicipalityConfigurationResponse = z.infer<typeof MunicipalityConfigurationResponseSchema>;
 export type BoundaryVersionDetailResponse = z.infer<typeof BoundaryVersionDetailResponseSchema>;
+export type BoundaryVersionListResponse = z.infer<typeof BoundaryVersionListResponseSchema>;
 export type CreateMunicipalityRequest = z.infer<typeof CreateMunicipalityRequestSchema>;
 export type CreateBoundaryVersionRequest = z.infer<typeof CreateBoundaryVersionRequestSchema>;

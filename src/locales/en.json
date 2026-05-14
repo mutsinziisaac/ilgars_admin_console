@@ -1,0 +1,64 @@
+{
+  "app": {
+    "name": "Maputo RUC",
+    "subtitle": "ADMIN CONSOLE",
+    "fullName": "Integrated Local Government Administration & Revenue System",
+    "shortName": "ILGARS",
+    "municipality": "Maputo Municipality"
+  },
+  "auth": {
+    "callbackTitle": "Completing authentication...",
+    "errorTitle": "Authentication Error:",
+    "errorHelp": "Please contact your system administrator to verify the Keycloak client configuration.",
+    "loading": "Loading...",
+    "getStarted": "Get Started",
+    "signInFailed": "Failed to initiate sign in"
+  },
+  "landing": {
+    "description": "Streamline road user charges, manage permits, track enforcement, and optimize revenue collection for Maputo Municipality.",
+    "adminConsole": "ILGARS Admin Console",
+    "rights": "All rights reserved."
+  },
+  "header": {
+    "section": "REVENUE",
+    "today": "TODAY",
+    "title": "Operations dashboard",
+    "notifications": "Notifications"
+  },
+  "nav": {
+    "operations": "Operations",
+    "overview": "Overview",
+    "transactions": "Transactions",
+    "vehicles": "Vehicles",
+    "reports": "Reports",
+    "permits": "Permits",
+    "roadClosurePermits": "Road Closure Permits",
+    "heavyTruckPermits": "Heavy Truck Permits",
+    "violations": "Violations",
+    "alerts": "Alerts",
+    "enforcement": "Enforcement",
+    "devices": "Devices",
+    "gpsTracking": "GPS Tracking",
+    "cameras": "Cameras",
+    "configurations": "Configurations",
+    "municipality": "Municipality",
+    "tariffPlans": "Tariff Plans",
+    "rucPolicy": "RUC Policy",
+    "routes": "Routes",
+    "roadClosureRates": "Road Closure Rates",
+    "finesConfiguration": "Fines Configuration",
+    "geofencingZones": "Geofencing Zones",
+    "vehicleClassification": "Vehicle Classification",
+    "weightCategories": "Weight Categories",
+    "timeWindows": "Time Windows"
+  },
+  "user": {
+    "fallbackName": "Joana Macavel",
+    "role": "Revenue officer",
+    "locale": "Locale",
+    "english": "English",
+    "portuguese": "Portuguese",
+    "logout": "Logout"
+  },
+  "phrases": {}
+}

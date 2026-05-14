@@ -23,7 +23,7 @@ type AlertRule = {
   id: string
   name: string
   triggerType: string
-  severity: "High" | "Medium" | "Low"
+  severity: "Critical" | "Warning" | "Informational"
   enabled: boolean
   autoEscalate: boolean
   cooldownMins: number
@@ -39,94 +39,107 @@ type NotificationChannel = {
 
 // ── Default config state ─────────────────────────────────────────────────────
 const defaultRules: AlertRule[] = [
-  { id: "R-001", name: "Overweight Vehicle",          triggerType: "Weight Violation",        severity: "High",   enabled: true,  autoEscalate: true,  cooldownMins: 0  },
-  { id: "R-002", name: "Expired RUC Payment",         triggerType: "Payment Violation",       severity: "High",   enabled: true,  autoEscalate: true,  cooldownMins: 0  },
-  { id: "R-003", name: "Restricted Hours Violation",  triggerType: "Time Restriction",        severity: "High",   enabled: true,  autoEscalate: false, cooldownMins: 30 },
-  { id: "R-004", name: "No Road Closure Permit",      triggerType: "Permit Violation",        severity: "Medium", enabled: true,  autoEscalate: false, cooldownMins: 15 },
-  { id: "R-005", name: "Route Deviation",             triggerType: "Route Violation",         severity: "Low",    enabled: true,  autoEscalate: false, cooldownMins: 60 },
-  { id: "R-006", name: "Speed Violation",             triggerType: "Speed Violation",         severity: "Medium", enabled: true,  autoEscalate: false, cooldownMins: 10 },
-  { id: "R-007", name: "Repeat Offender",             triggerType: "Repeat Offence (3+)",     severity: "High",   enabled: true,  autoEscalate: true,  cooldownMins: 0  },
-  { id: "R-008", name: "Infrastructure Damage",       triggerType: "Infrastructure Damage",   severity: "High",   enabled: false, autoEscalate: true,  cooldownMins: 0  },
+  { id: "R-001", name: "Device Tampered",             triggerType: "Tracker tamper event",             severity: "Critical",      enabled: true, autoEscalate: true,  cooldownMins: 0  },
+  { id: "R-002", name: "Power Disconnected",          triggerType: "Tracker lost vehicle power",       severity: "Critical",      enabled: true, autoEscalate: true,  cooldownMins: 0  },
+  { id: "R-003", name: "Outstanding Payments",        triggerType: "Vehicle has unpaid RUC charges",   severity: "Critical",      enabled: true, autoEscalate: true,  cooldownMins: 0  },
+  { id: "R-004", name: "Expired RUC",                 triggerType: "Paid RUC has expired",             severity: "Critical",      enabled: true, autoEscalate: true,  cooldownMins: 0  },
+  { id: "R-005", name: "Unauthorized Route",          triggerType: "Vehicle entered unconfigured route", severity: "Warning",     enabled: true, autoEscalate: false, cooldownMins: 30 },
+  { id: "R-006", name: "Signal Lost",                 triggerType: "Tracker stopped transmitting",     severity: "Warning",       enabled: true, autoEscalate: false, cooldownMins: 10 },
+  { id: "R-007", name: "National Road Geofence",      triggerType: "Tracker accessed national road",   severity: "Informational", enabled: true, autoEscalate: false, cooldownMins: 60 },
 ]
 
 const defaultChannels: NotificationChannel[] = [
-  { id: "C-001", type: "Email",  destination: "enforcement@ilgars.gov.mz",  enabled: true,  severities: ["High", "Medium", "Low"] },
-  { id: "C-002", type: "Email",  destination: "supervisor@ilgars.gov.mz",   enabled: true,  severities: ["High"] },
-  { id: "C-003", type: "SMS",    destination: "+258 84 000 0001",            enabled: true,  severities: ["High"] },
-  { id: "C-004", type: "In-App", destination: "All Officers",               enabled: true,  severities: ["High", "Medium", "Low"] },
+  { id: "C-001", type: "Email",  destination: "enforcement@ilgars.gov.mz",  enabled: true,  severities: ["Critical", "Warning", "Informational"] },
+  { id: "C-002", type: "Email",  destination: "supervisor@ilgars.gov.mz",   enabled: true,  severities: ["Critical"] },
+  { id: "C-003", type: "SMS",    destination: "+258 84 000 0001",            enabled: true,  severities: ["Critical"] },
+  { id: "C-004", type: "In-App", destination: "All Officers",               enabled: true,  severities: ["Critical", "Warning", "Informational"] },
 ]
 
 // Mock alerts data
 const mockAlerts = [
   {
     id: "ALT-001",
-    type: "Overweight Vehicle",
-    severity: "High",
+    type: "Device Tampered",
+    category: "Tracker Integrity",
+    severity: "Critical",
     plateNumber: "AAA-123-MP",
     location: "Av. Julius Nyerere",
     timestamp: "2026-05-11 14:23",
     status: "Active",
-    description: "Vehicle detected exceeding weight limit by 20%"
+    detectedBy: "GPS-TRK-001",
+    description: "Tracker reported a tamper event and requires immediate enforcement follow-up."
   },
   {
     id: "ALT-002",
     type: "Expired RUC",
-    severity: "Medium",
+    category: "Payment Compliance",
+    severity: "Critical",
     plateNumber: "BBB-456-MP",
     location: "Av. 25 de Setembro",
     timestamp: "2026-05-11 13:45",
     status: "Active",
-    description: "Vehicle operating with expired RUC payment (30 days overdue)"
+    detectedBy: "Payment engine",
+    description: "Road user charge has expired and the vehicle is still operating."
   },
   {
     id: "ALT-003",
-    type: "Restricted Hours",
-    severity: "High",
+    type: "Power Disconnected",
+    category: "Tracker Integrity",
+    severity: "Critical",
     plateNumber: "CCC-789-MP",
     location: "Marginal Avenue",
     timestamp: "2026-05-11 12:10",
     status: "Resolved",
-    description: "Heavy vehicle detected during restricted hours (22:00-06:00)"
+    detectedBy: "GPS-TRK-003",
+    description: "Tracker lost vehicle power. Officer confirmed cable was reconnected."
   },
   {
     id: "ALT-004",
-    type: "No Permit",
-    severity: "Medium",
+    type: "Outstanding Payments",
+    category: "Payment Compliance",
+    severity: "Critical",
     plateNumber: "DDD-012-MP",
     location: "Av. Eduardo Mondlane",
     timestamp: "2026-05-11 11:30",
     status: "Active",
-    description: "Vehicle on closed road without valid permit"
+    detectedBy: "Payment engine",
+    description: "Vehicle has unpaid road user charges and should be escalated for collection."
   },
   {
     id: "ALT-005",
-    type: "Route Deviation",
-    severity: "Low",
+    type: "Unauthorized Route",
+    category: "Route Compliance",
+    severity: "Warning",
     plateNumber: "EEE-345-MP",
     location: "Av. Acordos de Lusaka",
     timestamp: "2026-05-11 10:15",
-    status: "Dismissed",
-    description: "Vehicle deviated from authorized route"
+    status: "Escalated",
+    detectedBy: "GPS-TRK-002",
+    description: "Tracker entered a route that is not configured for this vehicle."
   },
   {
     id: "ALT-006",
-    type: "Speed Violation",
-    severity: "Medium",
+    type: "Signal Lost",
+    category: "Connectivity",
+    severity: "Warning",
     plateNumber: "FFF-678-MP",
     location: "Av. Vladimir Lenine",
     timestamp: "2026-05-11 09:30",
     status: "Active",
-    description: "Vehicle exceeding speed limit in restricted zone"
+    detectedBy: "GPS-TRK-004",
+    description: "Tracker has not transmitted data within the configured signal-loss window."
   },
   {
     id: "ALT-007",
-    type: "Repeat Offender",
-    severity: "High",
+    type: "National Road Geofence",
+    category: "Geofence Monitoring",
+    severity: "Informational",
     plateNumber: "AAA-123-MP",
     location: "Av. Julius Nyerere",
     timestamp: "2026-05-11 08:20",
     status: "Active",
-    description: "Vehicle with 3+ violations in past 30 days"
+    detectedBy: "National road geofence",
+    description: "Tracker accessed a national road geofence. Recorded for monitoring."
   },
 ]
 
@@ -155,12 +168,12 @@ export function AlertsPage() {
   const [channels, setChannels] = useState<NotificationChannel[]>(defaultChannels)
   const [repeatThreshold, setRepeatThreshold] = useState(3)
   const [weightThresholdPct, setWeightThresholdPct] = useState(10)
-  const [speedThresholdKmh, setSpeedThresholdKmh] = useState(20)
-  const [rucGraceDays, setRucGraceDays] = useState(7)
+  const [signalLossMinutes, setSignalLossMinutes] = useState(15)
+  const [rucGraceHours, setRucGraceHours] = useState(24)
   const [globalMute, setGlobalMute] = useState(false)
 
   // New rule form
-  const [newRule, setNewRule] = useState({ name: "", triggerType: "", severity: "Medium" as AlertRule["severity"] })
+  const [newRule, setNewRule] = useState({ name: "", triggerType: "", severity: "Warning" as AlertRule["severity"] })
   // New channel form
   const [newChannel, setNewChannel] = useState({ type: "Email" as NotificationChannel["type"], destination: "" })
 
@@ -175,16 +188,16 @@ export function AlertsPage() {
 
   const handleDismiss = () => {
     if (!selectedAlert) return
-    setAlerts(prev => prev.map(a => a.id === selectedAlert.id ? { ...a, status: "Dismissed" } : a))
+    setAlerts(prev => prev.map(a => a.id === selectedAlert.id ? { ...a, status: "Ignored" } : a))
     setIsDismissOpen(false)
-    toast.success(`Alert ${selectedAlert.id} dismissed`)
+    toast.success(`Alert ${selectedAlert.id} ignored`)
   }
 
   const handleEscalate = () => {
     if (!selectedAlert) return
-    setAlerts(prev => prev.map(a => a.id === selectedAlert.id ? { ...a, severity: "High" } : a))
+    setAlerts(prev => prev.map(a => a.id === selectedAlert.id ? { ...a, status: "Escalated", severity: "Critical" } : a))
     setIsEscalateOpen(false)
-    toast.success(`Alert ${selectedAlert.id} escalated to High severity`)
+    toast.success(`Alert ${selectedAlert.id} escalated to enforcement`)
   }
 
   // ── Configure Alerts handlers ─────────────────────────────────────────────
@@ -211,7 +224,7 @@ export function AlertsPage() {
       autoEscalate: false,
       cooldownMins: 0,
     }])
-    setNewRule({ name: "", triggerType: "", severity: "Medium" })
+    setNewRule({ name: "", triggerType: "", severity: "Warning" })
     toast.success("Alert rule added")
   }
 
@@ -228,7 +241,7 @@ export function AlertsPage() {
       type: newChannel.type,
       destination: newChannel.destination,
       enabled: true,
-      severities: ["High", "Medium", "Low"],
+      severities: ["Critical", "Warning", "Informational"],
     }])
     setNewChannel({ type: "Email", destination: "" })
     toast.success("Notification channel added")
@@ -246,7 +259,7 @@ export function AlertsPage() {
   }
 
   const severityColor = (s: string) =>
-    s === "High" ? "#E5533D" : s === "Medium" ? "#DAA22A" : "#5B8C5A"
+    s === "Critical" ? "#E5533D" : s === "Warning" ? "#DAA22A" : "#5B8C5A"
 
   // Filter alerts
   const filteredAlerts = alerts.filter(alert => {
@@ -254,7 +267,9 @@ export function AlertsPage() {
     const matchesSeverity = severityFilter === "all" || alert.severity === severityFilter
     const matchesSearch = searchQuery === "" || 
       alert.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alert.type.toLowerCase().includes(searchQuery.toLowerCase())
+      alert.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      alert.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      alert.detectedBy.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesStatus && matchesSeverity && matchesSearch
   })
 
@@ -267,9 +282,9 @@ export function AlertsPage() {
   // Get severity badge
   const getSeverityBadge = (severity: string) => {
     const colors: Record<string, string> = {
-      "High": "bg-[#E5533D] text-white",
-      "Medium": "bg-[#DAA22A] text-[#1C1C1C]",
-      "Low": "bg-[#5B8C5A] text-white"
+      "Critical": "bg-[#E5533D] text-white",
+      "Warning": "bg-[#DAA22A] text-[#1C1C1C]",
+      "Informational": "bg-[#5B8C5A] text-white"
     }
     return (
       <Badge className={`${colors[severity] || "bg-secondary"} text-sm px-3 py-1`}>
@@ -283,12 +298,14 @@ export function AlertsPage() {
     const colors: Record<string, string> = {
       "Active": "bg-[#E5533D] text-white",
       "Resolved": "bg-[#5B8C5A] text-white",
-      "Dismissed": "bg-muted text-muted-foreground"
+      "Escalated": "bg-[#DAA22A] text-[#1C1C1C]",
+      "Ignored": "bg-muted text-muted-foreground"
     }
     const icons: Record<string, any> = {
       "Active": AlertTriangle,
       "Resolved": CheckCircle,
-      "Dismissed": XCircle
+      "Escalated": ArrowUpCircle,
+      "Ignored": XCircle
     }
     const Icon = icons[status] || Clock
     return (
@@ -304,7 +321,7 @@ export function AlertsPage() {
       {/* Page Header */}
       <div>
         <h1 className="text-4xl font-semibold text-foreground">Alerts</h1>
-        <p className="text-lg text-muted-foreground">Real-time violation alerts and notifications</p>
+        <p className="text-lg text-muted-foreground">Device, payment, route, and geofence alerts awaiting review</p>
       </div>
 
       {/* Stats Cards */}
@@ -323,13 +340,13 @@ export function AlertsPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">High Severity</CardDescription>
+            <CardDescription className="text-base">Critical Alerts</CardDescription>
             <CardTitle className="text-4xl text-[#E5533D]">
-              {alerts.filter(a => a.severity === "High" && a.status === "Active").length}
+              {alerts.filter(a => a.severity === "Critical" && a.status === "Active").length}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Critical violations</p>
+            <p className="text-base text-muted-foreground">Immediate escalation</p>
           </CardContent>
         </Card>
 
@@ -347,13 +364,13 @@ export function AlertsPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription className="text-base">Repeat Offenders</CardDescription>
+            <CardDescription className="text-base">Escalated</CardDescription>
             <CardTitle className="text-4xl text-[#DAA22A]">
-              {alerts.filter(a => a.type === "Repeat Offender").length}
+              {alerts.filter(a => a.status === "Escalated").length}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Multiple violations</p>
+            <p className="text-base text-muted-foreground">Sent to enforcement</p>
           </CardContent>
         </Card>
       </div>
@@ -364,7 +381,7 @@ export function AlertsPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-2xl">Alert Log</CardTitle>
-              <CardDescription className="text-base">Real-time violation alerts</CardDescription>
+              <CardDescription className="text-base">Real-time tracking and compliance alerts</CardDescription>
             </div>
             <Button className="text-base h-11 px-6" onClick={() => setIsConfigOpen(true)}>
               <Bell className="h-5 w-5 mr-2" />
@@ -379,7 +396,7 @@ export function AlertsPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by plate number or alert type..."
+                  placeholder="Search by plate, alert type, category, or source..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 text-base h-11"
@@ -394,7 +411,8 @@ export function AlertsPage() {
                 <SelectItem value="all" className="text-base">All Status</SelectItem>
                 <SelectItem value="Active" className="text-base">Active</SelectItem>
                 <SelectItem value="Resolved" className="text-base">Resolved</SelectItem>
-                <SelectItem value="Dismissed" className="text-base">Dismissed</SelectItem>
+                <SelectItem value="Escalated" className="text-base">Escalated</SelectItem>
+                <SelectItem value="Ignored" className="text-base">Ignored</SelectItem>
               </SelectContent>
             </Select>
             <Select value={severityFilter} onValueChange={setSeverityFilter}>
@@ -403,9 +421,9 @@ export function AlertsPage() {
               </SelectTrigger>
               <SelectContent className="text-base">
                 <SelectItem value="all" className="text-base">All Severity</SelectItem>
-                <SelectItem value="High" className="text-base">High</SelectItem>
-                <SelectItem value="Medium" className="text-base">Medium</SelectItem>
-                <SelectItem value="Low" className="text-base">Low</SelectItem>
+                <SelectItem value="Critical" className="text-base">Critical</SelectItem>
+                <SelectItem value="Warning" className="text-base">Warning</SelectItem>
+                <SelectItem value="Informational" className="text-base">Informational</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -415,6 +433,7 @@ export function AlertsPage() {
               <TableRow>
                 <TableHead className="text-base">Alert ID</TableHead>
                 <TableHead className="text-base">Type</TableHead>
+                <TableHead className="text-base">Category</TableHead>
                 <TableHead className="text-base">Plate Number</TableHead>
                 <TableHead className="text-base">Location</TableHead>
                 <TableHead className="text-base">Severity</TableHead>
@@ -428,6 +447,7 @@ export function AlertsPage() {
                 <TableRow key={alert.id}>
                   <TableCell className="font-medium text-base">{alert.id}</TableCell>
                   <TableCell className="text-base">{alert.type}</TableCell>
+                  <TableCell className="text-base text-muted-foreground">{alert.category}</TableCell>
                   <TableCell className="font-mono font-bold text-base">{alert.plateNumber}</TableCell>
                   <TableCell className="text-base">{alert.location}</TableCell>
                   <TableCell>{getSeverityBadge(alert.severity)}</TableCell>
@@ -458,7 +478,6 @@ export function AlertsPage() {
                             <DropdownMenuItem
                               className="text-base cursor-pointer"
                               onClick={() => { setSelectedAlert(alert); setIsEscalateOpen(true) }}
-                              disabled={alert.severity === "High"}
                             >
                               <ArrowUpCircle className="h-4 w-4 mr-2" /> Escalate
                             </DropdownMenuItem>
@@ -467,7 +486,7 @@ export function AlertsPage() {
                               className="text-base cursor-pointer text-muted-foreground"
                               onClick={() => { setSelectedAlert(alert); setIsDismissOpen(true) }}
                             >
-                              <XCircle className="h-4 w-4 mr-2" /> Dismiss
+                              <XCircle className="h-4 w-4 mr-2" /> Ignore
                             </DropdownMenuItem>
                           </>
                         )}
@@ -525,8 +544,10 @@ export function AlertsPage() {
               {[
                 ["Alert ID", selectedAlert.id],
                 ["Type", selectedAlert.type],
+                ["Category", selectedAlert.category],
                 ["Plate Number", selectedAlert.plateNumber],
                 ["Location", selectedAlert.location],
+                ["Detected By", selectedAlert.detectedBy],
                 ["Severity", selectedAlert.severity],
                 ["Status", selectedAlert.status],
                 ["Timestamp", selectedAlert.timestamp],
@@ -589,8 +610,8 @@ export function AlertsPage() {
           <div className="flex items-start gap-3 p-4 bg-[#DAA22A]/10 rounded-lg">
             <ShieldAlert className="h-5 w-5 text-[#DAA22A] mt-0.5 flex-shrink-0" />
             <p className="text-base">
-              Escalate alert <strong>{selectedAlert?.id}</strong> to <strong>High</strong> severity?
-              This will flag it for immediate enforcement action.
+              Escalate alert <strong>{selectedAlert?.id}</strong> to the enforcement team?
+              This will keep the alert in the audit trail and flag it for officer action.
             </p>
           </div>
         </ModalBody>
@@ -605,15 +626,15 @@ export function AlertsPage() {
       {/* ── Alert: Dismiss ── */}
       <Modal open={isDismissOpen} onOpenChange={setIsDismissOpen} className="w-full max-w-md">
         <ModalHeader onClose={() => setIsDismissOpen(false)}>
-          <ModalTitle>Dismiss Alert</ModalTitle>
+          <ModalTitle>Ignore Alert</ModalTitle>
           <ModalDescription>{selectedAlert?.id} — {selectedAlert?.type}</ModalDescription>
         </ModalHeader>
         <ModalBody>
-          <p className="text-base">Dismiss alert <strong>{selectedAlert?.id}</strong>? It will be marked as dismissed and removed from the active queue.</p>
+          <p className="text-base">Ignore alert <strong>{selectedAlert?.id}</strong>? This is for false positives or events that do not need enforcement action.</p>
         </ModalBody>
         <ModalFooter>
           <Button variant="outline" onClick={() => setIsDismissOpen(false)}>Cancel</Button>
-          <Button variant="secondary" onClick={handleDismiss}><XCircle className="h-4 w-4 mr-2" />Dismiss</Button>
+          <Button variant="secondary" onClick={handleDismiss}><XCircle className="h-4 w-4 mr-2" />Ignore</Button>
         </ModalFooter>
       </Modal>
 
@@ -656,7 +677,7 @@ export function AlertsPage() {
                 >
                   {globalMute
                     ? <><ToggleRight className="h-8 w-8 text-[#E5533D]" /><span className="text-[#E5533D]">Muted</span></>
-                    : <><ToggleLeft className="h-8 w-8 text-muted-foreground" /><span className="text-muted-foreground">Active</span></>
+                        : <><ToggleLeft className="h-8 w-8 text-muted-foreground" /><span className="text-muted-foreground">Monitoring</span></>
                   }
                 </button>
               </div>
@@ -766,9 +787,9 @@ export function AlertsPage() {
                     <Select value={newRule.severity} onValueChange={v => setNewRule(p => ({ ...p, severity: v as AlertRule["severity"] }))}>
                       <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="Low">Low</SelectItem>
+                        <SelectItem value="Critical">Critical</SelectItem>
+                        <SelectItem value="Warning">Warning</SelectItem>
+                        <SelectItem value="Informational">Informational</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -906,38 +927,38 @@ export function AlertsPage() {
                 <div className="space-y-3 p-4 rounded-lg border border-border">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
-                    <p className="font-semibold text-sm">Speed Violation Threshold</p>
+                    <p className="font-semibold text-sm">Signal Loss Threshold</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">km/h over the posted speed limit before triggering an alert</p>
+                  <p className="text-xs text-muted-foreground">Minutes without GPS transmission before triggering a signal lost alert</p>
                   <div className="flex items-center gap-3">
                     <Input
                       type="number"
                       min={1}
-                      max={200}
-                      value={speedThresholdKmh}
-                      onChange={e => setSpeedThresholdKmh(Number(e.target.value))}
+                      max={240}
+                      value={signalLossMinutes}
+                      onChange={e => setSignalLossMinutes(Number(e.target.value))}
                       className="w-24 h-10 text-base text-center"
                     />
-                    <span className="text-sm text-muted-foreground">km/h over limit</span>
+                    <span className="text-sm text-muted-foreground">minutes</span>
                   </div>
                 </div>
 
                 <div className="space-y-3 p-4 rounded-lg border border-border">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-[#5B8C5A]" />
-                    <p className="font-semibold text-sm">RUC Grace Period</p>
+                    <p className="font-semibold text-sm">RUC Expiry Grace Period</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">Days after RUC expiry before triggering an alert</p>
+                  <p className="text-xs text-muted-foreground">Hours after RUC expiry before triggering payment due and expired RUC alerts</p>
                   <div className="flex items-center gap-3">
                     <Input
                       type="number"
                       min={0}
-                      max={90}
-                      value={rucGraceDays}
-                      onChange={e => setRucGraceDays(Number(e.target.value))}
+                      max={720}
+                      value={rucGraceHours}
+                      onChange={e => setRucGraceHours(Number(e.target.value))}
                       className="w-24 h-10 text-base text-center"
                     />
-                    <span className="text-sm text-muted-foreground">days</span>
+                    <span className="text-sm text-muted-foreground">hours</span>
                   </div>
                 </div>
               </div>
@@ -947,8 +968,8 @@ export function AlertsPage() {
                 <ul className="space-y-1 list-disc list-inside">
                   <li>Repeat offender flag after <strong>{repeatThreshold}</strong> violations in 30 days</li>
                   <li>Overweight alert at <strong>{weightThresholdPct}%</strong> over legal limit</li>
-                  <li>Speed alert at <strong>{speedThresholdKmh} km/h</strong> over posted limit</li>
-                  <li>RUC grace period of <strong>{rucGraceDays}</strong> days after expiry</li>
+                  <li>Signal lost alert after <strong>{signalLossMinutes}</strong> minutes without tracker data</li>
+                  <li>Expired RUC alert after <strong>{rucGraceHours}</strong> hours from expiry</li>
                 </ul>
               </div>
             </TabsContent>

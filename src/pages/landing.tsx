@@ -3,9 +3,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "react-oidc-context"
 import { Navigate } from "react-router-dom"
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n"
 
 export function LandingPage() {
   const auth = useAuth()
+  const { locale, setLocale, t } = useI18n()
   const [error, setError] = useState<string | null>(null)
 
   // If user is already authenticated, redirect to dashboard
@@ -24,7 +26,7 @@ export function LandingPage() {
       await auth.signinRedirect()
     } catch (err) {
       console.error("Sign in error:", err)
-      setError(err instanceof Error ? err.message : "Failed to initiate sign in")
+      setError(err instanceof Error ? err.message : t("auth.signInFailed"))
     }
   }
 
@@ -40,9 +42,33 @@ export function LandingPage() {
               className="h-12 w-auto"
             />
             <div>
-              <h1 className="text-xl font-bold text-[oklch(0.30_0.06_155)]">ILGARS</h1>
-              <p className="text-xs text-muted-foreground">Integrated Local Government Administration & Revenue System</p>
+              <h1 className="text-xl font-bold text-[oklch(0.30_0.06_155)]">{t("app.shortName")}</h1>
+              <p className="text-xs text-muted-foreground">{t("app.fullName")}</p>
             </div>
+          </div>
+          <div className="flex items-center gap-1 rounded-md border bg-white p-1" aria-label={t("user.locale")}>
+            <button
+              type="button"
+              onClick={() => setLocale("en")}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                locale === "en"
+                  ? "bg-[#DAA22A] text-[#1C1C1C]"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocale("pt")}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                locale === "pt"
+                  ? "bg-[#DAA22A] text-[#1C1C1C]"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              PT
+            </button>
           </div>
         </div>
       </header>
@@ -54,24 +80,24 @@ export function LandingPage() {
             <div>
               <div className="inline-block mb-4">
                 <span className="bg-[#DAA22A]/20 text-[#DAA22A] px-4 py-2 rounded-full text-sm font-medium">
-                  Maputo Municipality
+                  {t("app.municipality")}
                 </span>
               </div>
               <h1 className="text-5xl font-bold text-[oklch(0.30_0.06_155)] mb-6 leading-tight">
-                Integrated Local Government Administration & Revenue System
+                {t("app.fullName")}
               </h1>
               <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-                Streamline road user charges, manage permits, track enforcement, and optimize revenue collection for Maputo Municipality.
+                {t("landing.description")}
               </p>
 
               {/* Show error if any */}
               {(error || auth.error) && (
                 <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-800">
-                    <strong>Authentication Error:</strong> {error || auth.error?.message}
+                    <strong>{t("auth.errorTitle")}</strong> {error || auth.error?.message}
                   </p>
                   <p className="text-xs text-red-600 mt-2">
-                    Please contact your system administrator to verify the Keycloak client configuration.
+                    {t("auth.errorHelp")}
                   </p>
                 </div>
               )}
@@ -80,7 +106,7 @@ export function LandingPage() {
               {auth.isLoading ? (
                 <div className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DAA22A]"></div>
-                  <span className="text-muted-foreground">Loading...</span>
+                  <span className="text-muted-foreground">{t("auth.loading")}</span>
                 </div>
               ) : (
                 <Button
@@ -88,7 +114,7 @@ export function LandingPage() {
                   size="lg"
                   className="bg-[#DAA22A] hover:bg-[#DAA22A]/90 text-[#1C1C1C] text-lg h-14 px-8"
                 >
-                  Get Started
+                  {t("auth.getStarted")}
                 </Button>
               )}
             </div>
@@ -120,12 +146,12 @@ export function LandingPage() {
                 className="h-10 w-auto"
               />
               <div>
-                <p className="text-sm font-semibold text-[oklch(0.30_0.06_155)]">Maputo Municipality</p>
-                <p className="text-xs text-muted-foreground">ILGARS Admin Console</p>
+                <p className="text-sm font-semibold text-[oklch(0.30_0.06_155)]">{t("app.municipality")}</p>
+                <p className="text-xs text-muted-foreground">{t("landing.adminConsole")}</p>
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Maputo Municipality. All rights reserved.
+              © {new Date().getFullYear()} {t("app.municipality")}. {t("landing.rights")}
             </p>
           </div>
         </div>

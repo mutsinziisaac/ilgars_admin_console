@@ -23,7 +23,7 @@ export const TariffPlanSchema = z.object({
   createdAt: z.string().optional().nullable(),
   updatedAt: z.string().optional().nullable(),
   activatedAt: z.string().optional().nullable(),
-  rates: z.array(TariffRateSchema),
+  rates: z.array(TariffRateSchema).optional().default([]),
 })
 
 // List Response Schema

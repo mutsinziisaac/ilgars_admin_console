@@ -95,6 +95,56 @@ const buildFieldErrors = (
   }, {});
 };
 
+const getStringRecordValue = (
+  value: unknown,
+  key: string,
+): unknown => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[key];
+};
+
+const getServerErrorDetail = (details: unknown): string | undefined => {
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+
+  const header = getStringRecordValue(details, "header");
+  const headerMessage = getStringRecordValue(header, "response_message");
+  if (typeof headerMessage === "string" && headerMessage.trim()) {
+    return headerMessage.trim();
+  }
+
+  const additionalDetails = getStringRecordValue(header, "additional_details");
+  if (typeof additionalDetails === "string" && additionalDetails.trim()) {
+    return additionalDetails.trim();
+  }
+
+  const message = getStringRecordValue(details, "message");
+  if (typeof message === "string" && message.trim()) {
+    return message.trim();
+  }
+
+  const error = getStringRecordValue(details, "error");
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  const validationErrors = getStringRecordValue(details, "validation_errors");
+  if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+    const first = validationErrors[0] as Record<string, unknown> | undefined;
+    const field = typeof first?.field === "string" ? first.field.trim() : "";
+    const validationMessage = typeof first?.message === "string" ? first.message.trim() : "";
+    const detail = [field, validationMessage].filter(Boolean).join(" - ");
+
+    return detail || undefined;
+  }
+
+  return undefined;
+};
+
 export const toApiError = (error: unknown): ApiError => {
   if (error instanceof ApiError) {
     return error;
@@ -166,6 +216,11 @@ export const getApiErrorMessage = (
   defaultMessage = "An unexpected error occurred. Please try again.",
 ): string => {
   const apiError = toApiError(error);
+  const serverDetail = getServerErrorDetail(apiError.details);
+
+  if (serverDetail && !serverDetail.includes("Exception") && !serverDetail.includes("jakarta")) {
+    return serverDetail;
+  }
 
   if (apiError.message && apiError.message !== "Request failed") {
     const message = apiError.message;

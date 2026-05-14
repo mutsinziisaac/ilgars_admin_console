@@ -29,4 +29,6 @@ export const useActiveDeviceByVehicle = (vehicleId: string | null | undefined) =
       return DevicesApi.getActiveDeviceByVehicle(vehicleId, signal)
     },
     enabled: Boolean(vehicleId),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })

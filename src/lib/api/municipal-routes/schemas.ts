@@ -20,7 +20,7 @@ export const MunicipalRouteSchema = z
     code: z.string(),
     name: z.string(),
     roadType: z.string(),
-    geoJson: z.string(),
+    geoJson: z.string().optional().default(""),
     distanceKm: z.number().optional().nullable(),
     allowedUses: z.array(z.string()).optional().default([]),
     active: z.boolean().optional().default(false),

@@ -38,6 +38,7 @@ export const RUCPolicyDetailResponseSchema = z.object({
 
 // Create Request Schema
 export const CreateRUCPolicyRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   gracePeriodHours: z.number(),
   specialPermitCapacityThreshold: z.number(),
   specialPermitCapacityUnit: z.string().default("TONNES"),
@@ -46,6 +47,7 @@ export const CreateRUCPolicyRequestSchema = z.object({
 
 // Update Request Schema
 export const UpdateRUCPolicyRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   gracePeriodHours: z.number(),
   specialPermitCapacityThreshold: z.number(),
   specialPermitCapacityUnit: z.string(),

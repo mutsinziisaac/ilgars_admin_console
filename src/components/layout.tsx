@@ -1,6 +1,7 @@
-import { ReactNode } from "react"
+import type { ReactNode } from "react"
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
+import { PageLocalizer } from "./page-localizer"
 
 interface LayoutProps {
   children: ReactNode
@@ -21,7 +22,7 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-6">
-          {children}
+          <PageLocalizer>{children}</PageLocalizer>
         </main>
       </div>
     </div>

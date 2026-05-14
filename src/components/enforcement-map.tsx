@@ -1,8 +1,5 @@
 import { useEffect, useRef } from "react"
 import L from "leaflet"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { AlertTriangle } from "lucide-react"
 
 // ── Real Maputo coordinates ──────────────────────────────────────────────────
 // Centre of Maputo city
@@ -14,7 +11,7 @@ const ENFORCEMENT_POINTS = [
   {
     id: "ENF-001",
     plateNumber: "AAA-123-MP",
-    offenceType: "Operating Without Valid RUC Payment",
+    offenceType: "Outstanding Payments",
     action: "Vehicle Impounded",
     officer: "Officer Silva",
     timestamp: "14:23",
@@ -34,7 +31,7 @@ const ENFORCEMENT_POINTS = [
   {
     id: "ENF-003",
     plateNumber: "CCC-789-MP",
-    offenceType: "Operating During Restricted Hours",
+    offenceType: "Expired Permit",
     action: "Vehicle Impounded",
     officer: "Officer Nhantumbo",
     timestamp: "12:10",
@@ -44,7 +41,7 @@ const ENFORCEMENT_POINTS = [
   {
     id: "ENF-004",
     plateNumber: "DDD-012-MP",
-    offenceType: "Operating Without Road Closure Permit",
+    offenceType: "No Circulation License",
     action: "Warning Issued",
     officer: "Officer Costa",
     timestamp: "11:30",
@@ -54,7 +51,7 @@ const ENFORCEMENT_POINTS = [
   {
     id: "ENF-005",
     plateNumber: "EEE-345-MP",
-    offenceType: "Unauthorized Route Deviation",
+    offenceType: "Unauthorized Route",
     action: "Warning Issued",
     officer: "Officer Bila",
     timestamp: "10:15",
@@ -64,7 +61,7 @@ const ENFORCEMENT_POINTS = [
   {
     id: "ENF-006",
     plateNumber: "FFF-678-MP",
-    offenceType: "Damaged Road Infrastructure",
+    offenceType: "Device Tampered",
     action: "Fine Issued",
     officer: "Officer Tembe",
     timestamp: "09:30",
@@ -73,73 +70,129 @@ const ENFORCEMENT_POINTS = [
   },
 ]
 
+type EnforcementSeverity = "High" | "Medium" | "Low"
+
+export type EnforcementAlert = {
+  id: string
+  plateNumber: string
+  vehicleType: string
+  owner: string
+  violationType: string
+  severity: EnforcementSeverity
+  location: string
+  detectedAt: string
+  detectedBy: string
+  estimatedPenalty: string
+  latlng: [number, number]
+}
+
 // Unenforced violations — detected but no action taken yet
-const UNENFORCED_VIOLATIONS = [
+const BASE_UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
   {
     id: "VIO-001",
     plateNumber: "HHH-234-MP",
     vehicleType: "Heavy Truck",
     owner: "Beira Freight Co.",
     violationType: "Overweight Vehicle",
-    severity: "High" as const,
+    severity: "High",
     location: "Av. Julius Nyerere & Av. Mao Tse Tung",
     detectedAt: "09:14",
     detectedBy: "CAM-001 (ANPR)",
     estimatedPenalty: "25,000 MZN",
-    latlng: [-25.9580, 32.5860] as [number, number],
+    latlng: [-25.9580, 32.5860],
   },
   {
     id: "VIO-002",
     plateNumber: "III-567-MP",
     vehicleType: "Cargo Truck",
     owner: "Maputo Cargo Ltd",
-    violationType: "Expired RUC Payment",
-    severity: "High" as const,
+    violationType: "Expired Permit",
+    severity: "High",
     location: "Av. 25 de Setembro",
     detectedAt: "09:45",
     detectedBy: "CAM-002 (ANPR)",
     estimatedPenalty: "45,000 MZN",
-    latlng: [-25.9670, 32.5710] as [number, number],
+    latlng: [-25.9670, 32.5710],
   },
   {
     id: "VIO-003",
     plateNumber: "JJJ-890-MP",
     vehicleType: "Bus",
     owner: "City Transit",
-    violationType: "No Road Closure Permit",
-    severity: "Medium" as const,
+    violationType: "No Circulation License",
+    severity: "Medium",
     location: "Av. Eduardo Mondlane",
     detectedAt: "10:02",
     detectedBy: "CAM-004 (Traffic)",
     estimatedPenalty: "20,000 MZN",
-    latlng: [-25.9600, 32.5660] as [number, number],
+    latlng: [-25.9600, 32.5660],
   },
   {
     id: "VIO-004",
     plateNumber: "KKK-123-MP",
     vehicleType: "Tractor",
     owner: "Heavy Haul Services",
-    violationType: "Restricted Hours Violation",
-    severity: "High" as const,
+    violationType: "Device Tampered",
+    severity: "High",
     location: "Marginal Avenue",
     detectedAt: "10:30",
     detectedBy: "GPS-003",
     estimatedPenalty: "35,000 MZN",
-    latlng: [-25.9720, 32.5960] as [number, number],
+    latlng: [-25.9720, 32.5960],
   },
   {
     id: "VIO-005",
     plateNumber: "LLL-456-MP",
     vehicleType: "Heavy Truck",
     owner: "Freight Masters",
-    violationType: "Route Deviation",
-    severity: "Low" as const,
+    violationType: "Unauthorized Route",
+    severity: "Medium",
     location: "Av. Vladimir Lenine",
     detectedAt: "10:55",
     detectedBy: "GPS-002",
     estimatedPenalty: "10,000 MZN",
-    latlng: [-25.9640, 32.5800] as [number, number],
+    latlng: [-25.9640, 32.5800],
   },
+]
+
+const generatedAlertTypes = [
+  { violationType: "Outstanding Payments", severity: "High" as const, penalty: "45,000 MZN", source: "Payment engine" },
+  { violationType: "Device Tampered", severity: "High" as const, penalty: "50,000 MZN", source: "GPS tracker" },
+  { violationType: "Unauthorized Route", severity: "Medium" as const, penalty: "10,000 MZN", source: "GPS tracker" },
+  { violationType: "Signal Lost", severity: "Medium" as const, penalty: "5,000 MZN", source: "GPS tracker" },
+  { violationType: "National Road Geofence", severity: "Low" as const, penalty: "0 MZN", source: "Geofence engine" },
+]
+
+const generatedLocations = [
+  { location: "Av. Julius Nyerere", latlng: [-25.9606, 32.5842] as [number, number] },
+  { location: "Av. 25 de Setembro", latlng: [-25.9659, 32.5725] as [number, number] },
+  { location: "Av. Eduardo Mondlane", latlng: [-25.9598, 32.5665] as [number, number] },
+  { location: "Marginal Avenue", latlng: [-25.9708, 32.5938] as [number, number] },
+  { location: "Av. Vladimir Lenine", latlng: [-25.9637, 32.5794] as [number, number] },
+  { location: "Av. Acordos de Lusaka", latlng: [-25.9719, 32.5830] as [number, number] },
+]
+
+export const UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
+  ...BASE_UNENFORCED_VIOLATIONS,
+  ...Array.from({ length: 45 }, (_, index) => {
+    const alertType = generatedAlertTypes[index % generatedAlertTypes.length]
+    const place = generatedLocations[index % generatedLocations.length]
+    const offset = Math.floor(index / generatedLocations.length)
+    const minutes = 8 + index
+    return {
+      id: `VIO-${String(index + 6).padStart(3, "0")}`,
+      plateNumber: `${String.fromCharCode(65 + (index % 20))}${String.fromCharCode(66 + (index % 18))}${String.fromCharCode(67 + (index % 16))}-${String(200 + index).padStart(3, "0")}-MP`,
+      vehicleType: index % 3 === 0 ? "Heavy Truck" : index % 3 === 1 ? "Cargo Truck" : "Tractor",
+      owner: index % 2 === 0 ? "Maputo Cargo Ltd" : "TransMoz Logistics",
+      violationType: alertType.violationType,
+      severity: alertType.severity,
+      location: place.location,
+      detectedAt: `11:${String(minutes % 60).padStart(2, "0")}`,
+      detectedBy: alertType.source,
+      estimatedPenalty: alertType.penalty,
+      latlng: [place.latlng[0] + offset * 0.0006, place.latlng[1] + offset * 0.0005] as [number, number],
+    }
+  }),
 ]
 
 // Heatmap hotspot zones (real Maputo intersections)
@@ -158,27 +211,32 @@ const actionColor = (action: string) =>
   : action === "Fine Issued"     ? "#5B8C5A"
   :                                "#DAA22A"
 
-const severityColor = (s: "High" | "Medium" | "Low") =>
+const severityColor = (s: EnforcementSeverity) =>
   s === "High" ? "#E5533D" : s === "Medium" ? "#DAA22A" : "#5B8C5A"
 
 // ── SVG circle icon factory ───────────────────────────────────────────────────
-function circleIcon(color: string, pulse = false) {
+function circleIcon(color: string, pulse = false, active = false) {
+  const size = active ? 42 : 28
+  const center = size / 2
+  const markerRadius = active ? 11 : 9
+  const pulseRadius = active ? 18 : 13
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      ${pulse ? `<circle cx="14" cy="14" r="13" fill="${color}" opacity="0.25">
-        <animate attributeName="r" values="10;14;10" dur="1.6s" repeatCount="indefinite"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      ${active ? `<circle cx="${center}" cy="${center}" r="${center - 3}" fill="none" stroke="#111827" stroke-width="3"/>` : ""}
+      ${pulse ? `<circle cx="${center}" cy="${center}" r="${pulseRadius}" fill="${color}" opacity="${active ? "0.36" : "0.25"}">
+        <animate attributeName="r" values="${markerRadius};${pulseRadius};${markerRadius}" dur="1.2s" repeatCount="indefinite"/>
         <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" repeatCount="indefinite"/>
       </circle>` : ""}
-      <circle cx="14" cy="14" r="9" fill="${color}" stroke="white" stroke-width="2.5"/>
-      ${pulse ? `<path d="M14 9v5l3 2" stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>` :
-               `<circle cx="14" cy="14" r="4" fill="white" opacity="0.8"/>`}
+      <circle cx="${center}" cy="${center}" r="${markerRadius}" fill="${color}" stroke="white" stroke-width="${active ? "3.5" : "2.5"}"/>
+      ${pulse ? `<path d="M${center} ${center - 5}v5l3 2" stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>` :
+               `<circle cx="${center}" cy="${center}" r="4" fill="white" opacity="0.8"/>`}
     </svg>`
   return L.divIcon({
     html: svg,
     className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
+    iconSize: [size, size],
+    iconAnchor: [center, center],
+    popupAnchor: [0, -center],
   })
 }
 
@@ -187,10 +245,20 @@ interface EnforcementMapProps {
   layer: "both" | "heatmap" | "violations"
   hoveredId: string | null
   onHover: (id: string | null) => void
+  selectedId?: string | null
+  violations?: EnforcementAlert[]
+  onSelect?: (id: string) => void
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function EnforcementMap({ layer, hoveredId, onHover }: EnforcementMapProps) {
+export function EnforcementMap({
+  layer,
+  hoveredId,
+  onHover,
+  selectedId,
+  violations = UNENFORCED_VIOLATIONS,
+  onSelect,
+}: EnforcementMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const heatLayerRef = useRef<L.LayerGroup | null>(null)
@@ -260,13 +328,39 @@ export function EnforcementMap({ layer, hoveredId, onHover }: EnforcementMapProp
     })
     enfLayerRef.current = enfLayer
 
-    // ── Unenforced violation markers ──────────────────────────────────────────
+    mapRef.current = map
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [])
+
+  // ── Render one marker per enforcement alert ────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (vioLayerRef.current) {
+      map.removeLayer(vioLayerRef.current)
+    }
+
     const vioLayer = L.layerGroup()
     const vioMarkers = new Map<string, L.Marker>()
+    const locationCounts = new Map<string, number>()
 
-    UNENFORCED_VIOLATIONS.forEach((vio) => {
+    violations.forEach((vio) => {
+      const key = `${Math.round(vio.latlng[0] * 250)}:${Math.round(vio.latlng[1] * 250)}`
+      const countAtLocation = locationCounts.get(key) ?? 0
+      locationCounts.set(key, countAtLocation + 1)
+      const angle = countAtLocation * 0.95
+      const radius = countAtLocation === 0 ? 0 : 0.00018 + Math.floor(countAtLocation / 6) * 0.00008
+      const markerPosition: [number, number] = [
+        vio.latlng[0] + Math.sin(angle) * radius,
+        vio.latlng[1] + Math.cos(angle) * radius,
+      ]
       const color = severityColor(vio.severity)
-      const marker = L.marker(vio.latlng, { icon: circleIcon(color, true) })
+      const marker = L.marker(markerPosition, { icon: circleIcon(color, true) })
 
       marker.bindPopup(`
         <div style="min-width:220px;font-family:inherit">
@@ -287,26 +381,25 @@ export function EnforcementMap({ layer, hoveredId, onHover }: EnforcementMapProp
             <strong style="color:${color};font-size:14px">${vio.estimatedPenalty}</strong>
           </div>
           <div style="margin-top:6px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:4px;padding:4px 8px;text-align:center;font-size:11px;font-weight:600;color:#92400E">
-            ⚠ Awaiting Enforcement
+            Alert Enforcement
           </div>
         </div>
       `, { maxWidth: 280 })
 
       marker.on("mouseover", () => onHover(vio.id))
       marker.on("mouseout", () => onHover(null))
+      marker.on("click", () => onSelect?.(vio.id))
       marker.addTo(vioLayer)
       vioMarkers.set(vio.id, marker)
     })
 
     vioLayerRef.current = vioLayer
     vioMarkersRef.current = vioMarkers
-    mapRef.current = map
 
-    return () => {
-      map.remove()
-      mapRef.current = null
+    if (layer === "violations" || layer === "both") {
+      vioLayer.addTo(map)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [violations, layer, onHover, onSelect])
 
   // ── Toggle layers when prop changes ───────────────────────────────────────
   useEffect(() => {
@@ -330,16 +423,20 @@ export function EnforcementMap({ layer, hoveredId, onHover }: EnforcementMapProp
   // ── Highlight hovered violation marker ────────────────────────────────────
   useEffect(() => {
     vioMarkersRef.current.forEach((marker, id) => {
-      const vio = UNENFORCED_VIOLATIONS.find((v) => v.id === id)
+      const vio = violations.find((v) => v.id === id)
       if (!vio) return
       const color = severityColor(vio.severity)
-      const isActive = id === hoveredId
-      marker.setIcon(circleIcon(color, true))
-      if (isActive) {
+      const isActiveAlert = id === hoveredId || id === selectedId
+
+      if (isActiveAlert) {
+        marker.setIcon(circleIcon(color, true, true))
+        mapRef.current?.setView(vio.latlng, Math.max(mapRef.current.getZoom(), 15))
         marker.openPopup()
+      } else {
+        marker.setIcon(circleIcon(color, true, false))
       }
     })
-  }, [hoveredId])
+  }, [hoveredId, selectedId, violations])
 
   return (
     <div
@@ -350,5 +447,5 @@ export function EnforcementMap({ layer, hoveredId, onHover }: EnforcementMapProp
   )
 }
 
-// ── Side-panel list (exported separately so statistics.tsx stays clean) ───────
-export { UNENFORCED_VIOLATIONS, ENFORCEMENT_POINTS, severityColor, actionColor }
+// ── Side-panel list (exported separately so enforcement.tsx stays clean) ──────
+export { ENFORCEMENT_POINTS, severityColor, actionColor }

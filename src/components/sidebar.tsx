@@ -9,11 +9,14 @@ import {
   LogOut,
   Languages,
   Smartphone,
-  Settings
+  Settings,
+  Check
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "react-oidc-context"
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n"
+import type { Locale } from "@/lib/i18n"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,7 +37,7 @@ type Page = SidebarProps["currentPage"]
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const auth = useAuth()
-  const [locale, setLocale] = useState<"en" | "pt">("en")
+  const { locale, setLocale, t } = useI18n()
   const [permitsOpen, setPermitsOpen] = useState(false)
   const [devicesOpen, setDevicesOpen] = useState(false)
   const [violationsOpen, setViolationsOpen] = useState(false)
@@ -44,10 +47,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     auth.signoutRedirect()
   }
 
-  const handleLocaleChange = (newLocale: "en" | "pt") => {
+  const handleLocaleChange = (newLocale: Locale) => {
     setLocale(newLocale)
-    // TODO: Implement actual locale change logic
-    console.log("Locale changed to:", newLocale)
   }
 
   const collapseDropdowns = () => {
@@ -63,47 +64,52 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   }
 
   // Get user name from Keycloak profile or use default
-  const userName = auth.user?.profile?.name || auth.user?.profile?.preferred_username || "Joana Macavel"
+  const userName = auth.user?.profile?.name || auth.user?.profile?.preferred_username || t("user.fallbackName")
   
   const menuItems = [
-    { icon: LayoutDashboard, label: "Overview", page: "dashboard" as const, badge: undefined },
-    { icon: Receipt, label: "Transactions", page: "transactions" as const, badge: undefined },
-    { icon: Truck, label: "Vehicles", page: "vehicles" as const, badge: undefined },
-    { icon: BarChart3, label: "Reports", page: "reports" as const, badge: undefined },
+    { icon: LayoutDashboard, label: t("nav.overview"), page: "dashboard" as const, badge: undefined },
+    { icon: Receipt, label: t("nav.transactions"), page: "transactions" as const, badge: undefined },
+    { icon: Truck, label: t("nav.vehicles"), page: "vehicles" as const, badge: undefined },
+    { icon: BarChart3, label: t("nav.reports"), page: "reports" as const, badge: undefined },
   ]
 
   const permitsSubItems = [
-    { label: "Road Closure Permits", page: "road-closure-permits" as const, badge: 8 },
-    { label: "Heavy Truck Permits", page: "heavy-truck-permits" as const, badge: 5 },
+    { label: t("nav.roadClosurePermits"), page: "road-closure-permits" as const, badge: 8 },
+    { label: t("nav.heavyTruckPermits"), page: "heavy-truck-permits" as const, badge: 5 },
   ]
 
   const devicesSubItems = [
-    { label: "GPS Tracking", page: "gps-tracking" as const, badge: undefined },
-    { label: "Cameras", page: "cameras" as const, badge: undefined },
+    { label: t("nav.gpsTracking"), page: "gps-tracking" as const, badge: undefined },
+    { label: t("nav.cameras"), page: "cameras" as const, badge: undefined },
   ]
 
   const violationsSubItems = [
-    { label: "Alerts", page: "alerts" as const, badge: 7 },
-    { label: "Enforcement", page: "enforcement" as const, badge: 12 },
+    { label: t("nav.alerts"), page: "alerts" as const, badge: 7 },
+    { label: t("nav.enforcement"), page: "enforcement" as const, badge: 12 },
   ]
 
   const configurationsSubItems = [
-    { label: "Municipality", page: "municipality" as const },
-    { label: "Tariff Plans", page: "tariff-plans" as const },
-    { label: "RUC Policy", page: "ruc-policy" as const },
-    { label: "Routes", page: "routes" as const },
-    { label: "Road Closure Rates", page: "road-closure-rates" as const },
-    { label: "Fines Configuration", page: "fines-configuration" as const },
-    { label: "Geofencing Zones", page: "geofencing-zones" as const },
-    { label: "Vehicle Classification", page: "vehicle-classification" as const },
-    { label: "Weight Categories", page: "weight-categories" as const },
-    { label: "Time Windows", page: "time-windows" as const },
+    { label: t("nav.municipality"), page: "municipality" as const },
+    { label: t("nav.routes"), page: "routes" as const },
+    { label: t("nav.rucPolicy"), page: "ruc-policy" as const },
+    { label: t("nav.tariffPlans"), page: "tariff-plans" as const },
+    { label: t("nav.roadClosureRates"), page: "road-closure-rates" as const },
+    { label: t("nav.finesConfiguration"), page: "fines-configuration" as const },
+    { label: t("nav.geofencingZones"), page: "geofencing-zones" as const },
+    { label: t("nav.vehicleClassification"), page: "vehicle-classification" as const },
+    { label: t("nav.weightCategories"), page: "weight-categories" as const },
+    { label: t("nav.timeWindows"), page: "time-windows" as const },
   ]
 
   const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "heavy-truck-permits"
   const isDevicesActive = currentPage === "gps-tracking" || currentPage === "cameras"
   const isViolationsActive = currentPage === "alerts" || currentPage === "enforcement"
   const isConfigurationsActive = currentPage === "municipality" || currentPage === "tariff-plans" || currentPage === "ruc-policy" || currentPage === "routes" || currentPage === "road-closure-rates" || currentPage === "fines-configuration" || currentPage === "geofencing-zones" || currentPage === "vehicle-classification" || currentPage === "weight-categories" || currentPage === "time-windows"
+  const showPermits = permitsOpen || isPermitsActive
+  const showDevices = devicesOpen || isDevicesActive
+  const showViolations = violationsOpen || isViolationsActive
+  const showConfigurations = configurationsOpen || isConfigurationsActive
+
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-sidebar-border bg-card">
       {/* Logo */}
@@ -116,8 +122,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           />
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Maputo RUC</h1>
-          <p className="text-sm text-muted-foreground">ADMIN CONSOLE</p>
+          <h1 className="text-lg font-semibold text-foreground">{t("app.name")}</h1>
+          <p className="text-sm text-muted-foreground">{t("app.subtitle")}</p>
         </div>
       </div>
 
@@ -127,7 +133,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 p-4">
         <div className="mb-2 px-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Operations
+          {t("nav.operations")}
         </div>
         
         {/* Main Menu Items */}
@@ -168,14 +174,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             )}
           >
             <FileText className="h-5 w-5" />
-            <span className="flex-1 text-left">Permits</span>
+            <span className="flex-1 text-left">{t("nav.permits")}</span>
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground">
               13
             </span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", permitsOpen && "rotate-180")} />
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showPermits && "rotate-180")} />
           </button>
           
-          {permitsOpen && (
+          {showPermits && (
             <div className="mt-1 space-y-1 pl-8">
               {permitsSubItems.map((subItem) => {
                 const isActive = subItem.page === currentPage
@@ -215,14 +221,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             )}
           >
             <ShieldAlert className="h-5 w-5" />
-            <span className="flex-1 text-left">Violations</span>
+            <span className="flex-1 text-left">{t("nav.violations")}</span>
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground">
               19
             </span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", violationsOpen && "rotate-180")} />
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showViolations && "rotate-180")} />
           </button>
           
-          {violationsOpen && (
+          {showViolations && (
             <div className="mt-1 space-y-1 pl-8">
               {violationsSubItems.map((subItem) => {
                 const isActive = subItem.page === currentPage
@@ -262,11 +268,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             )}
           >
             <Smartphone className="h-5 w-5" />
-            <span className="flex-1 text-left">Devices</span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", devicesOpen && "rotate-180")} />
+            <span className="flex-1 text-left">{t("nav.devices")}</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showDevices && "rotate-180")} />
           </button>
           
-          {devicesOpen && (
+          {showDevices && (
             <div className="mt-1 space-y-1 pl-8">
               {devicesSubItems.map((subItem) => {
                 const isActive = subItem.page === currentPage
@@ -309,11 +315,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             )}
           >
             <Settings className="h-5 w-5" />
-            <span className="flex-1 text-left">Configurations</span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", configurationsOpen && "rotate-180")} />
+            <span className="flex-1 text-left">{t("nav.configurations")}</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showConfigurations && "rotate-180")} />
           </button>
           
-          {configurationsOpen && (
+          {showConfigurations && (
             <div className="mt-1 space-y-1 pl-8">
               {configurationsSubItems.map((subItem) => {
                 const isActive = subItem.page === currentPage
@@ -351,7 +357,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               </div>
               <div className="flex-1 text-left">
                 <p className="text-base font-medium text-foreground">{userName}</p>
-                <p className="text-sm text-muted-foreground">Revenue officer</p>
+                <p className="text-sm text-muted-foreground">{t("user.role")}</p>
               </div>
               <ChevronDown className="h-5 w-5 text-foreground" />
             </button>
@@ -360,19 +366,19 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Languages className="mr-2 h-4 w-4" />
-                <span>Locale</span>
+                <span>{t("user.locale")}</span>
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={() => handleLocaleChange("en")}>
                   <span className="flex items-center justify-between w-full">
-                    English
-                    {locale === "en" && <span className="ml-2">✓</span>}
+                    {t("user.english")}
+                    {locale === "en" && <Check className="ml-2 h-4 w-4" />}
                   </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleLocaleChange("pt")}>
                   <span className="flex items-center justify-between w-full">
-                    Portuguese
-                    {locale === "pt" && <span className="ml-2">✓</span>}
+                    {t("user.portuguese")}
+                    {locale === "pt" && <Check className="ml-2 h-4 w-4" />}
                   </span>
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
@@ -380,7 +386,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
               <LogOut className="mr-2 h-4 w-4" />
-              <span>Logout</span>
+              <span>{t("user.logout")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

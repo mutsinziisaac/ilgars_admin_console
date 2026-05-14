@@ -10,6 +10,8 @@ export const useMunicipalRoutesList = (params?: ListMunicipalRoutesParams) =>
   useQuery({
     queryKey: municipalRoutesKeys.list(params),
     queryFn: ({ signal }) => MunicipalRoutesApi.listMunicipalRoutes(params, signal),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 
 export const useCreateMunicipalRoute = () => {

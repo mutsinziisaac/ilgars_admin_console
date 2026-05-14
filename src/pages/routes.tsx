@@ -1,5 +1,5 @@
-import { useRef, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,14 +9,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Route, Plus, Upload, MapPin, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { Route, Plus, Upload, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useCreateMunicipalRoute, useMunicipalRoutesList } from "@/lib/api/municipal-routes/hooks"
 import type { MunicipalRoute } from "@/lib/api/municipal-routes/schemas"
+import { MUNICIPAL_ROUTES_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
 import {
-  ACTIVE_MUNICIPALITY_ID_STORAGE_KEY,
-  DEFAULT_MUNICIPALITY_ID,
-} from "@/lib/api/constants"
+  getMunicipalityDisplayName,
+  getStoredMunicipalityId as getRegistryMunicipalityId,
+} from "@/lib/municipality-registry"
 
 const defaultRouteGeoJson =
   "{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[32.443,-25.965],[32.529,-25.951],[32.573,-25.961]]},\"properties\":{\"name\":\"EN4 Avenida de Mocambique to Port of Maputo\"}}"
@@ -39,9 +40,36 @@ const filterOptions = [
 ] as const
 
 const getStoredMunicipalityId = () => {
-  if (typeof window === "undefined") return DEFAULT_MUNICIPALITY_ID
+  return getRegistryMunicipalityId()
+}
 
-  return localStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
+const getRoutesStorageKey = (municipalityId: string) =>
+  `${MUNICIPAL_ROUTES_STORAGE_KEY_PREFIX}.${municipalityId}`
+
+const getStoredRoutes = (municipalityId: string): MunicipalRoute[] => {
+  if (typeof window === "undefined") return []
+
+  try {
+    const stored = localStorage.getItem(getRoutesStorageKey(municipalityId))
+    return stored ? (JSON.parse(stored) as MunicipalRoute[]) : []
+  } catch {
+    return []
+  }
+}
+
+const storeRoutes = (municipalityId: string, routes: MunicipalRoute[]) => {
+  if (typeof window === "undefined") return
+
+  localStorage.setItem(getRoutesStorageKey(municipalityId), JSON.stringify(routes))
+}
+
+const mergeRoutes = (incoming: MunicipalRoute[], fallback: MunicipalRoute[] = []) => {
+  const byId = new Map<string, MunicipalRoute>()
+
+  fallback.forEach((route) => byId.set(route.id, route))
+  incoming.forEach((route) => byId.set(route.id, route))
+
+  return Array.from(byId.values())
 }
 
 const createDefaultRouteCode = () => `EN4-PORT-${Date.now()}`
@@ -51,6 +79,9 @@ export function RoutesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [activeAllowedUse, setActiveAllowedUse] = useState<(typeof filterOptions)[number]["value"]>("all")
   const [activeMunicipalityId, setActiveMunicipalityId] = useState(getStoredMunicipalityId())
+  const [cachedRoutes, setCachedRoutes] = useState<MunicipalRoute[]>(() =>
+    getStoredRoutes(getStoredMunicipalityId()),
+  )
 
   const [routeForm, setRouteForm] = useState({
     municipalityId: activeMunicipalityId,
@@ -70,10 +101,36 @@ export function RoutesPage() {
 
   const { data: routesResponse, isLoading, error, refetch } = useMunicipalRoutesList(routeListParams)
   const createMutation = useCreateMunicipalRoute()
-  const routes = routesResponse?.data || routesResponse?.content || []
+  const apiRoutes = routesResponse?.data || routesResponse?.content || []
+  const routes = useMemo(() => {
+    const mergedRoutes = mergeRoutes(apiRoutes, cachedRoutes)
+    return activeAllowedUse === "all"
+      ? mergedRoutes
+      : mergedRoutes.filter((route) => route.allowedUses.includes(activeAllowedUse))
+  }, [activeAllowedUse, apiRoutes, cachedRoutes])
+
+  useEffect(() => {
+    const latestMunicipalityId = getStoredMunicipalityId()
+    setActiveMunicipalityId(latestMunicipalityId)
+    setCachedRoutes(getStoredRoutes(latestMunicipalityId))
+    setRouteForm((current) => ({
+      ...current,
+      municipalityId: latestMunicipalityId,
+    }))
+  }, [])
+
+  useEffect(() => {
+    if (!apiRoutes.length) return
+
+    const nextRoutes = mergeRoutes(apiRoutes, getStoredRoutes(activeMunicipalityId))
+    setCachedRoutes(nextRoutes)
+    storeRoutes(activeMunicipalityId, nextRoutes)
+  }, [activeMunicipalityId, apiRoutes])
 
   const resetForm = () => {
     const municipalityId = getStoredMunicipalityId()
+    setActiveMunicipalityId(municipalityId)
+    setCachedRoutes(getStoredRoutes(municipalityId))
     setRouteForm({
       municipalityId,
       code: createDefaultRouteCode(),
@@ -83,6 +140,11 @@ export function RoutesPage() {
       allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
       geoJson: defaultRouteGeoJson,
     })
+  }
+
+  const openCreateRoute = () => {
+    resetForm()
+    setIsCreateOpen(true)
   }
 
   const toggleAllowedUse = (allowedUse: string) => {
@@ -97,7 +159,7 @@ export function RoutesPage() {
     const municipalityId = routeForm.municipalityId.trim()
 
     if (!municipalityId) {
-      toast.error("Municipality ID is required")
+      toast.error("Create a municipality before creating a route")
       return
     }
 
@@ -132,9 +194,11 @@ export function RoutesPage() {
         active: true,
       },
       {
-        onSuccess: () => {
-          localStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, municipalityId)
+        onSuccess: (data) => {
           setActiveMunicipalityId(municipalityId)
+          const nextRoutes = mergeRoutes([data.data], getStoredRoutes(municipalityId))
+          setCachedRoutes(nextRoutes)
+          storeRoutes(municipalityId, nextRoutes)
           setIsCreateOpen(false)
           resetForm()
           toast.success("Route created successfully")
@@ -191,7 +255,7 @@ export function RoutesPage() {
           <h1 className="text-4xl font-semibold text-foreground">Municipal Routes</h1>
           <p className="text-lg text-muted-foreground">Create and list selectable backend routes</p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)} disabled={createMutation.isPending}>
+        <Button onClick={openCreateRoute} disabled={createMutation.isPending}>
           {createMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -206,9 +270,6 @@ export function RoutesPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <CardTitle className="text-2xl">Routes</CardTitle>
-              <CardDescription className="text-base">
-                Uses GET /municipal-routes with municipality, active, and allowed-use filters
-              </CardDescription>
             </div>
             <div className="flex rounded-md border p-1">
               {filterOptions.map((filter) => (
@@ -225,12 +286,7 @@ export function RoutesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4" />
-            <span className="font-mono">{activeMunicipalityId}</span>
-          </div>
-
-          {isLoading ? (
+          {isLoading && routes.length === 0 ? (
             <div className="space-y-3">
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
@@ -298,14 +354,10 @@ export function RoutesPage() {
         <ModalBody>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="municipalityId" className="text-base">Municipality ID *</Label>
-              <Input
-                id="municipalityId"
-                value={routeForm.municipalityId}
-                onChange={(event) => setRouteForm({ ...routeForm, municipalityId: event.target.value })}
-                placeholder="Backend municipality UUID"
-                className="text-base h-11"
-              />
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(routeForm.municipalityId)}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

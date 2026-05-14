@@ -1,4 +1,4 @@
-﻿import { useState } from "react"
+﻿import { useCallback, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,88 +10,9 @@ import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFoote
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Search, MapPin, AlertTriangle, CheckCircle, XCircle, Clock, Truck, FileText, Eye, User, Calendar, Map, Flame, ShieldAlert } from "lucide-react"
+import { MapPin, AlertTriangle, CheckCircle, XCircle, Truck, FileText, Eye, User, Calendar, Map, BellRing, Search } from "lucide-react"
 import { toast } from "sonner"
 import { EnforcementMap, UNENFORCED_VIOLATIONS, severityColor } from "@/components/enforcement-map"
-
-// Unenforced violations â€” detected but no action taken yet
-const mockUnenforcedViolations = [
-  {
-    id: "VIO-001",
-    plateNumber: "HHH-234-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Beira Freight Co.",
-    violationType: "Overweight Vehicle",
-    severity: "High",
-    location: "Av. Julius Nyerere & Av. Mao Tse Tung",
-    detectedAt: "2026-05-12 09:14",
-    detectedBy: "CAM-001 (ANPR)",
-    estimatedPenalty: "25,000 MZN",
-    mapPos: { top: "32%", left: "42%" },
-  },
-  {
-    id: "VIO-002",
-    plateNumber: "III-567-MP",
-    vehicleType: "Cargo Truck",
-    owner: "Maputo Cargo Ltd",
-    violationType: "Expired RUC Payment",
-    severity: "High",
-    location: "Av. 25 de Setembro",
-    detectedAt: "2026-05-12 09:45",
-    detectedBy: "CAM-002 (ANPR)",
-    estimatedPenalty: "45,000 MZN",
-    mapPos: { top: "52%", left: "38%" },
-  },
-  {
-    id: "VIO-003",
-    plateNumber: "JJJ-890-MP",
-    vehicleType: "Bus",
-    owner: "City Transit",
-    violationType: "No Road Closure Permit",
-    severity: "Medium",
-    location: "Av. Eduardo Mondlane",
-    detectedAt: "2026-05-12 10:02",
-    detectedBy: "CAM-004 (Traffic)",
-    estimatedPenalty: "20,000 MZN",
-    mapPos: { top: "62%", left: "33%" },
-  },
-  {
-    id: "VIO-004",
-    plateNumber: "KKK-123-MP",
-    vehicleType: "Tractor",
-    owner: "Heavy Haul Services",
-    violationType: "Restricted Hours Violation",
-    severity: "High",
-    location: "Marginal Avenue",
-    detectedAt: "2026-05-12 10:30",
-    detectedBy: "GPS-003",
-    estimatedPenalty: "35,000 MZN",
-    mapPos: { top: "44%", left: "57%" },
-  },
-  {
-    id: "VIO-005",
-    plateNumber: "LLL-456-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Freight Masters",
-    violationType: "Route Deviation",
-    severity: "Low",
-    location: "Av. Vladimir Lenine",
-    detectedAt: "2026-05-12 10:55",
-    detectedBy: "GPS-002",
-    estimatedPenalty: "10,000 MZN",
-    mapPos: { top: "48%", left: "46%" },
-  },
-]
-
-// Enforcement hotspot zones for the heatmap
-const heatmapZones = [
-  { top: "30%", left: "38%", size: "120px", opacity: 0.55, label: "Julius Nyerere" },
-  { top: "48%", left: "33%", size: "100px", opacity: 0.45, label: "25 de Setembro" },
-  { top: "40%", left: "52%", size: "90px",  opacity: 0.40, label: "Marginal Ave" },
-  { top: "58%", left: "28%", size: "80px",  opacity: 0.35, label: "Eduardo Mondlane" },
-  { top: "44%", left: "43%", size: "70px",  opacity: 0.30, label: "Vladimir Lenine" },
-  { top: "36%", left: "55%", size: "60px",  opacity: 0.25, label: "Mao Tse Tung" },
-]
 
 // Mock enforcement log data with offence types
 const mockEnforcementLogs = [
@@ -103,14 +24,14 @@ const mockEnforcementLogs = [
     vehicleType: "Cargo Truck",
     location: "Av. Julius Nyerere & Mao Tse Tung",
     coordinates: "-25.9655, 32.5892",
-    offenceType: "Operating Without Valid RUC Payment",
-    offenceCategory: "Payment Violation",
+    offenceType: "Outstanding Payments",
+    offenceCategory: "Payment Compliance",
     severity: "High",
     penaltyAmount: "45,000 MZN",
     action: "Vehicle Impounded",
     officer: "Officer Silva",
     timestamp: "2026-05-06 14:23",
-    notes: "Vehicle operating 14 days past RUC payment due date. Owner notified. Vehicle towed to impound lot.",
+    notes: "Vehicle has unpaid road user charges. Owner notified. Vehicle towed to impound lot.",
     priorOffences: 2,
     isRepeatOffender: true
   },
@@ -123,7 +44,7 @@ const mockEnforcementLogs = [
     location: "Av. 25 de Setembro",
     coordinates: "-25.9612, 32.5731",
     offenceType: "Overweight Vehicle",
-    offenceCategory: "Weight Violation",
+    offenceCategory: "Weight Compliance",
     severity: "Medium",
     penaltyAmount: "25,000 MZN",
     action: "Fine Issued",
@@ -141,14 +62,14 @@ const mockEnforcementLogs = [
     vehicleType: "Tractor",
     location: "Marginal Avenue",
     coordinates: "-25.9701, 32.5945",
-    offenceType: "Operating During Restricted Hours",
-    offenceCategory: "Time Restriction Violation",
+    offenceType: "Expired Permit",
+    offenceCategory: "Permit Compliance",
     severity: "High",
     penaltyAmount: "35,000 MZN",
     action: "Vehicle Impounded",
     officer: "Officer Nhantumbo",
     timestamp: "2026-05-06 12:10",
-    notes: "Heavy vehicle operating during night restriction hours (20:00-06:00) without authorization. Repeat offender. Vehicle impounded.",
+    notes: "Vehicle was operating after its RUC permit expired. Repeat offender. Vehicle impounded.",
     priorOffences: 3,
     isRepeatOffender: true
   },
@@ -160,14 +81,14 @@ const mockEnforcementLogs = [
     vehicleType: "Bus",
     location: "Av. Eduardo Mondlane",
     coordinates: "-25.9588, 32.5823",
-    offenceType: "Operating Without Road Closure Permit",
-    offenceCategory: "Permit Violation",
+    offenceType: "No Circulation License",
+    offenceCategory: "License Compliance",
     severity: "Medium",
     penaltyAmount: "20,000 MZN",
     action: "Warning Issued",
     officer: "Officer Costa",
     timestamp: "2026-05-06 11:30",
-    notes: "Vehicle operating on road with active closure without valid permit. First offense. Warning issued. Must obtain permit within 24 hours.",
+    notes: "Vehicle operating without an active circulation license. First offence. Warning issued. Must regularize within 24 hours.",
     priorOffences: 0,
     isRepeatOffender: false
   },
@@ -179,14 +100,14 @@ const mockEnforcementLogs = [
     vehicleType: "Heavy Truck",
     location: "Av. Acordos de Lusaka",
     coordinates: "-25.9723, 32.5834",
-    offenceType: "Unauthorized Route Deviation",
-    offenceCategory: "Route Violation",
+    offenceType: "Unauthorized Route",
+    offenceCategory: "Route Compliance",
     severity: "Low",
     penaltyAmount: "10,000 MZN",
     action: "Warning Issued",
     officer: "Officer Bila",
     timestamp: "2026-05-06 10:15",
-    notes: "Vehicle deviated from authorized route specified in permit. First offense. Verbal warning issued.",
+    notes: "Vehicle entered a route that was not configured for this vehicle. First offence. Verbal warning issued.",
     priorOffences: 0,
     isRepeatOffender: false
   },
@@ -198,14 +119,14 @@ const mockEnforcementLogs = [
     vehicleType: "Cargo Truck",
     location: "Av. Vladimir Lenine",
     coordinates: "-25.9634, 32.5789",
-    offenceType: "Damaged Road Infrastructure",
-    offenceCategory: "Infrastructure Damage",
+    offenceType: "Device Tampered",
+    offenceCategory: "Tracker Integrity",
     severity: "High",
     penaltyAmount: "50,000 MZN",
     action: "Fine Issued",
     officer: "Officer Tembe",
     timestamp: "2026-05-06 09:30",
-    notes: "Vehicle caused damage to road surface due to excessive weight. Fine issued for repair costs. Vehicle inspection required.",
+    notes: "Tracker tamper alert was confirmed during roadside inspection. Fine issued and vehicle inspection required.",
     priorOffences: 1,
     isRepeatOffender: false
   },
@@ -217,14 +138,14 @@ const mockEnforcementLogs = [
     vehicleType: "Cargo Truck",
     location: "Av. Julius Nyerere",
     coordinates: "-25.9667, 32.5901",
-    offenceType: "Operating Without Valid RUC Payment",
-    offenceCategory: "Payment Violation",
+    offenceType: "Outstanding Payments",
+    offenceCategory: "Payment Compliance",
     severity: "High",
     penaltyAmount: "45,000 MZN",
     action: "Fine Issued",
     officer: "Officer Silva",
     timestamp: "2026-04-22 15:45",
-    notes: "Previous offense for same violation. Fine issued. Driver warned about repeat offender status.",
+    notes: "Previous offence for unpaid RUC charges. Fine issued. Driver warned about repeat offender status.",
     priorOffences: 1,
     isRepeatOffender: true
   },
@@ -236,75 +157,35 @@ const mockEnforcementLogs = [
     vehicleType: "Heavy Truck",
     location: "Av. Mao Tse Tung",
     coordinates: "-25.9589, 32.5912",
-    offenceType: "Missing Safety Equipment",
-    offenceCategory: "Safety Violation",
-    severity: "Low",
+    offenceType: "Signal Lost",
+    offenceCategory: "Connectivity",
+    severity: "Medium",
     penaltyAmount: "5,000 MZN",
     action: "Warning Issued",
     officer: "Officer Cossa",
     timestamp: "2026-05-06 08:20",
-    notes: "Vehicle missing required safety reflectors. Warning issued. Must rectify within 48 hours.",
+    notes: "Tracker stopped transmitting and officer confirmed the vehicle location manually. Warning issued. Must restore signal within 48 hours.",
     priorOffences: 0,
     isRepeatOffender: false
   }
 ]
 
-// Mock vehicle lookup data with driver offence history
-const mockVehicleData: Record<string, any> = {
-  "AAA-123-MP": {
-    plateNumber: "AAA-123-MP",
-    vehicleType: "Cargo Truck",
-    owner: "TransMoz Logistics",
-    driverName: "JoÃ£o Silva",
-    driverLicense: "DL-2345678",
-    status: "Repeat Offender",
-    totalOffences: 3,
-    recentOffences: [
-      { date: "2026-05-06", type: "Operating Without Valid RUC Payment", penalty: "45,000 MZN" },
-      { date: "2026-04-22", type: "Operating Without Valid RUC Payment", penalty: "45,000 MZN" },
-      { date: "2026-03-15", type: "Overweight Vehicle", penalty: "25,000 MZN" }
-    ],
-    totalPenalties: "115,000 MZN",
-    lastOffence: "2026-05-06",
-    riskLevel: "High"
-  },
-  "BBB-456-MP": {
-    plateNumber: "BBB-456-MP",
-    vehicleType: "Heavy Truck",
-    owner: "Cargo Express Ltd",
-    driverName: "Maria Santos",
-    driverLicense: "DL-3456789",
-    status: "Compliant",
-    totalOffences: 1,
-    recentOffences: [
-      { date: "2026-05-06", type: "Overweight Vehicle", penalty: "25,000 MZN" }
-    ],
-    totalPenalties: "25,000 MZN",
-    lastOffence: "2026-05-06",
-    riskLevel: "Low"
-  },
-  "HHH-234-MP": {
-    plateNumber: "HHH-234-MP",
-    vehicleType: "Bus",
-    owner: "Maputo Transport Services",
-    driverName: "Alberto Tembe",
-    driverLicense: "DL-9012345",
-    status: "Clean Record",
-    totalOffences: 0,
-    recentOffences: [],
-    totalPenalties: "0 MZN",
-    lastOffence: "Never",
-    riskLevel: "None"
-  }
-}
+type AlertDispatchState = "sent" | "responding"
 
-export function StatisticsPage() {
+export function EnforcementPage() {
   const [enforcementLogs, setEnforcementLogs] = useState(mockEnforcementLogs)
   const [selectedEnforcement, setSelectedEnforcement] = useState<typeof mockEnforcementLogs[0] | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false)
   const [isMapOpen, setIsMapOpen] = useState(false)
-  const [hoveredViolation, setHoveredViolation] = useState<typeof mockUnenforcedViolations[0] | null>(null)
+  const [hoveredViolation, setHoveredViolation] = useState<(typeof UNENFORCED_VIOLATIONS)[number] | null>(null)
+  const [selectedViolationId, setSelectedViolationId] = useState<string | null>(null)
+  const [alertDispatchStates, setAlertDispatchStates] = useState<Partial<Record<string, AlertDispatchState>>>({})
+  const [alertSearch, setAlertSearch] = useState("")
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState("all")
+  const [alertTypeFilter, setAlertTypeFilter] = useState("all")
+  const [alertStatusFilter, setAlertStatusFilter] = useState("all")
+  const [alertPage, setAlertPage] = useState(1)
   const [mapLayer, setMapLayer] = useState<"heatmap" | "violations" | "both">("both")
   const [actionFilter, setActionFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
@@ -337,6 +218,7 @@ export function StatisticsPage() {
       coordinates: formData.coordinates,
       offenceType: formData.offenceType,
       offenceCategory: formData.offenceCategory,
+      severity: "Medium",
       penaltyAmount: formData.penaltyAmount,
       action: formData.action,
       officer: "Current Officer",
@@ -372,6 +254,86 @@ export function StatisticsPage() {
     })
   }
 
+  const handleAlertEnforcement = (violation: (typeof UNENFORCED_VIOLATIONS)[number]) => {
+    setAlertDispatchStates((previous) => ({ ...previous, [violation.id]: "sent" }))
+    toast.success("Enforcement alert triggered", {
+      description: `Nearby enforcers were notified to follow up on ${violation.plateNumber}.`,
+    })
+
+    window.setTimeout(() => {
+      setAlertDispatchStates((previous) => {
+        if (previous[violation.id] !== "sent") return previous
+        return { ...previous, [violation.id]: "responding" }
+      })
+      toast.success("Officer responding", {
+        description: `An enforcement officer accepted ${violation.plateNumber} and is moving to the location.`,
+      })
+    }, 1500)
+  }
+
+  const handleOpenFollowUp = (violation: (typeof UNENFORCED_VIOLATIONS)[number]) => {
+    setFormData({
+      plateNumber: violation.plateNumber,
+      driverName: "",
+      driverLicense: "",
+      vehicleType: violation.vehicleType,
+      location: violation.location,
+      coordinates: violation.latlng.join(", "),
+      offenceType: violation.violationType,
+      offenceCategory: violation.detectedBy.includes("GPS") || violation.detectedBy.includes("tracker") ? "Tracker Integrity" : "Payment Compliance",
+      penaltyAmount: violation.estimatedPenalty,
+      action: "",
+      notes: `Officer follow-up for ${violation.violationType} alert from ${violation.detectedBy}.`,
+    })
+    setIsLogDialogOpen(true)
+  }
+
+  const alertTypes = useMemo(
+    () => Array.from(new Set(UNENFORCED_VIOLATIONS.map((violation) => violation.violationType))).sort(),
+    []
+  )
+
+  const filteredEnforcementAlerts = useMemo(() => {
+    const normalizedSearch = alertSearch.trim().toLowerCase()
+    const severityRank = { High: 0, Medium: 1, Low: 2 }
+
+    return UNENFORCED_VIOLATIONS
+      .filter((violation) => {
+        const status = alertDispatchStates[violation.id] ?? "new"
+        const matchesSearch = !normalizedSearch ||
+          violation.plateNumber.toLowerCase().includes(normalizedSearch) ||
+          violation.violationType.toLowerCase().includes(normalizedSearch) ||
+          violation.location.toLowerCase().includes(normalizedSearch) ||
+          violation.detectedBy.toLowerCase().includes(normalizedSearch)
+        const matchesSeverity = alertSeverityFilter === "all" || violation.severity === alertSeverityFilter
+        const matchesType = alertTypeFilter === "all" || violation.violationType === alertTypeFilter
+        const matchesStatus = alertStatusFilter === "all" || alertStatusFilter === status
+        return matchesSearch && matchesSeverity && matchesType && matchesStatus
+      })
+      .sort((a, b) => {
+        const severityDelta = severityRank[a.severity] - severityRank[b.severity]
+        if (severityDelta !== 0) return severityDelta
+        return b.detectedAt.localeCompare(a.detectedAt)
+      })
+  }, [alertSearch, alertSeverityFilter, alertTypeFilter, alertStatusFilter, alertDispatchStates])
+
+  const alertPageSize = 8
+  const alertTotalPages = Math.max(1, Math.ceil(filteredEnforcementAlerts.length / alertPageSize))
+  const normalizedAlertPage = Math.min(alertPage, alertTotalPages)
+  const visibleEnforcementAlerts = filteredEnforcementAlerts.slice(
+    (normalizedAlertPage - 1) * alertPageSize,
+    normalizedAlertPage * alertPageSize
+  )
+
+  const handleSelectViolation = useCallback((id: string | null) => {
+    setSelectedViolationId(id)
+    setHoveredViolation(id ? (UNENFORCED_VIOLATIONS.find((violation) => violation.id === id) ?? null) : null)
+  }, [])
+
+  const handleHoverViolation = useCallback((id: string | null) => {
+    setHoveredViolation(id ? (UNENFORCED_VIOLATIONS.find((violation) => violation.id === id) ?? null) : null)
+  }, [])
+
   // Filter logs
   const filteredLogs = enforcementLogs.filter(log => {
     if (actionFilter === "all") return true
@@ -403,8 +365,8 @@ export function StatisticsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-semibold text-foreground">Violations</h1>
-          <p className="text-lg text-muted-foreground">Track violations and compliance monitoring</p>
+          <h1 className="text-4xl font-semibold text-foreground">Enforcement</h1>
+          <p className="text-lg text-muted-foreground">Log officer actions for RUC, permit, route, and tracker violations</p>
         </div>
         <Button className="text-base h-11 px-6" onClick={() => setIsMapOpen(true)}>
           <Map className="h-5 w-5 mr-2" />
@@ -653,13 +615,16 @@ export function StatisticsPage() {
                       <SelectValue placeholder="Select offence type" />
                     </SelectTrigger>
                     <SelectContent className="text-base">
-                      <SelectItem value="Operating Without Valid RUC Payment" className="text-base">Operating Without Valid RUC Payment</SelectItem>
+                      <SelectItem value="Outstanding Payments" className="text-base">Outstanding Payments</SelectItem>
+                      <SelectItem value="Expired Permit" className="text-base">Expired Permit</SelectItem>
+                      <SelectItem value="No Circulation License" className="text-base">No Circulation License</SelectItem>
+                      <SelectItem value="Unauthorized Route" className="text-base">Unauthorized Route</SelectItem>
                       <SelectItem value="Overweight Vehicle" className="text-base">Overweight Vehicle</SelectItem>
-                      <SelectItem value="Operating During Restricted Hours" className="text-base">Operating During Restricted Hours</SelectItem>
                       <SelectItem value="Operating Without Road Closure Permit" className="text-base">Operating Without Road Closure Permit</SelectItem>
-                      <SelectItem value="Unauthorized Route Deviation" className="text-base">Unauthorized Route Deviation</SelectItem>
-                      <SelectItem value="Damaged Road Infrastructure" className="text-base">Damaged Road Infrastructure</SelectItem>
-                      <SelectItem value="Missing Safety Equipment" className="text-base">Missing Safety Equipment</SelectItem>
+                      <SelectItem value="Restricted Hours Violation" className="text-base">Restricted Hours Violation</SelectItem>
+                      <SelectItem value="Device Tampered" className="text-base">Device Tampered</SelectItem>
+                      <SelectItem value="Signal Lost" className="text-base">Signal Lost</SelectItem>
+                      <SelectItem value="Power Disconnected" className="text-base">Power Disconnected</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -671,13 +636,14 @@ export function StatisticsPage() {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent className="text-base">
-                      <SelectItem value="Payment Violation" className="text-base">Payment Violation</SelectItem>
-                      <SelectItem value="Weight Violation" className="text-base">Weight Violation</SelectItem>
-                      <SelectItem value="Time Restriction Violation" className="text-base">Time Restriction Violation</SelectItem>
-                      <SelectItem value="Permit Violation" className="text-base">Permit Violation</SelectItem>
-                      <SelectItem value="Route Violation" className="text-base">Route Violation</SelectItem>
-                      <SelectItem value="Infrastructure Damage" className="text-base">Infrastructure Damage</SelectItem>
-                      <SelectItem value="Safety Violation" className="text-base">Safety Violation</SelectItem>
+                      <SelectItem value="Payment Compliance" className="text-base">Payment Compliance</SelectItem>
+                      <SelectItem value="Permit Compliance" className="text-base">Permit Compliance</SelectItem>
+                      <SelectItem value="License Compliance" className="text-base">License Compliance</SelectItem>
+                      <SelectItem value="Route Compliance" className="text-base">Route Compliance</SelectItem>
+                      <SelectItem value="Weight Compliance" className="text-base">Weight Compliance</SelectItem>
+                      <SelectItem value="Time Window Compliance" className="text-base">Time Window Compliance</SelectItem>
+                      <SelectItem value="Tracker Integrity" className="text-base">Tracker Integrity</SelectItem>
+                      <SelectItem value="Connectivity" className="text-base">Connectivity</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1010,7 +976,7 @@ export function StatisticsPage() {
             <div>
               <ModalTitle>Enforcement Heatmap — Maputo</ModalTitle>
               <ModalDescription>
-                Real-time enforcement activity &amp; unenforced violations
+                Real-time enforcement activity and alerts for nearby officers
               </ModalDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -1037,11 +1003,10 @@ export function StatisticsPage() {
                 <EnforcementMap
                   layer={mapLayer}
                   hoveredId={hoveredViolation?.id ?? null}
-                  onHover={(id) =>
-                    setHoveredViolation(
-                      id ? (UNENFORCED_VIOLATIONS.find((v) => v.id === id) ?? null) : null
-                    )
-                  }
+                  selectedId={selectedViolationId}
+                  violations={filteredEnforcementAlerts}
+                  onSelect={handleSelectViolation}
+                  onHover={handleHoverViolation}
                 />
               )}
             </div>
@@ -1051,20 +1016,80 @@ export function StatisticsPage() {
               <div className="p-4 border-b border-border">
                 <p className="font-semibold text-base flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
-                  Unenforced Violations
+                  Enforcement Alerts
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {UNENFORCED_VIOLATIONS.length} awaiting action — hover to highlight on map
+                  {filteredEnforcementAlerts.length} of {UNENFORCED_VIOLATIONS.length} visible, sorted by urgency
                 </p>
+                <div className="mt-3 space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={alertSearch}
+                      onChange={(event) => {
+                        setAlertSearch(event.target.value)
+                        setAlertPage(1)
+                      }}
+                      placeholder="Plate, type, source..."
+                      className="h-9 pl-8 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={alertSeverityFilter} onValueChange={(value) => {
+                      setAlertSeverityFilter(value)
+                      setAlertPage(1)
+                    }}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All severity</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="Low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={alertStatusFilter} onValueChange={(value) => {
+                      setAlertStatusFilter(value)
+                      setAlertPage(1)
+                    }}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All status</SelectItem>
+                        <SelectItem value="new">New</SelectItem>
+                        <SelectItem value="sent">Alert Sent</SelectItem>
+                        <SelectItem value="responding">Officer Responding</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Select value={alertTypeFilter} onValueChange={(value) => {
+                    setAlertTypeFilter(value)
+                    setAlertPage(1)
+                  }}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All alert types</SelectItem>
+                      {alertTypes.map((type) => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto divide-y divide-border">
-                {UNENFORCED_VIOLATIONS.map((vio) => {
+                {visibleEnforcementAlerts.map((vio) => {
                   const color = severityColor(vio.severity)
-                  const isActive = hoveredViolation?.id === vio.id
+                  const isActive = hoveredViolation?.id === vio.id || selectedViolationId === vio.id
+                  const dispatchState = alertDispatchStates[vio.id] ?? "new"
                   return (
                     <div
                       key={vio.id}
                       className={`p-3 cursor-pointer transition-colors ${isActive ? "bg-muted" : "hover:bg-muted/50"}`}
+                      onClick={() => handleSelectViolation(vio.id)}
                       onMouseEnter={() => setHoveredViolation(vio)}
                       onMouseLeave={() => setHoveredViolation(null)}
                     >
@@ -1078,6 +1103,14 @@ export function StatisticsPage() {
                             >
                               {vio.severity}
                             </Badge>
+                            {dispatchState !== "new" && (
+                              <Badge
+                                variant="outline"
+                                className={`text-xs px-1.5 py-0 ${dispatchState === "responding" ? "border-[#5B8C5A] text-[#5B8C5A]" : "border-[#DAA22A] text-[#DAA22A]"}`}
+                              >
+                                {dispatchState === "responding" ? "Officer Responding" : "Alert Sent"}
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-xs text-foreground mt-0.5 truncate">{vio.violationType}</p>
                           <p className="text-xs text-muted-foreground truncate">{vio.location}</p>
@@ -1085,6 +1118,23 @@ export function StatisticsPage() {
                             <span className="text-xs text-muted-foreground">{vio.detectedAt}</span>
                             <span className="text-xs font-semibold" style={{ color }}>{vio.estimatedPenalty}</span>
                           </div>
+                          <Button
+                            size="sm"
+                            variant={dispatchState === "responding" ? "default" : dispatchState === "sent" ? "secondary" : "outline"}
+                            className="mt-2 h-8 w-full justify-center text-xs"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              if (dispatchState === "responding") {
+                                handleOpenFollowUp(vio)
+                                return
+                              }
+                              handleAlertEnforcement(vio)
+                            }}
+                            disabled={dispatchState === "sent"}
+                          >
+                            <BellRing className="mr-1.5 h-3.5 w-3.5" />
+                            {dispatchState === "responding" ? "Log Officer Follow-up" : dispatchState === "sent" ? "Waiting for Officer" : "Alert Enforcement"}
+                          </Button>
                         </div>
                         <div
                           className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 animate-pulse"
@@ -1094,8 +1144,36 @@ export function StatisticsPage() {
                     </div>
                   )
                 })}
+                {visibleEnforcementAlerts.length === 0 && (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No alerts match the current filters.
+                  </div>
+                )}
               </div>
               <div className="p-3 border-t border-border space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setAlertPage((page) => Math.max(1, page - 1))}
+                    disabled={normalizedAlertPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {normalizedAlertPage} of {alertTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setAlertPage((page) => Math.min(alertTotalPages, page + 1))}
+                    disabled={normalizedAlertPage === alertTotalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Legend</p>
                 <div className="space-y-1.5">
                   {[
@@ -1114,7 +1192,7 @@ export function StatisticsPage() {
                       <div className="absolute inset-0 rounded-full bg-[#E5533D] opacity-40 animate-ping" />
                       <div className="w-3 h-3 rounded-full bg-[#E5533D] border border-white" />
                     </div>
-                    <span className="text-xs text-muted-foreground">Pulsing = unenforced violation</span>
+                    <span className="text-xs text-muted-foreground">Pulsing = alert enforcement candidate</span>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground text-center pt-1">

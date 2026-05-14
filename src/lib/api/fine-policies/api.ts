@@ -1,9 +1,10 @@
-import { coreRequest } from "../httpClient";
+import { coreRequest, coreHttpClient } from "../httpClient";
 import { DEFAULT_MUNICIPALITY_ID } from "../constants";
 import {
   FinePolicyDetailResponseSchema,
   FinePolicyListResponseSchema,
   type CreateFinePolicyRequest,
+  type UpdateFinePolicyRequest,
   type FinePolicyDetailResponse,
   type FinePolicyListResponse,
 } from "./schemas";
@@ -49,4 +50,41 @@ export const FinePoliciesApi = {
       signal,
       schema: FinePolicyDetailResponseSchema,
     }),
+
+  /**
+   * Get fine policy
+   * GET /v1/fine-policies/{id}
+   */
+  getFinePolicy: (policyId: string, signal?: AbortSignal) =>
+    coreRequest<FinePolicyDetailResponse>({
+      method: "GET",
+      url: `/v1/fine-policies/${encodeURIComponent(policyId)}`,
+      signal,
+      schema: FinePolicyDetailResponseSchema,
+    }),
+
+  /**
+   * Update fine policy
+   * PUT /v1/fine-policies/{id}
+   */
+  updateFinePolicy: (policyId: string, payload: UpdateFinePolicyRequest, signal?: AbortSignal) =>
+    coreRequest<FinePolicyDetailResponse>({
+      method: "PUT",
+      url: `/v1/fine-policies/${encodeURIComponent(policyId)}`,
+      data: {
+        data: {
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
+          ...payload,
+        },
+      },
+      signal,
+      schema: FinePolicyDetailResponseSchema,
+    }),
+
+  /**
+   * Delete fine policy
+   * DELETE /v1/fine-policies/{id}
+   */
+  deleteFinePolicy: (policyId: string) =>
+    coreHttpClient.delete(`/v1/fine-policies/${encodeURIComponent(policyId)}`).then(() => undefined),
 };

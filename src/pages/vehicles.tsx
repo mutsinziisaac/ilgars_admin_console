@@ -4,21 +4,53 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Truck, Search, Eye, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react"
+import { Truck, Search, Eye, CheckCircle, AlertCircle } from "lucide-react"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { toast } from "sonner"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
-import type { Vehicle } from "@/lib/api"
 
-export function VehiclesPage(): JSX.Element {
+type VehicleSearchFilters = {
+  plateNumber?: string
+  make?: string
+  model?: string
+  fuelType?: string
+  serviceType?: string
+}
+
+const vehicleSearchParamKeys = ["plateNumber", "make", "model", "fuelType", "serviceType"] as const
+
+const parseVehicleSearch = (searchValue: string): VehicleSearchFilters => {
+  const trimmedSearch = searchValue.trim()
+  if (!trimmedSearch) return {}
+
+  const queryText = (() => {
+    try {
+      return new URL(trimmedSearch).search
+    } catch {
+      return trimmedSearch.includes("=") ? trimmedSearch : ""
+    }
+  })()
+
+  if (queryText) {
+    const params = new URLSearchParams(queryText.startsWith("?") ? queryText.slice(1) : queryText)
+    const filters = vehicleSearchParamKeys.reduce<VehicleSearchFilters>((currentFilters, key) => {
+      const value = params.get(key)?.trim()
+      return value ? { ...currentFilters, [key]: value } : currentFilters
+    }, {})
+
+    if (Object.keys(filters).length > 0) return filters
+  }
+
+  return { plateNumber: trimmedSearch }
+}
+
+export function VehiclesPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [vehicleSearchFilters, setVehicleSearchFilters] = useState<VehicleSearchFilters>({})
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
@@ -31,7 +63,7 @@ export function VehiclesPage(): JSX.Element {
   const { data, isLoading, error, refetch } = useVehiclesList({
     page: currentPage - 1,
     size: itemsPerPage,
-    plateNumber: searchQuery || undefined,
+    ...vehicleSearchFilters,
     status: statusFilter !== "all" ? statusFilter : undefined,
   })
 
@@ -109,38 +141,8 @@ export function VehiclesPage(): JSX.Element {
 
   // Handle search
   const handleSearch = () => {
-    setCurrentPage(1) // Reset to first page on search
-  }
-
-  // Handle delete vehicle
-  const handleDeleteVehicle = (vehicleId: string) => {
-    // TODO: Implement delete vehicle API call
-    const vehicle = vehicles.find(v => v.id === vehicleId)
-    toast.success("Vehicle deleted", {
-      description: `${vehicle?.plateNumber} has been removed from the system.`
-    })
-  }
-
-  // Handle suspend/activate
-  const handleToggleStatus = (vehicleId: string) => {
-    // TODO: Implement update vehicle status API call
-    const vehicle = vehicles.find(v => v.id === vehicleId)
-    toast.info("Status updated", {
-      description: `${vehicle?.plateNumber} status has been updated`
-    })
-  }
-
-  // Open edit dialog
-  const openEditDialog = (vehicle: any) => {
-    setSelectedVehicle(toVehicleView(vehicle))
-    setFormData({
-      plate: vehicle.plateNumber,
-      owner: getVehicleOwner(vehicle),
-      vehicleType: getVehicleType(vehicle),
-      weightClass: getVehicleCapacity(vehicle),
-      notes: ""
-    })
-    setIsEditDialogOpen(true)
+    setCurrentPage(1)
+    setVehicleSearchFilters(parseVehicleSearch(searchQuery))
   }
 
   // Simulate loading
@@ -149,41 +151,6 @@ export function VehiclesPage(): JSX.Element {
     toast.info("Data refreshed", {
       description: "Vehicle list has been updated."
     })
-  }
-
-  // Handle export
-  const handleExport = () => {
-    toast.success("Export started", {
-      description: "Your vehicle report is being generated."
-    })
-  }
-
-  // Get status badge
-  const getStatusBadge = (status: string) => {
-    return String(status).toUpperCase() === "ACTIVE" ? (
-      <Badge className="bg-[#4CAF50] text-white text-sm px-3 py-1">
-        <CheckCircle className="h-4 w-4 mr-1" />
-        Active
-      </Badge>
-    ) : (
-      <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1">
-        <XCircle className="h-4 w-4 mr-1" />
-        {status}
-      </Badge>
-    )
-  }
-
-  // Get compliance badge
-  const getComplianceBadge = (compliance: string) => {
-    return compliance === "Compliant" ? (
-      <Badge className="bg-[#4CAF50] text-white text-sm px-3 py-1">
-        {compliance}
-      </Badge>
-    ) : (
-      <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1">
-        {compliance}
-      </Badge>
-    )
   }
 
   return (
@@ -199,18 +166,21 @@ export function VehiclesPage(): JSX.Element {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search vehicles..."
+              placeholder="Search plate or paste vehicle API URL"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="pl-11 text-base h-12 w-80"
             />
           </div>
+          <Button onClick={handleSearch} className="h-12 px-5">
+            Search
+          </Button>
         </div>
       </div>
 
       {/* Error State */}
-      {error && (
+      {error ? (
         <Card className="border-destructive">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 text-destructive">
@@ -227,7 +197,7 @@ export function VehiclesPage(): JSX.Element {
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-3">
@@ -289,7 +259,13 @@ export function VehiclesPage(): JSX.Element {
             <Label htmlFor="status-filter" className="text-base font-medium">
               Filter by Status:
             </Label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value)
+                setCurrentPage(1)
+              }}
+            >
               <SelectTrigger id="status-filter" className="w-[200px] text-base h-11">
                 <SelectValue />
               </SelectTrigger>

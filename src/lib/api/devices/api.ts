@@ -2,7 +2,7 @@ import { devicesRequest } from "../httpClient"
 import {
   ActiveDeviceResponseSchema,
   DeviceAssignmentSchema,
-  DeviceSchema,
+  DeviceResponseSchema,
   type ActiveDeviceResponse,
   type AssignDeviceRequest,
   type Device,
@@ -14,26 +14,25 @@ export const DevicesApi = {
   /**
    * Register tracker
    * POST /v1/devices
-   *
-   * Devices service does not use the Core { data } wrapper.
    */
   registerDevice: (payload: RegisterDeviceRequest) =>
     devicesRequest<Device>({
       method: "POST",
       url: "/v1/devices",
-      data: payload,
-      schema: DeviceSchema,
+      data: { data: payload },
+      schema: DeviceResponseSchema,
     }),
 
   /**
    * Assign tracker to vehicle
    * POST /v1/devices/{deviceId}/assignments
+   * Proxies https://ilgars.ayinza.dev/devices/api/v1/devices/{deviceId}/assignments
    */
   assignDevice: (deviceId: string, payload: AssignDeviceRequest) =>
     devicesRequest<DeviceAssignment>({
       method: "POST",
       url: `/v1/devices/${encodeURIComponent(deviceId)}/assignments`,
-      data: payload,
+      data: { data: payload },
       schema: DeviceAssignmentSchema,
     }),
 
@@ -45,13 +44,14 @@ export const DevicesApi = {
     devicesRequest<DeviceAssignment>({
       method: "POST",
       url: `/v1/devices/${encodeURIComponent(deviceId)}/assignments/replace`,
-      data: payload,
+      data: { data: payload },
       schema: DeviceAssignmentSchema,
     }),
 
   /**
    * Get active tracker by vehicle
    * GET /v1/vehicles/{vehicleId}/active-device
+   * Proxies https://ilgars.ayinza.dev/devices/api/v1/vehicles/{vehicleId}/active-device
    */
   getActiveDeviceByVehicle: (vehicleId: string, signal?: AbortSignal) =>
     devicesRequest<ActiveDeviceResponse>({

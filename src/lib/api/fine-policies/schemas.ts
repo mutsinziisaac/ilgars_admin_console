@@ -41,6 +41,7 @@ export const FinePolicyDetailResponseSchema = z.object({
 });
 
 export const CreateFinePolicyRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   code: z.string(),
   trigger: z.string(),
   gracePeriodHours: z.number(),
@@ -51,7 +52,12 @@ export const CreateFinePolicyRequestSchema = z.object({
   active: z.boolean().optional().default(true),
 });
 
+export const UpdateFinePolicyRequestSchema = CreateFinePolicyRequestSchema.partial().extend({
+  municipalityId: z.string().optional(),
+});
+
 export type FinePolicy = z.infer<typeof FinePolicySchema>;
 export type FinePolicyListResponse = z.infer<typeof FinePolicyListResponseSchema>;
 export type FinePolicyDetailResponse = z.infer<typeof FinePolicyDetailResponseSchema>;
 export type CreateFinePolicyRequest = z.infer<typeof CreateFinePolicyRequestSchema>;
+export type UpdateFinePolicyRequest = z.infer<typeof UpdateFinePolicyRequestSchema>;

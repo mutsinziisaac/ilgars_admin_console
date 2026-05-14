@@ -9,6 +9,11 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query"
 
+const DEFAULT_QUERY_OPTIONS = {
+  staleTime: 2 * 60 * 1000,
+  refetchOnWindowFocus: false,
+} as const
+
 type ListFetcher<TData, TParams> = (args: {
   signal?: AbortSignal
   params?: TParams
@@ -36,6 +41,7 @@ export const createListQueryHook = <TData, TParams = undefined>(options: {
     return useQuery<TData, unknown>({
       queryKey: key(effectiveParams),
       queryFn: ({ signal }) => fetcher({ signal, params: effectiveParams }),
+      ...DEFAULT_QUERY_OPTIONS,
       ...queryOptions,
     })
   }
@@ -62,6 +68,7 @@ export const createDetailQueryHook = <TData, TId = string | number>(options: {
         return fetcher(id, signal)
       },
       enabled: id != null,
+      ...DEFAULT_QUERY_OPTIONS,
       ...queryOptions,
     })
 }

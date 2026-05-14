@@ -58,7 +58,7 @@ export const RUCPoliciesApi = {
       url: "/v1/ruc-policies",
       data: {
         data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
+          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -75,7 +75,7 @@ export const RUCPoliciesApi = {
       url: `/v1/ruc-policies/${encodeURIComponent(id)}`,
       data: {
         data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
+          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
       },
@@ -92,6 +92,7 @@ export const RUCPoliciesApi = {
       gracePeriodHours: policy.gracePeriodHours,
       specialPermitCapacityThreshold: policy.specialPermitCapacityThreshold,
       specialPermitCapacityUnit: policy.specialPermitCapacityUnit,
+      municipalityId: policy.municipalityId,
       active: true,
     }),
 

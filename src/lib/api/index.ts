@@ -16,7 +16,9 @@ export { RoadClosurePermitsApi } from "./permits/api";
 export { MunicipalRoutesApi } from "./municipal-routes/api";
 export { MunicipalitiesApi } from "./municipalities/api";
 export { FinePoliciesApi } from "./fine-policies/api";
+export { ExemptAreasApi } from "./exempt-areas/api";
 export { DevicesApi } from "./devices/api";
+export { AnalyticsApi } from "./analytics/api";
 
 // Export schemas and types
 export type { Vehicle, VehicleListResponse, VehicleDetailResponse } from "./vehicles/schemas";
@@ -58,7 +60,10 @@ export type {
   Municipality,
   BoundaryVersion,
   MunicipalityDetailResponse,
+  MunicipalityListResponse,
+  MunicipalityConfigurationResponse,
   BoundaryVersionDetailResponse,
+  BoundaryVersionListResponse,
   CreateMunicipalityRequest,
   CreateBoundaryVersionRequest,
 } from "./municipalities/schemas";
@@ -67,7 +72,15 @@ export type {
   FinePolicyListResponse,
   FinePolicyDetailResponse,
   CreateFinePolicyRequest,
+  UpdateFinePolicyRequest,
 } from "./fine-policies/schemas";
+export type {
+  ExemptArea,
+  ExemptAreaListResponse,
+  ExemptAreaDetailResponse,
+  CreateExemptAreaRequest,
+  UpdateExemptAreaRequest,
+} from "./exempt-areas/schemas";
 export type {
   Device,
   DeviceAssignment,
@@ -75,3 +88,7 @@ export type {
   RegisterDeviceRequest,
   AssignDeviceRequest,
 } from "./devices/schemas";
+export type {
+  HeatmapPoint,
+  HeatmapResponse,
+} from "./analytics/schemas";

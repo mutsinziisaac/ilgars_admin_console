@@ -16,8 +16,13 @@ import {
   useActivateRUCPolicy,
 } from "@/lib/api/ruc-policies/hooks"
 import type { RUCPolicy } from "@/lib/api/ruc-policies/schemas"
+import {
+  getMunicipalityDisplayName,
+  getStoredMunicipalityId,
+} from "@/lib/municipality-registry"
 
 export function RUCPolicyPage() {
+  const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(getStoredMunicipalityId())
   const [selectedPolicy, setSelectedPolicy] = useState<RUCPolicy | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -26,13 +31,17 @@ export function RUCPolicyPage() {
   const [activatedPolicyIds, setActivatedPolicyIds] = useState<Set<string>>(() => new Set())
 
   // Fetch RUC policies from API
-  const { data: policiesResponse, isLoading, error, refetch } = useRUCPoliciesList({ active: undefined })
+  const { data: policiesResponse, isLoading, error, refetch } = useRUCPoliciesList({
+    municipalityId: selectedMunicipalityId,
+    active: undefined,
+  })
   
   // Mutations
   const createMutation = useCreateRUCPolicy({
     onSuccess: () => {
       toast.success("RUC policy created successfully")
       setIsCreateOpen(false)
+      setSelectedMunicipalityId(policyForm.municipalityId)
       resetForm()
     },
     onError: (error: any) => {
@@ -72,13 +81,17 @@ export function RUCPolicyPage() {
   const activePolicy = policies.find((p: RUCPolicy) => p.active || activatedPolicyIds.has(p.id))
   
   const [policyForm, setPolicyForm] = useState({
+    municipalityId: getStoredMunicipalityId(),
     specialPermitCapacityThreshold: 8000,
     specialPermitCapacityUnit: "TONNES",
     gracePeriodHours: 168 // 7 days default
   })
 
   const resetForm = () => {
+    const municipalityId = getStoredMunicipalityId()
+    setSelectedMunicipalityId(municipalityId)
     setPolicyForm({
+      municipalityId,
       specialPermitCapacityThreshold: 8000,
       specialPermitCapacityUnit: "TONNES",
       gracePeriodHours: 168
@@ -86,17 +99,28 @@ export function RUCPolicyPage() {
   }
 
   const handleCreatePolicy = () => {
+    if (!policyForm.municipalityId) {
+      toast.error("Create a municipality before creating a RUC policy")
+      return
+    }
+
     createMutation.mutate({
+      municipalityId: policyForm.municipalityId,
       specialPermitCapacityThreshold: policyForm.specialPermitCapacityThreshold,
       specialPermitCapacityUnit: policyForm.specialPermitCapacityUnit,
       gracePeriodHours: policyForm.gracePeriodHours,
       active: false
+    }, {
+      onSuccess: () => {
+        setSelectedMunicipalityId(policyForm.municipalityId)
+      },
     })
   }
 
   const handleUpdatePolicy = () => {
     if (!selectedPolicy) return
     updateMutation.mutate({
+      municipalityId: policyForm.municipalityId || selectedPolicy.municipalityId,
       specialPermitCapacityThreshold: policyForm.specialPermitCapacityThreshold,
       specialPermitCapacityUnit: policyForm.specialPermitCapacityUnit,
       gracePeriodHours: policyForm.gracePeriodHours
@@ -111,6 +135,7 @@ export function RUCPolicyPage() {
   const handleEditClick = (policy: RUCPolicy) => {
     setSelectedPolicy(policy)
     setPolicyForm({
+      municipalityId: policy.municipalityId,
       specialPermitCapacityThreshold: policy.specialPermitCapacityThreshold,
       specialPermitCapacityUnit: policy.specialPermitCapacityUnit,
       gracePeriodHours: policy.gracePeriodHours
@@ -121,6 +146,11 @@ export function RUCPolicyPage() {
   const handleViewPolicy = (policy: RUCPolicy) => {
     setSelectedPolicy(policy)
     setIsViewOpen(true)
+  }
+
+  const openCreatePolicy = () => {
+    resetForm()
+    setIsCreateOpen(true)
   }
 
   const getStatusBadge = (active: boolean) => {
@@ -172,7 +202,7 @@ export function RUCPolicyPage() {
           <h1 className="text-4xl font-semibold text-foreground">RUC Policy Configuration</h1>
           <p className="text-lg text-muted-foreground">Manage Road User Charge policy settings and thresholds</p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)} disabled={createMutation.isPending}>
+        <Button onClick={openCreatePolicy} disabled={createMutation.isPending}>
           {createMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -190,7 +220,7 @@ export function RUCPolicyPage() {
               <div>
                 <CardTitle className="text-2xl">Active Policy</CardTitle>
                 <CardDescription className="text-base">
-                  Currently enforced RUC policy configuration
+                  Currently enforced RUC policy for {getMunicipalityDisplayName(selectedMunicipalityId)}
                 </CardDescription>
               </div>
               <Button variant="outline" onClick={() => handleViewPolicy(activePolicy)}>
@@ -224,10 +254,14 @@ export function RUCPolicyPage() {
       {/* All Policies Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">RUC Policies</CardTitle>
-          <CardDescription className="text-base">
-            Manage all RUC policy configurations
-          </CardDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-2xl">RUC Policies</CardTitle>
+              <CardDescription className="text-base">
+                Manage policies for {getMunicipalityDisplayName(selectedMunicipalityId)}
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {error ? (
@@ -243,7 +277,7 @@ export function RUCPolicyPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Settings className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No RUC policies found</h3>
-              <p className="text-muted-foreground">Create your first RUC policy to get started</p>
+              <p className="text-muted-foreground">Create a RUC policy for {getMunicipalityDisplayName(selectedMunicipalityId)}.</p>
             </div>
           ) : (
             <Table>
@@ -314,6 +348,13 @@ export function RUCPolicyPage() {
         <ModalBody>
           <div className="space-y-6">
             <div className="space-y-2">
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(policyForm.municipalityId)}
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="threshold" className="text-base">Special Permit Capacity Threshold *</Label>
               <Input
                 id="threshold"
@@ -375,6 +416,13 @@ export function RUCPolicyPage() {
         </ModalHeader>
         <ModalBody>
           <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(policyForm.municipalityId)}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="edit-threshold" className="text-base">Special Permit Capacity Threshold *</Label>
               <Input
@@ -457,8 +505,8 @@ export function RUCPolicyPage() {
                   {getStatusBadge(selectedPolicy.active || activatedPolicyIds.has(selectedPolicy.id))}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Municipality ID</p>
-                  <p className="text-base font-mono text-sm">{selectedPolicy.municipalityId}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Municipality</p>
+                  <p className="text-base font-semibold">{getMunicipalityDisplayName(selectedPolicy.municipalityId)}</p>
                 </div>
               </div>
 

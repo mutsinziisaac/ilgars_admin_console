@@ -42,6 +42,10 @@ export const ActiveDeviceResponseSchema = z
   })
   .passthrough()
 
+export const DeviceResponseSchema = z
+  .union([DeviceSchema, z.object({ data: DeviceSchema })])
+  .transform((response) => ("data" in response ? response.data : response))
+
 export const RegisterDeviceRequestSchema = z.object({
   deviceUid: z.string(),
   serialNumber: z.string(),

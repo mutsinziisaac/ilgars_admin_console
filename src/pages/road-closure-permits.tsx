@@ -1,6 +1,5 @@
-﻿import { useState } from "react"
+﻿import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,15 +7,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Plus, Receipt, MapPin, FileCheck, AlertTriangle, Shield, Calendar } from "lucide-react"
+import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Receipt, MapPin, AlertTriangle, Shield, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import { Map } from "@/components/ui/map"
-import { AuthorizationsPage } from "@/pages/authorizations"
+import { RoadClosurePermitsApi, getApiErrorMessage, type RoadClosurePermit } from "@/lib/api"
+import { userManager } from "@/lib/userManager"
+import { getStoredMunicipalityId } from "@/lib/municipality-registry"
 
 const TARIFFS: Record<string, Record<string, number>> = {
   "Construction Works": { "Protocol Roads": 10000, "Secondary Roads": 5000,  "Tertiary Roads": 3500  },
@@ -29,10 +30,6 @@ const TARIFFS: Record<string, Record<string, number>> = {
 const PURPOSES = Object.keys(TARIFFS)
 const ROAD_TYPES = ["Protocol Roads", "Secondary Roads", "Tertiary Roads"]
 
-function calcFee(purpose: string, roadType: string, hours: number): number {
-  return (TARIFFS[purpose]?.[roadType] ?? 0) * hours
-}
-
 interface Permit {
   id: string
   applicant: string
@@ -44,7 +41,7 @@ interface Permit {
   hours: number
   hourlyRate: number
   totalFee: number
-  status: "Pending" | "Approved" | "Rejected"
+  status: "Awaiting Admin Approval" | "Approved" | "Rejected"
   submittedDate: string
   eventDate: string
   paymentDeadline: string
@@ -53,27 +50,78 @@ interface Permit {
 }
 
 const mockPermits: Permit[] = [
-  { id: "PRM-2026-001", applicant: "Maputo Film Productions", contactEmail: "info@maputofilm.co.mz", contactPhone: "+258 84 111 2222", purpose: "Filming", roadType: "Protocol Roads", location: "Av. Julius Nyerere, between Rua da Imprensa and Rua dos Desportistas", hours: 3, hourlyRate: 40000, totalFee: 120000, status: "Pending", submittedDate: "2026-05-01", eventDate: "2026-05-15", paymentDeadline: "2026-05-10", notes: "Feature film production. Road closure 06:00-09:00." },
+  { id: "PRM-2026-001", applicant: "Maputo Film Productions", contactEmail: "info@maputofilm.co.mz", contactPhone: "+258 84 111 2222", purpose: "Filming", roadType: "Protocol Roads", location: "Av. Julius Nyerere, between Rua da Imprensa and Rua dos Desportistas", hours: 3, hourlyRate: 40000, totalFee: 120000, status: "Awaiting Admin Approval", submittedDate: "2026-05-01", eventDate: "2026-05-15", paymentDeadline: "2026-05-10", notes: "Feature film production. Road closure 06:00-09:00." },
   { id: "PRM-2026-002", applicant: "Construtora Nacional Lda", contactEmail: "obras@construtora.co.mz", contactPhone: "+258 82 333 4444", purpose: "Construction Works", roadType: "Secondary Roads", location: "Av. 25 de Setembro, near Praca dos Trabalhadores", hours: 8, hourlyRate: 5000, totalFee: 40000, status: "Approved", submittedDate: "2026-04-20", eventDate: "2026-05-05", paymentDeadline: "2026-04-30", notes: "Water pipe replacement works." },
   { id: "PRM-2026-003", applicant: "Maputo Sports Federation", contactEmail: "events@maputo-sports.co.mz", contactPhone: "+258 86 555 6666", purpose: "Sporting Events", roadType: "Protocol Roads", location: "Marginal Avenue, full stretch", hours: 5, hourlyRate: 5000, totalFee: 25000, status: "Approved", submittedDate: "2026-04-25", eventDate: "2026-05-10", paymentDeadline: "2026-05-05" },
-  { id: "PRM-2026-004", applicant: "Feira de Maputo Org.", contactEmail: "feira@maputo.co.mz", contactPhone: "+258 84 777 8888", purpose: "Fairs", roadType: "Secondary Roads", location: "Av. Eduardo Mondlane, block between Rua 1389 and Rua Consiglieri Pedroso", hours: 12, hourlyRate: 1000, totalFee: 12000, status: "Pending", submittedDate: "2026-05-03", eventDate: "2026-05-20", paymentDeadline: "2026-05-13", notes: "Annual trade fair. Partial road closure required." },
+  { id: "PRM-2026-004", applicant: "Feira de Maputo Org.", contactEmail: "feira@maputo.co.mz", contactPhone: "+258 84 777 8888", purpose: "Fairs", roadType: "Secondary Roads", location: "Av. Eduardo Mondlane, block between Rua 1389 and Rua Consiglieri Pedroso", hours: 12, hourlyRate: 1000, totalFee: 12000, status: "Awaiting Admin Approval", submittedDate: "2026-05-03", eventDate: "2026-05-20", paymentDeadline: "2026-05-13", notes: "Annual trade fair. Partial road closure required." },
   { id: "PRM-2026-005", applicant: "Sunset Events Lda", contactEmail: "hello@sunsetevents.co.mz", contactPhone: "+258 82 999 0000", purpose: "For-Profit Events", roadType: "Tertiary Roads", location: "Rua da Mesquita, Sommerschield", hours: 6, hourlyRate: 5000, totalFee: 30000, status: "Rejected", submittedDate: "2026-04-28", eventDate: "2026-05-08", paymentDeadline: "2026-05-03", rejectionReason: "Incomplete documentation. Missing municipal approval letter." },
-  { id: "PRM-2026-006", applicant: "TeleMaputo Broadcasting", contactEmail: "producao@telemaputo.co.mz", contactPhone: "+258 84 123 9876", purpose: "Filming", roadType: "Secondary Roads", location: "Av. Samora Machel, central section", hours: 4, hourlyRate: 30000, totalFee: 120000, status: "Pending", submittedDate: "2026-05-04", eventDate: "2026-05-18", paymentDeadline: "2026-05-14", notes: "TV commercial shoot. Night filming 22:00-02:00." },
+  { id: "PRM-2026-006", applicant: "TeleMaputo Broadcasting", contactEmail: "producao@telemaputo.co.mz", contactPhone: "+258 84 123 9876", purpose: "Filming", roadType: "Secondary Roads", location: "Av. Samora Machel, central section", hours: 4, hourlyRate: 30000, totalFee: 120000, status: "Awaiting Admin Approval", submittedDate: "2026-05-04", eventDate: "2026-05-18", paymentDeadline: "2026-05-14", notes: "TV commercial shoot. Night filming 22:00-02:00." },
   { id: "PRM-2026-007", applicant: "Maputo Marathon Committee", contactEmail: "marathon@maputo.gov.mz", contactPhone: "+258 86 321 6543", purpose: "Sporting Events", roadType: "Protocol Roads", location: "City centre circuit - Av. Julius Nyerere, Marginal, Av. Acordos de Lusaka", hours: 6, hourlyRate: 5000, totalFee: 30000, status: "Approved", submittedDate: "2026-04-15", eventDate: "2026-05-25", paymentDeadline: "2026-04-25" },
-  { id: "PRM-2026-008", applicant: "Infraestrutura Mocambique EP", contactEmail: "projetos@infra.gov.mz", contactPhone: "+258 82 456 7890", purpose: "Construction Works", roadType: "Tertiary Roads", location: "Rua dos Desportistas, Polana", hours: 10, hourlyRate: 3500, totalFee: 35000, status: "Pending", submittedDate: "2026-05-05", eventDate: "2026-05-22", paymentDeadline: "2026-05-15", notes: "Fibre optic cable installation." },
+  { id: "PRM-2026-008", applicant: "Infraestrutura Mocambique EP", contactEmail: "projetos@infra.gov.mz", contactPhone: "+258 82 456 7890", purpose: "Construction Works", roadType: "Tertiary Roads", location: "Rua dos Desportistas, Polana", hours: 10, hourlyRate: 3500, totalFee: 35000, status: "Awaiting Admin Approval", submittedDate: "2026-05-05", eventDate: "2026-05-22", paymentDeadline: "2026-05-15", notes: "Fibre optic cable installation." },
 ]
+
+const normalizePermitStatus = (status: string): Permit["status"] => {
+  const normalized = status.toUpperCase()
+  if (normalized === "APPROVED") return "Approved"
+  if (normalized === "REJECTED") return "Rejected"
+  return "Awaiting Admin Approval"
+}
+
+const calculateHours = (startAt: string, endAt: string) => {
+  const start = new Date(startAt).getTime()
+  const end = new Date(endAt).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0
+
+  return Math.max(1, Math.ceil((end - start) / 3600000))
+}
+
+const toPermitRow = (permit: RoadClosurePermit): Permit => {
+  const extra = permit as RoadClosurePermit & {
+    applicantEmail?: string | null
+    roadType?: string | null
+    location?: string | null
+    routeName?: string | null
+    hourlyRate?: number | null
+    totalFee?: number | null
+    rejectionReason?: string | null
+    notes?: string | null
+  }
+  const hours = calculateHours(permit.requestedStartAt, permit.requestedEndAt)
+  const hourlyRate = extra.hourlyRate ?? 0
+
+  return {
+    id: permit.id,
+    applicant: permit.applicantName,
+    contactEmail: extra.applicantEmail ?? "",
+    contactPhone: permit.applicantPhone ?? "",
+    purpose: permit.purpose,
+    roadType: extra.roadType ?? "Road Closure",
+    location: extra.location ?? extra.routeName ?? permit.routeId ?? "N/A",
+    hours,
+    hourlyRate,
+    totalFee: extra.totalFee ?? hourlyRate * hours,
+    status: normalizePermitStatus(permit.status),
+    submittedDate: permit.createdAt?.split("T")[0] ?? "N/A",
+    eventDate: permit.requestedStartAt?.split("T")[0] ?? "N/A",
+    paymentDeadline: permit.approvedAt?.split("T")[0] ?? "N/A",
+    rejectionReason: extra.rejectionReason ?? undefined,
+    notes: extra.notes ?? permit.conditions ?? undefined,
+  }
+}
 
 export function RoadClosurePermitsContent() {
   const [permits, setPermits] = useState<Permit[]>(mockPermits)
   const [isLoading, setIsLoading] = useState(false)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("Pending")
+  const [statusFilter, setStatusFilter] = useState("Awaiting Admin Approval")
   const [selectedPermit, setSelectedPermit] = useState<Permit | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isApproveOpen, setIsApproveOpen] = useState(false)
   const [isRejectOpen, setIsRejectOpen] = useState(false)
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false)
+  const [isDecidingPermit, setIsDecidingPermit] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
   const [form, setForm] = useState({ applicant: "", contactEmail: "", contactPhone: "", purpose: "", roadType: "", location: "", hours: "", eventDate: "", notes: "" })
   const [currentPage, setCurrentPage] = useState(1)
@@ -82,7 +130,32 @@ export function RoadClosurePermitsContent() {
   const previewRate = form.purpose && form.roadType ? (TARIFFS[form.purpose]?.[form.roadType] ?? 0) : 0
   const previewFee  = previewRate * (Number(form.hours) || 0)
 
-  const pendingCount  = permits.filter(p => p.status === "Pending").length
+  const loadPermits = async () => {
+    try {
+      setIsLoading(true)
+      const response = await RoadClosurePermitsApi.listRoadClosurePermits({
+        municipalityId: getStoredMunicipalityId(),
+        status: "PENDING_ADMIN_APPROVAL",
+      })
+      const apiPermits = response.data ?? response.content ?? []
+
+      if (apiPermits.length) {
+        setPermits(apiPermits.map(toPermitRow))
+      }
+    } catch (error) {
+      toast.error("Failed to load road closure permits", {
+        description: error instanceof Error ? error.message : "Permit list request failed",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadPermits()
+  }, [])
+
+  const pendingCount  = permits.filter(p => p.status === "Awaiting Admin Approval").length
   const approvedCount = permits.filter(p => p.status === "Approved").length
   const rejectedCount = permits.filter(p => p.status === "Rejected").length
   const totalRevenue  = permits.filter(p => p.status === "Approved").reduce((s, p) => s + p.totalFee, 0)
@@ -99,18 +172,76 @@ export function RoadClosurePermitsContent() {
   const endIndex = startIndex + itemsPerPage
   const paginatedPermits = filtered.slice(startIndex, endIndex)
 
-  const handleApprove = () => {
-    if (!selectedPermit) return
-    setPermits(prev => prev.map(p => p.id === selectedPermit.id ? { ...p, status: "Approved" as const } : p))
-    setIsApproveOpen(false); setIsDetailsOpen(false)
-    toast.success("Permit approved", { description: `${selectedPermit.id} is now active.` })
+  const handleViewDetails = async (permit: Permit) => {
+    setSelectedPermit(permit)
+    setIsDetailsOpen(true)
+    setIsDetailLoading(true)
+
+    try {
+      const response = await RoadClosurePermitsApi.getRoadClosurePermit(permit.id)
+      setSelectedPermit(toPermitRow(response.data))
+    } catch (error) {
+      toast.error("Failed to load permit details", {
+        description: getApiErrorMessage(error, "Permit detail request failed"),
+      })
+    } finally {
+      setIsDetailLoading(false)
+    }
   }
 
-  const handleReject = () => {
+  const getCurrentApprover = async () => {
+    const user = await userManager.getUser()
+    const profile = user?.profile
+
+    return (
+      profile?.name ||
+      profile?.preferred_username ||
+      profile?.email ||
+      "SystemAdmin"
+    )
+  }
+
+  const handleApprove = async () => {
+    if (!selectedPermit) return
+
+    try {
+      setIsDecidingPermit(true)
+      await RoadClosurePermitsApi.decideRoadClosurePermit(selectedPermit.id, {
+        decision: "APPROVED",
+        approvedBy: await getCurrentApprover(),
+      })
+      setPermits(prev => prev.map(p => p.id === selectedPermit.id ? { ...p, status: "Approved" as const } : p))
+      setIsApproveOpen(false); setIsDetailsOpen(false)
+      toast.success("Permit approved", { description: `${selectedPermit.id} is now active.` })
+    } catch (error) {
+      toast.error("Failed to approve permit", {
+        description: error instanceof Error ? error.message : "Approval request failed",
+      })
+    } finally {
+      setIsDecidingPermit(false)
+    }
+  }
+
+  const handleReject = async () => {
     if (!selectedPermit || !rejectionReason.trim()) return
-    setPermits(prev => prev.map(p => p.id === selectedPermit.id ? { ...p, status: "Rejected" as const, rejectionReason } : p))
-    setIsRejectOpen(false); setIsDetailsOpen(false); setRejectionReason("")
-    toast.error("Permit rejected", { description: `${selectedPermit.id} has been rejected.` })
+
+    try {
+      setIsDecidingPermit(true)
+      await RoadClosurePermitsApi.decideRoadClosurePermit(selectedPermit.id, {
+        decision: "REJECTED",
+        approvedBy: await getCurrentApprover(),
+        notes: rejectionReason.trim(),
+      })
+      setPermits(prev => prev.map(p => p.id === selectedPermit.id ? { ...p, status: "Rejected" as const, rejectionReason } : p))
+      setIsRejectOpen(false); setIsDetailsOpen(false); setRejectionReason("")
+      toast.error("Permit rejected", { description: `${selectedPermit.id} has been rejected.` })
+    } catch (error) {
+      toast.error("Failed to reject permit", {
+        description: error instanceof Error ? error.message : "Rejection request failed",
+      })
+    } finally {
+      setIsDecidingPermit(false)
+    }
   }
 
   const handleAddPermit = () => {
@@ -123,25 +254,24 @@ export function RoadClosurePermitsContent() {
       applicant: form.applicant, contactEmail: form.contactEmail, contactPhone: form.contactPhone,
       purpose: form.purpose, roadType: form.roadType, location: form.location,
       hours, hourlyRate: rate, totalFee: rate * hours,
-      status: "Pending", submittedDate: today, eventDate: form.eventDate, paymentDeadline: deadline,
+      status: "Awaiting Admin Approval", submittedDate: today, eventDate: form.eventDate, paymentDeadline: deadline,
       notes: form.notes || undefined,
     }
-    setPermits(prev => [np, ...prev])
+      setPermits(prev => [np, ...prev])
     setIsAddOpen(false)
     setForm({ applicant: "", contactEmail: "", contactPhone: "", purpose: "", roadType: "", location: "", hours: "", eventDate: "", notes: "" })
     toast.success("Permit submitted", { description: `${np.id} is pending review.` })
   }
 
   const handleRefresh = () => {
-    setIsLoading(true)
-    setTimeout(() => { setIsLoading(false); toast.info("Refreshed") }, 1500)
+    loadPermits()
   }
 
   const isFormValid = !!(form.applicant && form.contactEmail && form.purpose && form.roadType && form.location && Number(form.hours) > 0 && form.eventDate)
 
   const statusBadge = (status: string) => {
     if (status === "Approved") return <Badge className="bg-[#D6F0E0] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><CheckCircle className="h-3.5 w-3.5" />{status}</Badge>
-    if (status === "Pending")  return <Badge className="bg-[#DAA22A] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><Clock className="h-3.5 w-3.5" />{status}</Badge>
+    if (status === "Awaiting Admin Approval")  return <Badge className="bg-[#DAA22A] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><Clock className="h-3.5 w-3.5" />{status}</Badge>
     return <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1 gap-1"><XCircle className="h-3.5 w-3.5" />{status}</Badge>
   }
 
@@ -179,7 +309,7 @@ export function RoadClosurePermitsContent() {
               </SelectTrigger>
               <SelectContent className="text-base">
                 <SelectItem value="all" className="text-base">All ({permits.length})</SelectItem>
-                <SelectItem value="Pending" className="text-base">Pending ({pendingCount})</SelectItem>
+                <SelectItem value="Awaiting Admin Approval" className="text-base">Awaiting Admin Approval ({pendingCount})</SelectItem>
                 <SelectItem value="Approved" className="text-base">Approved ({approvedCount})</SelectItem>
                 <SelectItem value="Rejected" className="text-base">Rejected ({rejectedCount})</SelectItem>
               </SelectContent>
@@ -227,7 +357,7 @@ export function RoadClosurePermitsContent() {
                     <TableCell>{statusBadge(permit.status)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => { setSelectedPermit(permit); setIsDetailsOpen(true) }}><Eye className="h-5 w-5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => handleViewDetails(permit)}><Eye className="h-5 w-5" /></Button>
                         {permit.status === "Approved" && (
                           <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => { setSelectedPermit(permit); setIsInvoiceOpen(true) }}><Receipt className="h-5 w-5" /></Button>
                         )}
@@ -287,7 +417,7 @@ export function RoadClosurePermitsContent() {
                 {selectedPermit?.purpose} — {selectedPermit?.applicant}
               </ModalDescription>
             </div>
-            {selectedPermit?.status === "Pending" && (
+            {selectedPermit?.status === "Awaiting Admin Approval" && (
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setIsRejectOpen(true)} className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10">
                   <XCircle className="h-4 w-4 mr-2" />
@@ -303,7 +433,13 @@ export function RoadClosurePermitsContent() {
         </ModalHeader>
         
         <ModalBody>
-          {selectedPermit && (
+          {isDetailLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-8 w-1/3" />
+              <Skeleton className="h-[360px] w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : selectedPermit && (
             <div className="grid grid-cols-3 gap-6">
               {/* Left Column - Main Details */}
               <div className="col-span-2 space-y-6">
@@ -510,9 +646,6 @@ export function RoadClosurePermitsContent() {
           )}
         </ModalBody>
 
-        <ModalFooter>
-          {/* Footer can be used for additional actions if needed */}
-        </ModalFooter>
       </Modal>
 
       {/* ── Approve Dialog ── */}
@@ -523,8 +656,10 @@ export function RoadClosurePermitsContent() {
             <AlertDialogDescription className="text-base">Approve <strong>{selectedPermit?.id}</strong> for <strong>{selectedPermit?.applicant}</strong>? The permit will become active and an invoice for <strong>{selectedPermit?.totalFee.toLocaleString()} MZN</strong> will be issued.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="text-base h-11 px-6">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleApprove} className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-base h-11 px-6">Approve</AlertDialogAction>
+            <AlertDialogCancel disabled={isDecidingPermit} className="text-base h-11 px-6">Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={isDecidingPermit} onClick={handleApprove} className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-base h-11 px-6">
+              {isDecidingPermit ? "Approving..." : "Approve"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -538,8 +673,10 @@ export function RoadClosurePermitsContent() {
             <Textarea placeholder="Enter reason..." value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={4} className="text-base" />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRejectOpen(false)} className="text-base h-11 px-6">Cancel</Button>
-            <Button disabled={!rejectionReason.trim()} onClick={handleReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">Reject Permit</Button>
+            <Button variant="outline" disabled={isDecidingPermit} onClick={() => setIsRejectOpen(false)} className="text-base h-11 px-6">Cancel</Button>
+            <Button disabled={!rejectionReason.trim() || isDecidingPermit} onClick={handleReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">
+              {isDecidingPermit ? "Rejecting..." : "Reject Permit"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

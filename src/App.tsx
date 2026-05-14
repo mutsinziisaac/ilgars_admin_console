@@ -8,7 +8,7 @@ import { TransactionsPage } from "@/pages/transactions"
 import { RoadClosurePermitsContent } from "@/pages/road-closure-permits"
 import { AuthorizationsPage } from "@/pages/authorizations"
 import { AlertsPage } from "@/pages/alerts"
-import { StatisticsPage } from "@/pages/statistics"
+import { EnforcementPage } from "@/pages/enforcement"
 import { VehiclesPage } from "@/pages/vehicles"
 import { GPSTrackingPage } from "@/pages/gps-tracking"
 import { CamerasPage } from "@/pages/cameras"
@@ -24,11 +24,13 @@ import { VehicleClassificationPage } from "@/pages/vehicle-classification"
 import { WeightCategoriesPage } from "@/pages/weight-categories"
 import { TimeWindowsPage } from "@/pages/time-windows"
 import { Toaster } from "@/components/ui/sonner"
+import { useI18n } from "@/lib/i18n"
 
 // Callback handler component for Keycloak redirect
 function AuthCallback() {
   const auth = useAuth()
   const navigate = useNavigate()
+  const { t } = useI18n()
 
   useEffect(() => {
     // If authentication is complete, redirect to dashboard
@@ -41,7 +43,7 @@ function AuthCallback() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-        <p className="text-muted-foreground">Completing authentication...</p>
+        <p className="text-muted-foreground">{t("auth.callbackTitle")}</p>
       </div>
     </div>
   )
@@ -83,7 +85,7 @@ function AppContent() {
       case "alerts":
         return <AlertsPage />
       case "enforcement":
-        return <StatisticsPage />
+        return <EnforcementPage />
       case "vehicles":
         return <VehiclesPage />
       case "gps-tracking":

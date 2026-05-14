@@ -6,24 +6,30 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle, Loader2 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle, Loader2, Link2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { DevicesApi } from "@/lib/api/devices/api"
 import { useRegisterDevice } from "@/lib/api/devices/hooks"
 import { devicesKeys } from "@/lib/api/devices/queryKeys"
-import type { ActiveDeviceResponse, Device, RegisterDeviceRequest } from "@/lib/api/devices/schemas"
+import type { ActiveDeviceResponse, Device } from "@/lib/api/devices/schemas"
 import { VehiclesApi } from "@/lib/api/vehicles/api"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
 import type { Vehicle } from "@/lib/api/vehicles/schemas"
-import { ApiError } from "@/lib/api/errors"
+import { ApiError, getApiErrorMessage } from "@/lib/api/errors"
+import { buildDeviceAssignmentPayload } from "@/lib/api/devices/assignmentPayload"
+import { buildDefaultRegisterDevicePayload } from "@/lib/api/devices/registerPayload"
+import { getCurrentUsername } from "@/lib/auth/currentUser"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 
 // Maputo center coordinates
 const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
 const DEFAULT_ZOOM = 14
+const TRACKER_LOOKUP_PAGE_SIZE = 25
+const TRACKER_LOOKUP_STALE_MS = 5 * 60 * 1000
 
 // Mock camera data with real Maputo coordinates
 const mockCameras = [
@@ -212,28 +218,6 @@ function cameraIcon(status: string) {
   })
 }
 
-function buildRegisterDevicePayload(form: {
-  id: string
-}): RegisterDeviceRequest {
-  const timestamp = Date.now()
-  const deviceUid = form.id.trim()
-
-  return {
-    deviceUid,
-    serialNumber: `SER-${deviceUid || timestamp}`,
-    imei: `356000${timestamp}`,
-    simIccid: `892580${timestamp}`,
-    simMsisdn: `+25884${String(timestamp).slice(-7)}`,
-    vendor: "BMC",
-    model: "A1000",
-    providerKey: "bmc",
-    providerDeviceRef: `BMC-${deviceUid || timestamp}`,
-    protocol: "TCP",
-    firmwareVersion: "uat-1.0",
-    status: "REGISTERED",
-  }
-}
-
 export function DevicesPage() {
   const [activeTab, setActiveTab] = useState("tracking")
   const [searchQuery, setSearchQuery] = useState("")
@@ -247,7 +231,7 @@ export function DevicesPage() {
     isLoading: isVehiclesLoading,
     error: vehiclesError,
     refetch: refetchVehicles,
-  } = useVehiclesList({ page: 0, size: 100 })
+  } = useVehiclesList({ page: 0, size: TRACKER_LOOKUP_PAGE_SIZE })
   const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
   const activeDeviceQueries = useQueries({
     queries: vehicles.map((vehicle) => ({
@@ -268,7 +252,8 @@ export function DevicesPage() {
         }
       },
       enabled: Boolean(vehicle.id),
-      staleTime: 30_000,
+      staleTime: TRACKER_LOOKUP_STALE_MS,
+      refetchOnWindowFocus: false,
     })),
   })
 
@@ -287,13 +272,20 @@ export function DevicesPage() {
     ],
     [activeDeviceQueries, locallyAddedDevices, vehicles],
   )
-  const [selectedDevice, setSelectedDevice] = useState<AdminTrackingDevice | null>(null)
-  const [isDeviceDetailOpen, setIsDeviceDetailOpen] = useState(false)
-  const [isRestartConfirmOpen, setIsRestartConfirmOpen] = useState(false)
-  const [isToggleConfirmOpen, setIsToggleConfirmOpen] = useState(false)
-  const [isDeleteDeviceOpen, setIsDeleteDeviceOpen] = useState(false)
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
-  const [newDevice, setNewDevice] = useState({ id: "", vehicleId: "", plateNumber: "", vehicleType: "", owner: "" })
+  const [isAssignTrackerOpen, setIsAssignTrackerOpen] = useState(false)
+  const [isAssigningTracker, setIsAssigningTracker] = useState(false)
+  const [newDevice, setNewDevice] = useState({
+    id: "",
+    imei: "",
+    simCard: "",
+  })
+  const [assignmentForm, setAssignmentForm] = useState({
+    deviceId: "",
+    vehicleId: "",
+    plateNumber: "",
+    assignmentMode: "assign" as "assign" | "replace",
+  })
 
   // Camera state
   const [cameras, setCameras] = useState(mockCameras)
@@ -303,105 +295,96 @@ export function DevicesPage() {
   const [isToggleCameraOpen, setIsToggleCameraOpen] = useState(false)
   const [isDeleteCameraOpen, setIsDeleteCameraOpen] = useState(false)
 
-  // Device actions
-  const handleRestartDevice = () => {
-    setIsRestartConfirmOpen(false)
-    toast.success(`Device ${selectedDevice?.id} restart command sent`)
-  }
-
-  const handleToggleDevice = () => {
-    if (!selectedDevice) return
-    if (!locallyAddedDevices.some((device) => device.id === selectedDevice.id)) {
-      setIsToggleConfirmOpen(false)
-      toast.info("Device activation is controlled by tracker assignments in the backend")
-      return
-    }
-    const newStatus = selectedDevice.status === "Offline" ? "Active" : "Offline"
-    setLocallyAddedDevices(prev =>
-      prev.map(d => d.id === selectedDevice.id ? { ...d, status: newStatus } : d)
-    )
-    setIsToggleConfirmOpen(false)
-    toast.success(`Device ${selectedDevice.id} ${newStatus === "Offline" ? "deactivated" : "activated"}`)
-  }
-
-  const handleDeleteDevice = () => {
-    if (!selectedDevice) return
-    if (!locallyAddedDevices.some((device) => device.id === selectedDevice.id)) {
-      setIsDeleteDeviceOpen(false)
-      toast.info("Registered backend devices cannot be removed from this screen")
-      return
-    }
-    setLocallyAddedDevices(prev => prev.filter(d => d.id !== selectedDevice.id))
-    setIsDeleteDeviceOpen(false)
-    toast.success(`Device ${selectedDevice.id} removed`)
-  }
-
   const handleAddDevice = () => {
-    if (!newDevice.id.trim() || !newDevice.plateNumber.trim()) return
+    if (!newDevice.id.trim()) return
 
-    registerDeviceMutation.mutate(buildRegisterDevicePayload(newDevice), {
+    registerDeviceMutation.mutate(buildDefaultRegisterDevicePayload({
+      deviceUid: newDevice.id,
+      imei: newDevice.imei,
+      simMsisdn: newDevice.simCard,
+    }), {
       onSuccess: async (registeredDevice: Device) => {
         const backendDeviceId = registeredDevice.id || registeredDevice.deviceUid || newDevice.id.trim()
         const deviceId = registeredDevice.deviceUid || backendDeviceId
-        const plateNumber = newDevice.plateNumber.trim()
-        let vehicleId = newDevice.vehicleId.trim()
-        let resolvedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId || vehicle.plateNumber === plateNumber)
-        let assignmentSucceeded = false
-
-        if (!vehicleId) {
-          try {
-            const vehicleResponse = await VehiclesApi.lookupByPlate(plateNumber)
-            const vehicle = vehicleResponse.data as Vehicle
-            resolvedVehicle = vehicle
-            vehicleId = vehicle.id ?? ""
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Device registered, but no vehicle was found for that plate")
-          }
-        }
-
-        if (vehicleId) {
-          try {
-            await DevicesApi.assignDevice(backendDeviceId, {
-              vehicleId,
-              vehiclePlateSnapshot: plateNumber,
-              vehicleTruckNumberSnapshot: `TRK-${plateNumber}`,
-              assignedBy: "admin-console",
-              reason: "Tracker assignment from admin console",
-            })
-            assignmentSucceeded = true
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Device registered, but assignment failed")
-          }
-        }
-
-        setLocallyAddedDevices(prev => [...prev, {
-          id: deviceId,
-          backendDeviceId,
-          vehicleId: vehicleId || undefined,
-          plateNumber,
-          vehicleType: resolvedVehicle ? toVehicleDisplayName(resolvedVehicle) : newDevice.vehicleType.trim() || "Unassigned vehicle",
-          owner: resolvedVehicle ? toVehicleOwner(resolvedVehicle) : newDevice.owner.trim() || "Unassigned owner",
-          status: "Offline",
-          location: "Not yet assigned",
-          coordinates: "N/A",
-          latlng: MAPUTO_CENTER, // Default to Maputo center
-          speed: "N/A",
-          battery: "N/A",
-          signal: "Weak",
-          lastUpdate: "Just added"
-        }])
-        if (vehicleId) {
-          await queryClient.invalidateQueries({ queryKey: devicesKeys.activeByVehicle(vehicleId) })
-          await refetchVehicles()
-        }
         setIsAddDeviceOpen(false)
-        setNewDevice({ id: "", vehicleId: "", plateNumber: "", vehicleType: "", owner: "" })
-        toast.success(vehicleId && assignmentSucceeded ? `Device ${deviceId} registered and assigned successfully` : `Device ${deviceId} registered successfully`)
+        setNewDevice({ id: "", imei: "", simCard: "" })
+        setAssignmentForm((current) => ({ ...current, deviceId: backendDeviceId || deviceId }))
+        toast.success(`Tracker ${deviceId} registered successfully`)
       },
       onError: (error) => {
-        toast.error(error instanceof Error ? error.message : "Failed to register GPS device")
+        toast.error(getApiErrorMessage(error, "Failed to register GPS device"))
       },
     })
+  }
+
+  const handleAssignTracker = async () => {
+    const trackerId = assignmentForm.deviceId.trim()
+    const plateNumber = assignmentForm.plateNumber.trim()
+    let vehicleId = assignmentForm.vehicleId.trim()
+    let resolvedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId || vehicle.plateNumber === plateNumber)
+
+    if (!trackerId || !plateNumber) {
+      toast.error("Tracker ID and plate number are required")
+      return
+    }
+
+    setIsAssigningTracker(true)
+    try {
+      if (!vehicleId) {
+        const vehicleResponse = await VehiclesApi.lookupByPlate(plateNumber)
+        const vehicle = vehicleResponse.data as Vehicle
+        resolvedVehicle = vehicle
+        vehicleId = vehicle.id ?? ""
+      }
+
+      if (!vehicleId) {
+        toast.error("No vehicle was found for that plate")
+        return
+      }
+
+      const assignedBy = await getCurrentUsername()
+      const assignmentPayload = buildDeviceAssignmentPayload({
+        vehicleId,
+        plateNumber,
+        assignedBy,
+        mode: assignmentForm.assignmentMode,
+      })
+
+      if (assignmentForm.assignmentMode === "replace") {
+        await DevicesApi.replaceDeviceAssignment(trackerId, assignmentPayload)
+      } else {
+        await DevicesApi.assignDevice(trackerId, assignmentPayload)
+      }
+
+      await queryClient.invalidateQueries({ queryKey: devicesKeys.activeByVehicle(vehicleId) })
+      await refetchVehicles()
+      setLocallyAddedDevices(prev => [
+        ...prev.filter((device) => device.id !== trackerId && device.vehicleId !== vehicleId),
+        {
+          id: trackerId,
+          backendDeviceId: trackerId,
+          vehicleId,
+          plateNumber,
+          vehicleType: resolvedVehicle ? toVehicleDisplayName(resolvedVehicle) : "Unassigned vehicle",
+          owner: resolvedVehicle ? toVehicleOwner(resolvedVehicle) : "Unassigned owner",
+          status: "Active",
+          location: "Active tracker assigned",
+          coordinates: `${MAPUTO_CENTER[0]}, ${MAPUTO_CENTER[1]}`,
+          latlng: MAPUTO_CENTER,
+          speed: "N/A",
+          battery: "N/A",
+          signal: "Strong",
+          lastUpdate: "Just assigned"
+        },
+      ])
+      setIsAssignTrackerOpen(false)
+      setAssignmentForm({ deviceId: "", vehicleId: "", plateNumber: "", assignmentMode: "assign" })
+      toast.success(assignmentForm.assignmentMode === "replace" ? "Tracker assignment replaced successfully" : "Tracker assigned successfully")
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to assign tracker"))
+    } finally {
+      setIsAssigningTracker(false)
+    }
   }
 
   // Camera actions
@@ -432,7 +415,6 @@ export function DevicesPage() {
     device.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     device.owner.toLowerCase().includes(searchQuery.toLowerCase())
   )
-  const activeDeviceLookupError = activeDeviceQueries.find((query) => query.isError)?.error
 
   // Filter cameras
   const filteredCameras = cameras.filter(camera =>
@@ -473,6 +455,7 @@ export function DevicesPage() {
   const idleDevices = trackingDevices.filter(d => d.status === "Idle").length
   const offlineDevices = trackingDevices.filter(d => d.status === "Offline").length
   const lowBatteryDevices = trackingDevices.filter(d => parseInt(d.battery) < 20).length
+  const assignmentLookupsLoading = activeDeviceQueries.some((query) => query.isLoading || query.isFetching)
 
   const onlineCameras = cameras.filter(c => c.status === "Online").length
   const offlineCameras = cameras.filter(c => c.status === "Offline").length
@@ -653,13 +636,23 @@ export function DevicesPage() {
                   <CardDescription className="text-base">Vehicles enriched with active tracker assignments</CardDescription>
                 </div>
               <div className="flex items-center gap-3">
+                {assignmentLookupsLoading && (
+                  <Badge variant="outline" className="gap-2 px-3 py-1.5 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Syncing tracker assignments
+                  </Badge>
+                )}
                 <Button className="text-base h-11 px-6" onClick={() => setIsMapOpen(true)}>
                   <MapPin className="h-5 w-5 mr-2" />
                   View Map
                 </Button>
+                <Button variant="outline" className="text-base h-11 px-6" onClick={() => setIsAssignTrackerOpen(true)}>
+                  <Link2 className="h-5 w-5 mr-2" />
+                  Assign Tracker
+                </Button>
                 <Button className="text-base h-11 px-6" onClick={() => setIsAddDeviceOpen(true)}>
                   <Plus className="h-5 w-5 mr-2" />
-                  Add Device
+                  Register Tracker
                 </Button>
               </div>
               </div>
@@ -689,13 +682,12 @@ export function DevicesPage() {
                     <TableHead className="text-base">Battery</TableHead>
                     <TableHead className="text-base">Signal</TableHead>
                     <TableHead className="text-base">Status</TableHead>
-                    <TableHead className="text-right text-base">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isVehiclesLoading && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center text-base text-muted-foreground">
+                      <TableCell colSpan={8} className="py-10 text-center text-base text-muted-foreground">
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="h-5 w-5 animate-spin" />
                           Loading vehicles and tracker assignments
@@ -703,23 +695,26 @@ export function DevicesPage() {
                       </TableCell>
                     </TableRow>
                   )}
-                  {!isVehiclesLoading && Boolean(vehiclesError) && (
+                  {!isVehiclesLoading && assignmentLookupsLoading && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center text-base text-destructive">
-                        Failed to load vehicles for device tracking
+                      <TableCell colSpan={8} className="py-3 text-center text-sm text-muted-foreground">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Syncing tracker assignments
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
-                  {!isVehiclesLoading && !vehiclesError && Boolean(activeDeviceLookupError) && (
+                  {!isVehiclesLoading && Boolean(vehiclesError) && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-4 text-center text-sm text-[#B7791F]">
-                        Some tracker assignments could not be loaded. Vehicles without a readable assignment are shown as offline.
+                      <TableCell colSpan={8} className="py-10 text-center text-base text-destructive">
+                        Failed to load vehicles for device tracking
                       </TableCell>
                     </TableRow>
                   )}
                   {!isVehiclesLoading && !vehiclesError && filteredDevices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center text-base text-muted-foreground">
+                      <TableCell colSpan={8} className="py-10 text-center text-base text-muted-foreground">
                         No vehicles found for the current search.
                       </TableCell>
                     </TableRow>
@@ -756,45 +751,6 @@ export function DevicesPage() {
                         </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(device.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10">
-                              <MoreHorizontal className="h-5 w-5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="text-base">
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer"
-                              onClick={() => { setSelectedDevice(device); setIsDeviceDetailOpen(true) }}
-                            >
-                              <Eye className="h-4 w-4 mr-2" /> View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer"
-                              onClick={() => { setSelectedDevice(device); setIsRestartConfirmOpen(true) }}
-                            >
-                              <RefreshCw className="h-4 w-4 mr-2" /> Restart Device
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer"
-                              onClick={() => { setSelectedDevice(device); setIsToggleConfirmOpen(true) }}
-                            >
-                              {device.status === "Offline"
-                                ? <><Power className="h-4 w-4 mr-2" /> Activate</>
-                                : <><PowerOff className="h-4 w-4 mr-2" /> Deactivate</>
-                              }
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer text-destructive focus:text-destructive"
-                              onClick={() => { setSelectedDevice(device); setIsDeleteDeviceOpen(true) }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" /> Remove Device
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1002,104 +958,11 @@ export function DevicesPage() {
         </ModalBody>
       </Modal>
 
-      {/* ── GPS Device: View Details ── */}
-      <Modal open={isDeviceDetailOpen} onOpenChange={setIsDeviceDetailOpen} className="w-full max-w-lg">
-        <ModalHeader onClose={() => setIsDeviceDetailOpen(false)}>
-          <ModalTitle>Device Details</ModalTitle>
-          <ModalDescription>{selectedDevice?.id} — {selectedDevice?.plateNumber}</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          {selectedDevice && (
-            <div className="space-y-3 text-base">
-              {[
-                ["Device ID", selectedDevice.id],
-                ["Plate Number", selectedDevice.plateNumber],
-                ["Vehicle Type", selectedDevice.vehicleType],
-                ["Owner", selectedDevice.owner],
-                ["Location", selectedDevice.location],
-                ["Coordinates", selectedDevice.coordinates],
-                ["Speed", selectedDevice.speed],
-                ["Battery", selectedDevice.battery],
-                ["Signal", selectedDevice.signal],
-                ["Last Update", selectedDevice.lastUpdate],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-border pb-2">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="font-medium">{value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsDeviceDetailOpen(false)}>Close</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── GPS Device: Restart Confirm ── */}
-      <Modal open={isRestartConfirmOpen} onOpenChange={setIsRestartConfirmOpen} className="w-full max-w-md">
-        <ModalHeader onClose={() => setIsRestartConfirmOpen(false)}>
-          <ModalTitle>Restart Device</ModalTitle>
-          <ModalDescription>Send a restart command to this GPS device.</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <p className="text-base">Are you sure you want to restart <strong>{selectedDevice?.id}</strong> ({selectedDevice?.plateNumber})? The device will temporarily go offline.</p>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsRestartConfirmOpen(false)}>Cancel</Button>
-          <Button onClick={handleRestartDevice}><RefreshCw className="h-4 w-4 mr-2" />Restart</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── GPS Device: Toggle Activate/Deactivate ── */}
-      <Modal open={isToggleConfirmOpen} onOpenChange={setIsToggleConfirmOpen} className="w-full max-w-md">
-        <ModalHeader onClose={() => setIsToggleConfirmOpen(false)}>
-          <ModalTitle>{selectedDevice?.status === "Offline" ? "Activate Device" : "Deactivate Device"}</ModalTitle>
-          <ModalDescription>{selectedDevice?.id} — {selectedDevice?.plateNumber}</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <p className="text-base">
-            {selectedDevice?.status === "Offline"
-              ? `Activate device ${selectedDevice?.id}? It will resume tracking.`
-              : `Deactivate device ${selectedDevice?.id}? It will stop transmitting data.`}
-          </p>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsToggleConfirmOpen(false)}>Cancel</Button>
-          <Button
-            variant={selectedDevice?.status === "Offline" ? "default" : "destructive"}
-            onClick={handleToggleDevice}
-          >
-            {selectedDevice?.status === "Offline"
-              ? <><Power className="h-4 w-4 mr-2" />Activate</>
-              : <><PowerOff className="h-4 w-4 mr-2" />Deactivate</>}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── GPS Device: Delete Confirm ── */}
-      <Modal open={isDeleteDeviceOpen} onOpenChange={setIsDeleteDeviceOpen} className="w-full max-w-md">
-        <ModalHeader onClose={() => setIsDeleteDeviceOpen(false)}>
-          <ModalTitle>Remove Device</ModalTitle>
-          <ModalDescription>This action cannot be undone.</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="flex items-start gap-3 p-4 bg-destructive/10 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-            <p className="text-base">Permanently remove device <strong>{selectedDevice?.id}</strong> ({selectedDevice?.plateNumber}) from the system?</p>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsDeleteDeviceOpen(false)}>Cancel</Button>
-          <Button variant="destructive" onClick={handleDeleteDevice}><Trash2 className="h-4 w-4 mr-2" />Remove</Button>
-        </ModalFooter>
-      </Modal>
-
       {/* ── GPS Device: Add New ── */}
       <Modal open={isAddDeviceOpen} onOpenChange={setIsAddDeviceOpen} className="w-full max-w-md">
         <ModalHeader onClose={() => setIsAddDeviceOpen(false)}>
-          <ModalTitle>Add GPS Device</ModalTitle>
-          <ModalDescription>Register a new tracking device in the system.</ModalDescription>
+          <ModalTitle>Register Tracker</ModalTitle>
+          <ModalDescription>Create the tracker record in the devices service.</ModalDescription>
         </ModalHeader>
         <ModalBody>
           <div className="space-y-4">
@@ -1108,26 +971,18 @@ export function DevicesPage() {
               <Input placeholder="e.g. GPS-006" value={newDevice.id} onChange={e => setNewDevice(p => ({ ...p, id: e.target.value }))} className="h-11 text-base" />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Vehicle ID</label>
-              <Input placeholder="Optional backend vehicle ID" value={newDevice.vehicleId} onChange={e => setNewDevice(p => ({ ...p, vehicleId: e.target.value }))} className="h-11 text-base" />
+              <label className="text-sm font-medium">IMEI Number</label>
+              <Input placeholder="e.g. 3560001715600000000" value={newDevice.imei} onChange={e => setNewDevice(p => ({ ...p, imei: e.target.value }))} className="h-11 text-base" />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Plate Number</label>
-              <Input placeholder="e.g. FFF-678-MP" value={newDevice.plateNumber} onChange={e => setNewDevice(p => ({ ...p, plateNumber: e.target.value }))} className="h-11 text-base" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Vehicle Type</label>
-              <Input placeholder="e.g. Heavy Truck" value={newDevice.vehicleType} onChange={e => setNewDevice(p => ({ ...p, vehicleType: e.target.value }))} className="h-11 text-base" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Owner</label>
-              <Input placeholder="e.g. Maputo Logistics" value={newDevice.owner} onChange={e => setNewDevice(p => ({ ...p, owner: e.target.value }))} className="h-11 text-base" />
+              <label className="text-sm font-medium">SIM Card Number</label>
+              <Input placeholder="e.g. +258 84 123 4567" value={newDevice.simCard} onChange={e => setNewDevice(p => ({ ...p, simCard: e.target.value }))} className="h-11 text-base" />
             </div>
           </div>
         </ModalBody>
         <ModalFooter>
           <Button variant="outline" onClick={() => setIsAddDeviceOpen(false)} disabled={registerDeviceMutation.isPending}>Cancel</Button>
-          <Button onClick={handleAddDevice} disabled={registerDeviceMutation.isPending || !newDevice.id.trim() || !newDevice.plateNumber.trim()}>
+          <Button onClick={handleAddDevice} disabled={registerDeviceMutation.isPending || !newDevice.id.trim()}>
             {registerDeviceMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1136,7 +991,61 @@ export function DevicesPage() {
             ) : (
               <>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Device
+                Register Tracker
+              </>
+            )}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal open={isAssignTrackerOpen} onOpenChange={setIsAssignTrackerOpen} className="w-full max-w-md">
+        <ModalHeader onClose={() => setIsAssignTrackerOpen(false)}>
+          <ModalTitle>Assign Tracker</ModalTitle>
+          <ModalDescription>Link a registered tracker to a vehicle, or replace the active tracker assignment.</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Tracker ID</label>
+              <Input placeholder="e.g. TRK-1715600000000" value={assignmentForm.deviceId} onChange={e => setAssignmentForm(p => ({ ...p, deviceId: e.target.value }))} className="h-11 text-base" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Vehicle ID</label>
+              <Input placeholder="Optional backend vehicle ID" value={assignmentForm.vehicleId} onChange={e => setAssignmentForm(p => ({ ...p, vehicleId: e.target.value }))} className="h-11 text-base" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Plate Number</label>
+              <Input placeholder="e.g. FFF-678-MP" value={assignmentForm.plateNumber} onChange={e => setAssignmentForm(p => ({ ...p, plateNumber: e.target.value }))} className="h-11 text-base" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Assignment Action</label>
+              <Select
+                value={assignmentForm.assignmentMode}
+                onValueChange={(value) => setAssignmentForm(p => ({ ...p, assignmentMode: value as "assign" | "replace" }))}
+              >
+                <SelectTrigger className="h-11 w-full text-base">
+                  <SelectValue placeholder="Choose assignment action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="assign">Assign tracker to vehicle</SelectItem>
+                  <SelectItem value="replace">Replace active tracker assignment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setIsAssignTrackerOpen(false)} disabled={isAssigningTracker}>Cancel</Button>
+          <Button onClick={handleAssignTracker} disabled={isAssigningTracker || !assignmentForm.deviceId.trim() || !assignmentForm.plateNumber.trim()}>
+            {isAssigningTracker ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Assigning
+              </>
+            ) : (
+              <>
+                <Link2 className="h-4 w-4 mr-2" />
+                Assign Tracker
               </>
             )}
           </Button>
