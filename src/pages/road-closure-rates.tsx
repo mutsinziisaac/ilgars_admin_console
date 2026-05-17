@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Plus, Loader2, AlertCircle, Info, Edit } from "lucide-react"
+import { ArrowLeft, Plus, Loader2, AlertCircle, Info, Edit } from "lucide-react"
 import { toast } from "sonner"
 import {
   useCreateRoadClosureRate,
@@ -237,6 +236,107 @@ export function RoadClosureRatesPage() {
 
   const title = closureType === "FULL_CLOSURE" ? "Road Closure" : "Partial Road Restriction"
 
+  if (isCreateOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsCreateOpen(false)}
+            disabled={isSubmittingRates}
+            aria-label="Back to road closure rates"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-semibold text-foreground">
+              {hasRatesForClosureType ? "Edit" : "Create"} {title} Rates
+            </h1>
+            <p className="text-base text-muted-foreground">
+              {hasRatesForClosureType
+                ? "Update the backend road-closure-rate records for this closure type."
+                : "Create one backend road-closure-rate record for each purpose and road type."}
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Rate Context</CardTitle>
+            <CardDescription className="text-base">
+              Configure hourly rates for {getMunicipalityDisplayName(formMunicipalityId)}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Label className="text-base">Municipality</Label>
+            <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+              {getMunicipalityDisplayName(formMunicipalityId)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">{title} - Fee Per Hour</CardTitle>
+            <CardDescription className="text-base">
+              Enter MZN hourly rates by purpose and road type.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-hidden rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-base font-semibold">Purpose</TableHead>
+                    {roadTypes.map((roadType) => (
+                      <TableHead key={roadType.value} className="text-center text-base font-semibold">
+                        {roadType.label}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {purposes.map((purpose) => (
+                    <TableRow key={purpose.value}>
+                      <TableCell className="font-medium text-base">{purpose.label}</TableCell>
+                      {roadTypes.map((roadType) => (
+                        <TableCell key={roadType.value} className="text-center">
+                          <Input
+                            type="number"
+                            value={draftRates[purpose.value][roadType.value]}
+                            onChange={(event) => updateDraftRate(purpose.value, roadType.value, event.target.value)}
+                            className="h-10 min-w-[140px] text-center"
+                          />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-between gap-4">
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={isSubmittingRates}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateRates} disabled={isSubmittingRates}>
+            {isSubmittingRates ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                {hasRatesForClosureType ? "Saving..." : "Creating..."}
+              </>
+            ) : (
+              hasRatesForClosureType ? "Save Rates" : "Create Rates"
+            )}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -357,71 +457,6 @@ export function RoadClosureRatesPage() {
         </CardContent>
       </Card>
 
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-5xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>{hasRatesForClosureType ? "Edit" : "Create"} {title} Rates</ModalTitle>
-          <ModalDescription>
-            {hasRatesForClosureType
-              ? "Updates the backend road-closure-rate records for this closure type."
-              : "Creates one backend road-closure-rate record for each purpose and road type."}
-          </ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-base">Municipality</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
-                {getMunicipalityDisplayName(formMunicipalityId)}
-              </div>
-            </div>
-
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-base font-semibold">Purpose</TableHead>
-                  {roadTypes.map((roadType) => (
-                    <TableHead key={roadType.value} className="text-base font-semibold text-center">
-                      {roadType.label}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {purposes.map((purpose) => (
-                  <TableRow key={purpose.value}>
-                    <TableCell className="font-medium text-base">{purpose.label}</TableCell>
-                    {roadTypes.map((roadType) => (
-                      <TableCell key={roadType.value} className="text-center">
-                        <Input
-                          type="number"
-                          value={draftRates[purpose.value][roadType.value]}
-                          onChange={(event) => updateDraftRate(purpose.value, roadType.value, event.target.value)}
-                          className="h-10 text-center"
-                        />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={isSubmittingRates}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreateRates} disabled={isSubmittingRates}>
-            {isSubmittingRates ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {hasRatesForClosureType ? "Saving..." : "Creating..."}
-              </>
-            ) : (
-              hasRatesForClosureType ? "Save Rates" : "Create Rates"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
     </div>
   )
 }

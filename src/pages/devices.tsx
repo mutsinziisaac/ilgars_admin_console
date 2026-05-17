@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle, Loader2, Link2 } from "lucide-react"
+import { ArrowLeft, Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle, Loader2, Link2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -460,7 +460,7 @@ export function DevicesPage() {
   const onlineCameras = cameras.filter(c => c.status === "Online").length
   const offlineCameras = cameras.filter(c => c.status === "Offline").length
 
-  // Initialize Leaflet map when modal opens
+  // Initialize Leaflet map when map page opens
   useEffect(() => {
     if (!isMapOpen || !mapContainerRef.current || mapRef.current) return
 
@@ -560,6 +560,59 @@ export function DevicesPage() {
       }
     }
   }, [isMapOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isMapOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={() => setIsMapOpen(false)} className="mt-1">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-4xl font-semibold text-foreground">Device Location Map - Maputo</h1>
+            <p className="text-lg text-muted-foreground">View GPS tracking devices and cameras across Maputo.</p>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
+              <div ref={mapContainerRef} className="h-full w-full" />
+
+              <div className="absolute top-4 right-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+                <h3 className="mb-3 text-sm font-semibold">Legend</h3>
+                <div className="space-y-2">
+                  <div className="mb-1 text-xs font-semibold text-gray-600">GPS Devices</div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#5B8C5A]" />
+                    <span className="text-sm">Active ({activeDevices})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#DAA22A]" />
+                    <span className="text-sm">Idle ({idleDevices})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#E5533D]" />
+                    <span className="text-sm">Offline ({offlineDevices})</span>
+                  </div>
+                  <div className="my-2 border-t border-gray-200" />
+                  <div className="mb-1 text-xs font-semibold text-gray-600">Cameras</div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#5B8C5A]" />
+                    <span className="text-sm">Online ({onlineCameras})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#E5533D]" />
+                    <span className="text-sm">Offline ({offlineCameras})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -913,50 +966,6 @@ export function DevicesPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Map Modal */}
-      <Modal open={isMapOpen} onOpenChange={setIsMapOpen} className="w-[90vw] max-w-7xl">
-        <ModalHeader onClose={() => setIsMapOpen(false)}>
-          <ModalTitle>Device Location Map - Maputo</ModalTitle>
-        </ModalHeader>
-        
-        <ModalBody>
-          <div className="relative w-full h-[70vh] rounded-lg overflow-hidden">
-            {/* Leaflet Map Container */}
-            <div ref={mapContainerRef} className="w-full h-full" />
-            
-            {/* Legend */}
-            <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg z-[1000]">
-              <h3 className="font-semibold text-sm mb-3">Legend</h3>
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-gray-600 mb-1">GPS Devices</div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div>
-                  <span className="text-sm">Active ({activeDevices})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#DAA22A]"></div>
-                  <span className="text-sm">Idle ({idleDevices})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#E5533D]"></div>
-                  <span className="text-sm">Offline ({offlineDevices})</span>
-                </div>
-                <div className="border-t border-gray-200 my-2"></div>
-                <div className="text-xs font-semibold text-gray-600 mb-1">Cameras</div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div>
-                  <span className="text-sm">Online ({onlineCameras})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#E5533D]"></div>
-                  <span className="text-sm">Offline ({offlineCameras})</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ModalBody>
-      </Modal>
 
       {/* ── GPS Device: Add New ── */}
       <Modal open={isAddDeviceOpen} onOpenChange={setIsAddDeviceOpen} className="w-full max-w-md">

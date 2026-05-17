@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalBody } from "@/components/ui/modal"
-import { Camera, MapPin, Video, Eye, Search, Map } from "lucide-react"
+import { ArrowLeft, Camera, MapPin, Video, Eye, Search, Map } from "lucide-react"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 
@@ -131,7 +130,7 @@ export function CamerasPage() {
   const onlineCameras = cameras.filter(c => c.status === "Online").length
   const offlineCameras = cameras.filter(c => c.status === "Offline").length
 
-  // Initialize Leaflet map when modal opens
+  // Initialize Leaflet map when map page opens
   useEffect(() => {
     if (!isMapOpen || !mapContainerRef.current || mapRef.current) return
 
@@ -197,6 +196,44 @@ export function CamerasPage() {
       }
     }
   }, [isMapOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isMapOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={() => setIsMapOpen(false)} className="mt-1">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-4xl font-semibold text-foreground">Camera Locations - Maputo</h1>
+            <p className="text-lg text-muted-foreground">View installed ANPR and traffic monitoring cameras on the map.</p>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
+              <div ref={mapContainerRef} className="h-full w-full" />
+
+              <div className="absolute top-4 right-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+                <h3 className="mb-3 text-sm font-semibold">Cameras</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#5B8C5A]" />
+                    <span className="text-sm">Online ({onlineCameras})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#E5533D]" />
+                    <span className="text-sm">Offline ({offlineCameras})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -329,33 +366,6 @@ export function CamerasPage() {
         </CardContent>
       </Card>
 
-      {/* Map Modal */}
-      <Modal open={isMapOpen} onOpenChange={setIsMapOpen} className="w-[90vw] max-w-7xl">
-        <ModalHeader onClose={() => setIsMapOpen(false)}>
-          <ModalTitle>Camera Locations - Maputo</ModalTitle>
-        </ModalHeader>
-        
-        <ModalBody>
-          <div className="relative w-full h-[70vh] rounded-lg overflow-hidden">
-            <div ref={mapContainerRef} className="w-full h-full" />
-            
-            {/* Legend */}
-            <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg z-[1000]">
-              <h3 className="font-semibold text-sm mb-3">Cameras</h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#5B8C5A]"></div>
-                  <span className="text-sm">Online ({onlineCameras})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-[#E5533D]"></div>
-                  <span className="text-sm">Offline ({offlineCameras})</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ModalBody>
-      </Modal>
     </div>
   )
 }

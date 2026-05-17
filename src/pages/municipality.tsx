@@ -6,15 +6,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Building2, MapPin, Clock, Plus, Edit, CheckCircle, XCircle, Upload, Loader2, AlertCircle, Search } from "lucide-react"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ArrowLeft, Building2, MapPin, Clock, Plus, Edit, CheckCircle, XCircle, Upload, Loader2, AlertCircle, Search } from "lucide-react"
 import L from "leaflet"
 import { toast } from "sonner"
 import { MunicipalitiesApi } from "@/lib/api"
 import type { BoundaryVersion, Municipality } from "@/lib/api"
-import {
-  BOUNDARY_VERSIONS_STORAGE_KEY_PREFIX,
-} from "@/lib/api/constants"
+import { BOUNDARY_VERSIONS_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
 import {
   getStoredMunicipalities,
   getStoredMunicipality,
@@ -51,6 +49,14 @@ const storeBoundaryVersions = (municipalityId: string, boundaryVersions: Boundar
   )
 }
 
+const compactJson = (value: string) => {
+  try {
+    return JSON.stringify(JSON.parse(value))
+  } catch {
+    return value
+  }
+}
+
 const isMunicipality = (value: unknown): value is Municipality => {
   if (!value || typeof value !== "object") return false
 
@@ -63,6 +69,13 @@ const getBoundaryVersions = async (municipalityId: string, signal?: AbortSignal)
   return response.data ?? response.content ?? response.items ?? []
 }
 
+type LocallyTrackedBoundaryVersion = BoundaryVersion & {
+  activationConfirmed?: boolean
+}
+
+const hasConfirmedBoundaryActivation = (boundary: BoundaryVersion) =>
+  Boolean((boundary as LocallyTrackedBoundaryVersion).activationConfirmed)
+
 const mergeBoundaryVersions = (
   incoming: BoundaryVersion[],
   fallback: BoundaryVersion[] = [],
@@ -74,11 +87,27 @@ const mergeBoundaryVersions = (
   })
 
   incoming.forEach((boundary) => {
-    byId.set(boundary.id, boundary)
+    const cachedBoundary = byId.get(boundary.id)
+    const activationConfirmed =
+      hasConfirmedBoundaryActivation(cachedBoundary ?? boundary) ||
+      hasConfirmedBoundaryActivation(boundary)
+
+    byId.set(boundary.id, {
+      ...cachedBoundary,
+      ...boundary,
+      active: activationConfirmed,
+      activatedAt: activationConfirmed
+        ? (cachedBoundary?.activatedAt ?? boundary.activatedAt ?? new Date().toISOString().split("T")[0])
+        : null,
+      activationConfirmed,
+    } as LocallyTrackedBoundaryVersion)
   })
 
   return Array.from(byId.values())
 }
+
+const isBoundaryVersionActivated = (boundary: BoundaryVersion) =>
+  hasConfirmedBoundaryActivation(boundary)
 
 const isCancelledRequest = (error: unknown, signal?: AbortSignal) => {
   if (signal?.aborted) return true
@@ -166,6 +195,30 @@ const createBoundaryGeoJson = (points: [number, number][]) => {
   })
 }
 
+const createBoundaryVertexIcon = (index: number) =>
+  L.divIcon({
+    html: `
+      <div style="
+        display:flex;
+        height:24px;
+        width:24px;
+        align-items:center;
+        justify-content:center;
+        border-radius:999px;
+        border:2px solid #ffffff;
+        background:#5B8C5A;
+        color:#ffffff;
+        font-size:11px;
+        font-weight:700;
+        box-shadow:0 6px 16px rgba(0,0,0,.32);
+        cursor:grab;
+      ">${index + 1}</div>
+    `,
+    className: "",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  })
+
 const normalizeConfiguration = (
   response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
 ): { municipality?: Municipality; boundaryVersions: BoundaryVersion[] } => {
@@ -197,6 +250,7 @@ export function MunicipalityPage() {
   const boundaryMapContainerRef = useRef<HTMLDivElement | null>(null)
   const boundaryMapRef = useRef<L.Map | null>(null)
   const boundaryLayerRef = useRef<L.LayerGroup | null>(null)
+  const boundaryDraftPointsRef = useRef<[number, number][]>([])
   const [municipality, setMunicipality] = useState<Municipality | null>(() => getStoredMunicipality())
   const [municipalities, setMunicipalities] = useState<Municipality[]>(() => getStoredMunicipalities())
   const [municipalitySearch, setMunicipalitySearch] = useState("")
@@ -405,7 +459,7 @@ export function MunicipalityPage() {
     if (!isAddBoundaryOpen || !boundaryMapContainerRef.current || boundaryMapRef.current) return
 
     const map = L.map(boundaryMapContainerRef.current, {
-      center: boundaryDraftPoints[0] ?? MAPUTO_CENTER,
+      center: MAPUTO_CENTER,
       zoom: 11,
       zoomControl: true,
       attributionControl: true,
@@ -429,24 +483,34 @@ export function MunicipalityPage() {
       boundaryMapRef.current = null
       boundaryLayerRef.current = null
     }
-  }, [boundaryDraftPoints, isAddBoundaryOpen])
+  }, [isAddBoundaryOpen])
 
   useEffect(() => {
     const map = boundaryMapRef.current
     const layer = boundaryLayerRef.current
     if (!isAddBoundaryOpen || !map || !layer) return
 
+    boundaryDraftPointsRef.current = boundaryDraftPoints
     layer.clearLayers()
 
     boundaryDraftPoints.forEach((point, index) => {
-      L.circleMarker(point, {
-        radius: 5,
-        color: "#FFFFFF",
-        weight: 2,
-        fillColor: "#5B8C5A",
-        fillOpacity: 1,
+      L.marker(point, {
+        draggable: true,
+        icon: createBoundaryVertexIcon(index),
       })
-        .bindTooltip(String(index + 1), { permanent: true, direction: "top", offset: [0, -6] })
+        .on("dragstart", () => {
+          map.dragging.disable()
+        })
+        .on("dragend", (event) => {
+          const marker = event.target as L.Marker
+          const nextPoint = marker.getLatLng()
+          map.dragging.enable()
+          setBoundaryDraftPoints((points) =>
+            points.map((currentPoint, currentIndex) =>
+              currentIndex === index ? [nextPoint.lat, nextPoint.lng] : currentPoint
+            )
+          )
+        })
         .addTo(layer)
     })
 
@@ -459,12 +523,40 @@ export function MunicipalityPage() {
     }
 
     if (boundaryDraftPoints.length >= 3) {
-      L.polygon(boundaryDraftPoints, {
+      const polygon = L.polygon(boundaryDraftPoints, {
         color: "#5B8C5A",
         weight: 3,
         fillColor: "#5B8C5A",
         fillOpacity: 0.25,
       }).addTo(layer)
+
+      polygon.on("mouseover", () => {
+        const element = polygon.getElement() as HTMLElement | undefined
+        if (element) element.style.cursor = "move"
+      })
+
+      polygon.on("mousedown", (event: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(event)
+        const startLatLng = event.latlng
+        const originalPoints = boundaryDraftPointsRef.current
+        map.dragging.disable()
+
+        const handleMouseMove = (moveEvent: L.LeafletMouseEvent) => {
+          const latDelta = moveEvent.latlng.lat - startLatLng.lat
+          const lngDelta = moveEvent.latlng.lng - startLatLng.lng
+          setBoundaryDraftPoints(
+            originalPoints.map(([lat, lng]) => [lat + latDelta, lng + lngDelta])
+          )
+        }
+
+        const handleMouseUp = () => {
+          map.off("mousemove", handleMouseMove)
+          map.dragging.enable()
+        }
+
+        map.on("mousemove", handleMouseMove)
+        map.once("mouseup", handleMouseUp)
+      })
     }
 
     if (boundaryDraftPoints.length) {
@@ -493,7 +585,7 @@ export function MunicipalityPage() {
   }
 
   const openBoundaryModal = () => {
-    const currentBoundary = boundaries.find((boundary) => boundary.active) ?? boundaries[0]
+    const currentBoundary = boundaries.find(isBoundaryVersionActivated) ?? boundaries[0]
 
     if (currentBoundary) {
       setEditingBoundaryId(currentBoundary.id)
@@ -510,9 +602,9 @@ export function MunicipalityPage() {
         version: "v1",
         displayName: "Maputo GeoJSON Boundary",
         format: "GEOJSON",
-        boundaryData: defaultBoundaryData,
+        boundaryData: "",
       })
-      setBoundaryDraftPoints(extractPolygonLatLngs(defaultBoundaryData))
+      setBoundaryDraftPoints([])
     }
 
     setIsAddBoundaryOpen(true)
@@ -542,7 +634,7 @@ export function MunicipalityPage() {
     toast.success("Drawn polygon copied to GeoJSON data")
   }
 
-  const handleAddBoundary = async () => {
+  const handleAddBoundary = async (activateAfterCreate = false) => {
     if (!municipality?.id) {
       toast.error("Create a municipality before adding a boundary")
       return
@@ -583,8 +675,35 @@ export function MunicipalityPage() {
         format: boundaryForm.format,
         boundaryData: boundaryForm.boundaryData,
       })
-      const createdBoundary = response.data
-      const nextBoundaries = mergeBoundaryVersions([createdBoundary], boundaries)
+      let createdBoundary = {
+        ...response.data,
+        active: false,
+        activatedAt: null,
+        activationConfirmed: false,
+      }
+
+      if (activateAfterCreate) {
+        const activationResponse = await MunicipalitiesApi.activateBoundaryVersion(createdBoundary.id)
+        createdBoundary = {
+          ...createdBoundary,
+          ...activationResponse.data,
+          active: true,
+          activatedAt: activationResponse.data.activatedAt || new Date().toISOString().split('T')[0],
+          activationConfirmed: true,
+        }
+      }
+
+      const nextBoundaries = activateAfterCreate
+        ? mergeBoundaryVersions(
+            [createdBoundary],
+          boundaries.map((boundary) => ({
+            ...boundary,
+            active: false,
+            activatedAt: null,
+            activationConfirmed: false,
+          })),
+        )
+        : mergeBoundaryVersions([createdBoundary], boundaries)
       setBoundaries(nextBoundaries)
       storeBoundaryVersions(municipality.id, nextBoundaries)
       setIsAddBoundaryOpen(false)
@@ -594,7 +713,7 @@ export function MunicipalityPage() {
         format: "GEOJSON",
         boundaryData: defaultBoundaryData,
       })
-      toast.success("Boundary version created successfully")
+      toast.success(activateAfterCreate ? "Boundary version created and activated" : "Boundary version created successfully")
       await loadMunicipalityFromDb(municipality.id, undefined, nextBoundaries)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create boundary")
@@ -613,7 +732,7 @@ export function MunicipalityPage() {
       setBoundaryForm({
         ...boundaryForm,
         displayName: boundaryForm.displayName || file.name.replace(/\.(geo)?json$/i, ""),
-        boundaryData,
+        boundaryData: compactJson(boundaryData),
       })
       if (draftPoints.length) {
         setBoundaryDraftPoints(draftPoints)
@@ -635,12 +754,13 @@ export function MunicipalityPage() {
       const nextBoundaries = boundaries.map(b => ({
         ...b,
         active: b.id === boundaryId,
-        activatedAt: b.id === boundaryId ? (response.data.activatedAt || new Date().toISOString().split('T')[0]) : b.activatedAt
+        activatedAt: b.id === boundaryId ? (response.data.activatedAt || new Date().toISOString().split('T')[0]) : null,
+        activationConfirmed: b.id === boundaryId,
       }))
       setBoundaries(nextBoundaries)
       storeBoundaryVersions(municipality?.id ?? getStoredMunicipalityId(), nextBoundaries)
       if (municipality?.id) {
-        await loadMunicipalityFromDb(municipality.id)
+        await loadMunicipalityFromDb(municipality.id, undefined, nextBoundaries)
       }
       toast.success("Boundary version activated")
     } catch (error) {
@@ -699,6 +819,196 @@ export function MunicipalityPage() {
       )
     : municipalities
   const hasBoundary = boundaries.length > 0
+  const hasActivatedBoundary = boundaries.some(isBoundaryVersionActivated)
+  const getMunicipalityActiveStatus = (item: Municipality) => {
+    if (item.id === municipality?.id) {
+      return hasActivatedBoundary
+    }
+
+    return getStoredBoundaryVersions(item.id).some(isBoundaryVersionActivated)
+  }
+
+  if (isAddBoundaryOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setEditingBoundaryId(null)
+              setIsAddBoundaryOpen(false)
+            }}
+            disabled={isCreatingBoundary}
+            aria-label="Back to municipality configuration"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-semibold text-foreground">
+              {editingBoundaryId ? "Edit Boundary" : "Add Boundary Version"}
+            </h1>
+            <p className="text-base text-muted-foreground">
+              {editingBoundaryId
+                ? `Update the displayed boundary details for ${municipality?.name ?? "this municipality"}`
+                : `Create a GeoJSON boundary version for ${municipality?.name ?? "this municipality"}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Boundary Details</CardTitle>
+              <CardDescription className="text-base">
+                Set the boundary version and display name used across municipality configuration.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="version" className="text-base">Version Code *</Label>
+                  <Input
+                    id="version"
+                    value={boundaryForm.version}
+                    onChange={(e) => setBoundaryForm({ ...boundaryForm, version: e.target.value })}
+                    placeholder="e.g., v1"
+                    className="text-base h-11"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="displayName" className="text-base">Display Name *</Label>
+                  <Input
+                    id="displayName"
+                    value={boundaryForm.displayName}
+                    onChange={(e) => setBoundaryForm({ ...boundaryForm, displayName: e.target.value })}
+                    placeholder="e.g., Maputo GeoJSON Boundary"
+                    className="text-base h-11"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl">Map Boundary</CardTitle>
+                  <CardDescription className="text-base">
+                    Start with point A, click point B, then keep clicking around the municipality. Drag points to adjust.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="w-fit">
+                  {boundaryDraftPoints.length} points
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="h-[480px] overflow-hidden rounded-md border border-border">
+                <div ref={boundaryMapContainerRef} className="h-full w-full" />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <Button type="button" variant="outline" onClick={handleLoadGeoJsonOnMap}>
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Load GeoJSON
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setBoundaryDraftPoints((points) => points.slice(0, -1))}
+                  disabled={!boundaryDraftPoints.length}
+                >
+                  Undo Point
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setBoundaryDraftPoints([])}
+                  disabled={!boundaryDraftPoints.length}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Clear Map
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleApplyDrawnBoundary}
+                  disabled={boundaryDraftPoints.length < 3}
+                >
+                  Apply Polygon
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">GeoJSON Data</CardTitle>
+              <CardDescription className="text-base">
+                Paste a GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection, or upload a .geojson file.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                id="boundaryData"
+                value={boundaryForm.boundaryData}
+                onChange={(e) => setBoundaryForm({ ...boundaryForm, boundaryData: e.target.value })}
+                onBlur={() => setBoundaryForm((current) => ({ ...current, boundaryData: compactJson(current.boundaryData) }))}
+                placeholder={defaultBoundaryData}
+                rows={1}
+                wrap="off"
+                className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
+              />
+
+              <div className="flex items-center gap-3">
+                <input
+                  ref={boundaryFileInputRef}
+                  type="file"
+                  accept=".geojson,.json,application/geo+json,application/json"
+                  className="hidden"
+                  onChange={(event) => handleBoundaryFileUpload(event.target.files?.[0])}
+                />
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  type="button"
+                  onClick={() => boundaryFileInputRef.current?.click()}
+                  disabled={isCreatingBoundary}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload GeoJSON File
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-between gap-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingBoundaryId(null)
+                setIsAddBoundaryOpen(false)
+              }}
+              disabled={isCreatingBoundary}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => handleAddBoundary(false)} disabled={isCreatingBoundary}>
+              {isCreatingBoundary ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                editingBoundaryId ? "Save Boundary" : "Create Boundary"
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -758,13 +1068,13 @@ export function MunicipalityPage() {
                     <TableCell className="text-base font-semibold">{item.name}</TableCell>
                     <TableCell className="text-base">{item.code}</TableCell>
                     <TableCell className="text-base">{item.timezone}</TableCell>
-                    <TableCell>{getStatusBadge(item.status?.toLowerCase() !== "inactive")}</TableCell>
+                    <TableCell>{getStatusBadge(getMunicipalityActiveStatus(item))}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
                         variant={isSelected ? "outline" : "default"}
                         onClick={() => handleSelectMunicipality(item)}
-                        disabled={isSelected || isLoadingMunicipality}
+                        disabled={isSelected}
                       >
                         {isSelected ? "Selected" : "Select"}
                       </Button>
@@ -842,10 +1152,14 @@ export function MunicipalityPage() {
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-[#5B8C5A] mt-0.5" />
+                  {hasActivatedBoundary ? (
+                    <CheckCircle className="h-5 w-5 text-[#5B8C5A] mt-0.5" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  )}
                   <div>
                     <p className="text-sm text-muted-foreground">Status</p>
-                    <Badge className="bg-[#5B8C5A] text-white">{municipality.status}</Badge>
+                    {getStatusBadge(hasActivatedBoundary)}
                   </div>
                 </div>
               </div>
@@ -910,9 +1224,9 @@ export function MunicipalityPage() {
                   <TableCell className="text-base">{boundary.format}</TableCell>
                   <TableCell className="text-base">{boundary.createdAt}</TableCell>
                   <TableCell className="text-base">{boundary.activatedAt || "-"}</TableCell>
-                  <TableCell>{getStatusBadge(!!boundary.active)}</TableCell>
+                  <TableCell>{getStatusBadge(isBoundaryVersionActivated(boundary))}</TableCell>
                   <TableCell className="text-right">
-                    {!boundary.active && (
+                    {!isBoundaryVersionActivated(boundary) && (
                       <Button
                         size="sm"
                         onClick={() => handleActivateBoundary(boundary.id)}
@@ -933,14 +1247,27 @@ export function MunicipalityPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Municipality Modal */}
-      <Modal open={isEditMunicipalityOpen} onOpenChange={setIsEditMunicipalityOpen} className="w-full max-w-2xl">
-        <ModalHeader onClose={() => setIsEditMunicipalityOpen(false)}>
-          <ModalTitle>Edit Municipality</ModalTitle>
-          <ModalDescription>Update municipality configuration</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
+      {/* Edit Municipality Drawer */}
+      <Sheet open={isEditMunicipalityOpen} onOpenChange={setIsEditMunicipalityOpen}>
+        <SheetContent side="right" className="w-[520px] p-0 sm:max-w-[520px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-[#5B8C5A]" />
+              Edit Municipality
+            </SheetTitle>
+            <SheetDescription>Update municipality configuration</SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-4">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Municipality Profile</p>
+                <p className="text-sm text-muted-foreground">
+                  Update the active municipality details used for configuration requests.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="code" className="text-base">Municipality Code *</Label>
               <Input
@@ -974,160 +1301,42 @@ export function MunicipalityPage() {
               />
             </div>
           </div>
-        </ModalBody>
-        <ModalFooter>
+
+        <SheetFooter className="border-t border-border bg-background px-6 py-4">
           <Button variant="outline" onClick={() => setIsEditMunicipalityOpen(false)}>Cancel</Button>
           <Button onClick={handleUpdateMunicipality}>Save Changes</Button>
-        </ModalFooter>
-      </Modal>
+        </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* Add Boundary Modal */}
-      <Modal open={isAddBoundaryOpen} onOpenChange={setIsAddBoundaryOpen} className="w-full max-w-5xl">
-        <ModalHeader onClose={() => setIsAddBoundaryOpen(false)}>
-          <ModalTitle>{editingBoundaryId ? "Edit Boundary" : "Add Boundary Version"}</ModalTitle>
-          <ModalDescription>
-            {editingBoundaryId
-              ? `Update the displayed boundary details for ${municipality?.name ?? "this municipality"}`
-              : `Create a GeoJSON boundary version for ${municipality?.name ?? "this municipality"}`}
-          </ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="version" className="text-base">Version Code *</Label>
-              <Input
-                id="version"
-                value={boundaryForm.version}
-                onChange={(e) => setBoundaryForm({ ...boundaryForm, version: e.target.value })}
-                placeholder="e.g., v1"
-                className="text-base h-11"
-              />
-            </div>
+      <Sheet
+        open={isCreateMunicipalityOpen}
+        onOpenChange={(open) => {
+          if (!open && isCreatingMunicipality) return
+          setIsCreateMunicipalityOpen(open)
+        }}
+      >
+        <SheetContent side="right" className="w-[520px] p-0 sm:max-w-[520px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-[#5B8C5A]" />
+              Create Municipality
+            </SheetTitle>
+            <SheetDescription>
+              Use the deployed Core municipality contract to create a configuration record.
+            </SheetDescription>
+          </SheetHeader>
 
-            <div className="space-y-2">
-              <Label htmlFor="displayName" className="text-base">Display Name *</Label>
-              <Input
-                id="displayName"
-                value={boundaryForm.displayName}
-                onChange={(e) => setBoundaryForm({ ...boundaryForm, displayName: e.target.value })}
-                placeholder="e.g., Maputo GeoJSON Boundary"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="boundaryData" className="text-base">GeoJSON Data *</Label>
-              <div className="space-y-3 rounded-lg border border-border p-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-base font-semibold">Map Boundary</p>
-                    <p className="text-sm text-muted-foreground">
-                      Use the satellite map to click around the municipality boundary, then apply the polygon to GeoJSON.
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="w-fit">
-                    {boundaryDraftPoints.length} points
-                  </Badge>
-                </div>
-                <div className="h-[360px] overflow-hidden rounded-md border border-border">
-                  <div ref={boundaryMapContainerRef} className="h-full w-full" />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <Button type="button" variant="outline" onClick={handleLoadGeoJsonOnMap}>
-                    <MapPin className="mr-2 h-4 w-4" />
-                    Load GeoJSON
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setBoundaryDraftPoints((points) => points.slice(0, -1))}
-                    disabled={!boundaryDraftPoints.length}
-                  >
-                    Undo Point
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setBoundaryDraftPoints([])}
-                    disabled={!boundaryDraftPoints.length}
-                  >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Clear Map
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleApplyDrawnBoundary}
-                    disabled={boundaryDraftPoints.length < 3}
-                  >
-                    Apply Polygon
-                  </Button>
-                </div>
+          <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-4">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Municipality Profile</p>
+                <p className="text-sm text-muted-foreground">
+                  These details become the active municipality for configuration requests.
+                </p>
               </div>
-              <Textarea
-                id="boundaryData"
-                value={boundaryForm.boundaryData}
-                onChange={(e) => setBoundaryForm({ ...boundaryForm, boundaryData: e.target.value })}
-                placeholder={defaultBoundaryData}
-                className="text-base min-h-[200px] font-mono text-sm"
-              />
-              <p className="text-sm text-muted-foreground">
-                Paste a GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection, or upload a .geojson file.
-              </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                ref={boundaryFileInputRef}
-                type="file"
-                accept=".geojson,.json,application/geo+json,application/json"
-                className="hidden"
-                onChange={(event) => handleBoundaryFileUpload(event.target.files?.[0])}
-              />
-              <Button
-                variant="outline"
-                className="w-full"
-                type="button"
-                onClick={() => boundaryFileInputRef.current?.click()}
-                disabled={isCreatingBoundary}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload GeoJSON File
-              </Button>
-            </div>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setEditingBoundaryId(null)
-              setIsAddBoundaryOpen(false)
-            }}
-            disabled={isCreatingBoundary}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleAddBoundary} disabled={isCreatingBoundary}>
-            {isCreatingBoundary ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              editingBoundaryId ? "Save Boundary" : "Create Boundary"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* Create Municipality Modal */}
-      <Modal open={isCreateMunicipalityOpen} onOpenChange={setIsCreateMunicipalityOpen} className="w-full max-w-2xl">
-        <ModalHeader onClose={() => setIsCreateMunicipalityOpen(false)}>
-          <ModalTitle>Create Municipality</ModalTitle>
-          <ModalDescription>Use the deployed Core municipality contract</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="createCode" className="text-base">Municipality Code *</Label>
               <Input
@@ -1161,21 +1370,24 @@ export function MunicipalityPage() {
               />
             </div>
           </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateMunicipalityOpen(false)} disabled={isCreatingMunicipality}>Cancel</Button>
-          <Button onClick={handleCreateMunicipality} disabled={isCreatingMunicipality}>
-            {isCreatingMunicipality ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Municipality"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
+
+          <SheetFooter className="border-t border-border bg-background px-6 py-4">
+            <Button variant="outline" onClick={() => setIsCreateMunicipalityOpen(false)} disabled={isCreatingMunicipality}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateMunicipality} disabled={isCreatingMunicipality}>
+              {isCreatingMunicipality ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Municipality"
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

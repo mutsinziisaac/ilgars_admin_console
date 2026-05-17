@@ -47,7 +47,7 @@
     "routes": "Routes",
     "roadClosureRates": "Road Closure Rates",
     "finesConfiguration": "Fines Configuration",
-    "geofencingZones": "Geofencing Zones",
+    "geofencingZones": "Exempted Areas",
     "vehicleClassification": "Vehicle Classification",
     "weightCategories": "Weight Categories",
     "timeWindows": "Time Windows"

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle, Edit, Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
@@ -304,47 +304,107 @@ export function FinesConfigurationPage() {
         </CardContent>
       </Card>
 
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-2xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>Create Fine Policy</ModalTitle>
-          <ModalDescription>Add a municipality-specific fine policy</ModalDescription>
-        </ModalHeader>
-        <ModalBody>{renderFineFormFields()}</ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>Cancel</Button>
-          <Button onClick={handleCreateFine} disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Fine Policy"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
+      <Sheet
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          if (!open && createMutation.isPending) return
+          setIsCreateOpen(open)
+        }}
+      >
+        <SheetContent side="right" className="w-[560px] p-0 sm:max-w-[560px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-[#5B8C5A]" />
+              Create Fine Policy
+            </SheetTitle>
+            <SheetDescription>
+              Add a municipality-specific fine policy.
+            </SheetDescription>
+          </SheetHeader>
 
-      <Modal open={isEditOpen} onOpenChange={setIsEditOpen} className="w-full max-w-2xl">
-        <ModalHeader onClose={() => setIsEditOpen(false)}>
-          <ModalTitle>Edit Fine Policy</ModalTitle>
-          <ModalDescription>Update the fine policy for {getMunicipalityDisplayName(fineForm.municipalityId)}</ModalDescription>
-        </ModalHeader>
-        <ModalBody>{renderFineFormFields(true)}</ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={updateMutation.isPending}>Cancel</Button>
-          <Button onClick={handleUpdateFine} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
+          <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-4">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Fine Policy Scope</p>
+                <p className="text-sm text-muted-foreground">
+                  This policy will be used to calculate violation fines for the selected municipality.
+                </p>
+              </div>
+            </div>
+            {renderFineFormFields()}
+          </div>
+
+          <SheetFooter className="border-t border-border bg-background px-6 py-4">
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>Cancel</Button>
+            <Button onClick={handleCreateFine} disabled={createMutation.isPending}>
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Fine Policy"
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={isEditOpen}
+        onOpenChange={(open) => {
+          if (!open && updateMutation.isPending) return
+          setIsEditOpen(open)
+          if (!open) setSelectedPolicy(null)
+        }}
+      >
+        <SheetContent side="right" className="w-[560px] p-0 sm:max-w-[560px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle className="flex items-center gap-2">
+              <Edit className="h-5 w-5 text-[#5B8C5A]" />
+              Edit Fine Policy
+            </SheetTitle>
+            <SheetDescription>
+              Update the fine policy for {getMunicipalityDisplayName(fineForm.municipalityId)}.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-4">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Fine Policy Scope</p>
+                <p className="text-sm text-muted-foreground">
+                  Changes update how this violation fine is calculated for the municipality.
+                </p>
+              </div>
+            </div>
+            {renderFineFormFields(true)}
+          </div>
+
+          <SheetFooter className="border-t border-border bg-background px-6 py-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditOpen(false)
+                setSelectedPolicy(null)
+              }}
+              disabled={updateMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateFine} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

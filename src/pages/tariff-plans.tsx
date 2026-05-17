@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DollarSign, Plus, Edit, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, DollarSign, MoreHorizontal, Plus, Edit, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
   useTariffPlansList,
@@ -276,6 +277,28 @@ export function TariffPlansPage() {
     setPlanForm({ ...planForm, rates: newRates })
   }
 
+  const updateBandText = (index: number, field: "capacityBandCode", value: string) => {
+    const newRates = [...planForm.rates]
+    newRates[index] = {
+      ...newRates[index],
+      [field]: value,
+    }
+    setPlanForm({ ...planForm, rates: newRates })
+  }
+
+  const updateBandCapacity = (
+    index: number,
+    field: "minimumCapacity" | "maximumCapacity",
+    value: string,
+  ) => {
+    const newRates = [...planForm.rates]
+    newRates[index] = {
+      ...newRates[index],
+      [field]: value === "" ? null : Number(value),
+    }
+    setPlanForm({ ...planForm, rates: newRates })
+  }
+
   const getStatusBadge = (active: boolean) => {
     return active ? (
       <Badge className="bg-[#5B8C5A] text-white">
@@ -287,6 +310,318 @@ export function TariffPlansPage() {
         <XCircle className="h-3 w-3 mr-1" />
         Inactive
       </Badge>
+    )
+  }
+
+  if (isCreateOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsCreateOpen(false)}
+            disabled={createMutation.isPending}
+            aria-label="Back to tariff plans"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-semibold text-foreground">Create Tariff Plan</h1>
+            <p className="text-base text-muted-foreground">
+              Define a new capacity-based tariff rate plan.
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Plan Details</CardTitle>
+            <CardDescription className="text-base">
+              Set the tariff identity for {getMunicipalityDisplayName(planForm.municipalityId)}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(planForm.municipalityId)}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="code" className="text-base">Plan Code *</Label>
+                <Input
+                  id="code"
+                  value={planForm.code}
+                  onChange={(e) => setPlanForm({ ...planForm, code: e.target.value })}
+                  placeholder="e.g., MAPUTO-CIRCULATION-2026-1778687378"
+                  className="text-base h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-base">Plan Name *</Label>
+                <Input
+                  id="name"
+                  value={planForm.name}
+                  onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                  placeholder="e.g., Maputo Circulation Licence Fees"
+                  className="text-base h-11"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-base">Description</Label>
+              <Input
+                id="description"
+                value={planForm.description}
+                onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
+                placeholder="e.g., Standard capacity-based tariff rates"
+                className="text-base h-11"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Capacity Bands & Rates</CardTitle>
+            <CardDescription className="text-base">
+              Configure the daily and monthly MZN rates for each capacity band.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-hidden rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-base">Capacity Band Code</TableHead>
+                    <TableHead className="text-base">Min (kg)</TableHead>
+                    <TableHead className="text-base">Max (kg)</TableHead>
+                    <TableHead className="text-base">Daily Rate</TableHead>
+                    <TableHead className="text-base">Monthly Rate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {planForm.rates.map((rate, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Input
+                          value={rate.capacityBandCode}
+                          onChange={(e) => updateBandText(index, "capacityBandCode", e.target.value)}
+                          className="h-10 min-w-[220px] text-base"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={rate.minimumCapacity ?? ""}
+                          onChange={(e) => updateBandCapacity(index, "minimumCapacity", e.target.value)}
+                          className="h-10 min-w-[120px] text-base"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={rate.maximumCapacity ?? ""}
+                          onChange={(e) => updateBandCapacity(index, "maximumCapacity", e.target.value)}
+                          className="h-10 min-w-[120px] text-base"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={rate.amountPerDay}
+                          onChange={(e) => updateBandRate(index, "amountPerDay", e.target.value)}
+                          className="text-base h-10"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={rate.amountPerMonth ?? ""}
+                          onChange={(e) => updateBandRate(index, "amountPerMonth", e.target.value)}
+                          className="text-base h-10"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-between gap-4">
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreatePlan} disabled={createMutation.isPending}>
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Plan"
+            )}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isEditOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setIsEditOpen(false)
+              setSelectedPlan(null)
+            }}
+            disabled={updateMutation.isPending}
+            aria-label="Back to tariff plans"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-semibold text-foreground">Edit Tariff Plan</h1>
+            <p className="text-base text-muted-foreground">
+              Update tariff plan details and capacity-based rates.
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Plan Details</CardTitle>
+            <CardDescription className="text-base">
+              Update the tariff identity for {getMunicipalityDisplayName(planForm.municipalityId)}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(planForm.municipalityId)}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-code" className="text-base">Plan Code *</Label>
+                <Input
+                  id="edit-code"
+                  value={planForm.code}
+                  onChange={(e) => setPlanForm({ ...planForm, code: e.target.value })}
+                  placeholder="e.g., MAPUTO-CIRCULATION-2026"
+                  className="text-base h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-name" className="text-base">Plan Name *</Label>
+                <Input
+                  id="edit-name"
+                  value={planForm.name}
+                  onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                  placeholder="e.g., Standard Tariff Plan 2026"
+                  className="text-base h-11"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-description" className="text-base">Description</Label>
+              <Input
+                id="edit-description"
+                value={planForm.description}
+                onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
+                placeholder="e.g., Standard capacity-based tariff rates"
+                className="text-base h-11"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Capacity Bands & Rates</CardTitle>
+            <CardDescription className="text-base">
+              Adjust the daily and monthly MZN rates for each capacity band.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-hidden rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-base">Capacity Band Code</TableHead>
+                    <TableHead className="text-base">Min (kg)</TableHead>
+                    <TableHead className="text-base">Max (kg)</TableHead>
+                    <TableHead className="text-base">Daily Rate</TableHead>
+                    <TableHead className="text-base">Monthly Rate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {planForm.rates.map((rate, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium text-base">{rate.capacityBandCode}</TableCell>
+                      <TableCell className="text-base">{rate.minimumCapacity || "-"}</TableCell>
+                      <TableCell className="text-base">{rate.maximumCapacity || "-"}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={rate.amountPerDay}
+                          onChange={(e) => updateBandRate(index, "amountPerDay", e.target.value)}
+                          className="text-base h-10"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={rate.amountPerMonth ?? ""}
+                          onChange={(e) => updateBandRate(index, "amountPerMonth", e.target.value)}
+                          className="text-base h-10"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-between gap-4">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsEditOpen(false)
+              setSelectedPlan(null)
+            }}
+            disabled={updateMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleUpdatePlan} disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
+        </div>
+      </div>
     )
   }
 
@@ -383,39 +718,39 @@ export function TariffPlansPage() {
                     </TableCell>
                     <TableCell>{getStatusBadge(plan.active || activatedPlanIds.has(plan.id))}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewBands(plan)}
-                        >
-                          <DollarSign className="h-4 w-4 mr-1" />
-                          View Rates
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEditClick(plan)}
-                          disabled={updateMutation.isPending}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {!(plan.active || activatedPlanIds.has(plan.id)) && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleActivatePlan(plan.id)}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" aria-label={`Actions for ${plan.name}`}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem onSelect={() => handleViewBands(plan)}>
+                            <DollarSign className="h-4 w-4" />
+                            View Rates
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => handleEditClick(plan)}
+                            disabled={updateMutation.isPending}
+                          >
+                            <Edit className="h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          {!(plan.active || activatedPlanIds.has(plan.id)) && (
+                            <DropdownMenuItem
+                              onSelect={() => handleActivatePlan(plan.id)}
                               disabled={activatingPlanId === plan.id}
                             >
                               {activatingPlanId === plan.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
-                                "Activate"
+                                <CheckCircle className="h-4 w-4" />
                               )}
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                              Activate
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -424,222 +759,6 @@ export function TariffPlansPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Create Tariff Plan Modal */}
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-4xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>Create Tariff Plan</ModalTitle>
-          <ModalDescription>Define a new capacity-based tariff rate plan</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label className="text-base">Municipality</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
-                {getMunicipalityDisplayName(planForm.municipalityId)}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="code" className="text-base">Plan Code *</Label>
-              <Input
-                id="code"
-                value={planForm.code}
-                onChange={(e) => setPlanForm({ ...planForm, code: e.target.value })}
-                placeholder="e.g., MAPUTO-CIRCULATION-2026-1778687378"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-base">Plan Name *</Label>
-              <Input
-                id="name"
-                value={planForm.name}
-                onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
-                placeholder="e.g., Maputo Circulation Licence Fees"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description" className="text-base">Description</Label>
-              <Input
-                id="description"
-                value={planForm.description}
-                onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
-                placeholder="e.g., Standard capacity-based tariff rates"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">Capacity Bands & Rates (MZN)</Label>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-base">Capacity Band Code</TableHead>
-                      <TableHead className="text-base">Min (kg)</TableHead>
-                      <TableHead className="text-base">Max (kg)</TableHead>
-                      <TableHead className="text-base">Daily Rate</TableHead>
-                      <TableHead className="text-base">Monthly Rate</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {planForm.rates.map((rate, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium text-base">{rate.capacityBandCode}</TableCell>
-                        <TableCell className="text-base">{rate.minimumCapacity || '-'}</TableCell>
-                        <TableCell className="text-base">{rate.maximumCapacity || '-'}</TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={rate.amountPerDay}
-                            onChange={(e) => updateBandRate(index, 'amountPerDay', e.target.value)}
-                            className="text-base h-10"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={rate.amountPerMonth ?? ""}
-                            onChange={(e) => updateBandRate(index, 'amountPerMonth', e.target.value)}
-                            className="text-base h-10"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreatePlan} disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Plan"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* Edit Tariff Plan Modal */}
-      <Modal open={isEditOpen} onOpenChange={setIsEditOpen} className="w-full max-w-4xl">
-        <ModalHeader onClose={() => setIsEditOpen(false)}>
-          <ModalTitle>Edit Tariff Plan</ModalTitle>
-          <ModalDescription>Update tariff plan details and rates</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label className="text-base">Municipality</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
-                {getMunicipalityDisplayName(planForm.municipalityId)}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-code" className="text-base">Plan Code *</Label>
-              <Input
-                id="edit-code"
-                value={planForm.code}
-                onChange={(e) => setPlanForm({ ...planForm, code: e.target.value })}
-                placeholder="e.g., MAPUTO-CIRCULATION-2026"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-name" className="text-base">Plan Name *</Label>
-              <Input
-                id="edit-name"
-                value={planForm.name}
-                onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
-                placeholder="e.g., Standard Tariff Plan 2026"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-description" className="text-base">Description</Label>
-              <Input
-                id="edit-description"
-                value={planForm.description}
-                onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
-                placeholder="e.g., Standard capacity-based tariff rates"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">Capacity Bands & Rates (MZN)</Label>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-base">Capacity Band Code</TableHead>
-                      <TableHead className="text-base">Min (kg)</TableHead>
-                      <TableHead className="text-base">Max (kg)</TableHead>
-                      <TableHead className="text-base">Daily Rate</TableHead>
-                      <TableHead className="text-base">Monthly Rate</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {planForm.rates.map((rate, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium text-base">{rate.capacityBandCode}</TableCell>
-                        <TableCell className="text-base">{rate.minimumCapacity || '-'}</TableCell>
-                        <TableCell className="text-base">{rate.maximumCapacity || '-'}</TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={rate.amountPerDay}
-                            onChange={(e) => updateBandRate(index, 'amountPerDay', e.target.value)}
-                            className="text-base h-10"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={rate.amountPerMonth ?? ""}
-                            onChange={(e) => updateBandRate(index, 'amountPerMonth', e.target.value)}
-                            className="text-base h-10"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={updateMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleUpdatePlan} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
 
       {/* View Bands Modal */}
       <Modal open={isViewBandsOpen} onOpenChange={setIsViewBandsOpen} className="w-full max-w-4xl">

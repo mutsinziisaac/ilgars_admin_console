@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Route, Plus, Upload, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Route, MapPin, Plus, Upload, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import L from "leaflet"
+import "leaflet/dist/leaflet.css"
 import { useCreateMunicipalRoute, useMunicipalRoutesList } from "@/lib/api/municipal-routes/hooks"
 import type { MunicipalRoute } from "@/lib/api/municipal-routes/schemas"
 import { MUNICIPAL_ROUTES_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
@@ -73,9 +74,87 @@ const mergeRoutes = (incoming: MunicipalRoute[], fallback: MunicipalRoute[] = []
 }
 
 const createDefaultRouteCode = () => `EN4-PORT-${Date.now()}`
+const MAPUTO_CENTER: [number, number] = [-25.9655, 32.5832]
+
+const compactJson = (value: string) => {
+  try {
+    return JSON.stringify(JSON.parse(value))
+  } catch {
+    return value
+  }
+}
+
+const getLineCoordinates = (value: unknown): unknown[] | null => {
+  if (!value || typeof value !== "object") return null
+
+  const record = value as Record<string, unknown>
+  if (record.type === "Feature") return getLineCoordinates(record.geometry)
+
+  if (record.type === "FeatureCollection" && Array.isArray(record.features)) {
+    const lineFeature = record.features
+      .map((feature) => getLineCoordinates(feature))
+      .find((coordinates): coordinates is unknown[] => Boolean(coordinates))
+    return lineFeature ?? null
+  }
+
+  if (record.type === "LineString" && Array.isArray(record.coordinates)) return record.coordinates
+
+  if (record.type === "MultiLineString" && Array.isArray(record.coordinates)) {
+    const [firstLine] = record.coordinates
+    return Array.isArray(firstLine) ? firstLine : null
+  }
+
+  return null
+}
+
+const extractLineLatLngs = (geoJson: string): [number, number][] => {
+  try {
+    const coordinates = getLineCoordinates(JSON.parse(geoJson))
+    if (!coordinates) return []
+
+    return coordinates
+      .map((coordinate) => {
+        if (!Array.isArray(coordinate) || coordinate.length < 2) return null
+        const [lng, lat] = coordinate
+        if (typeof lat !== "number" || typeof lng !== "number") return null
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+        return [lat, lng] as [number, number]
+      })
+      .filter((point): point is [number, number] => Boolean(point))
+  } catch {
+    return []
+  }
+}
+
+const createRouteGeoJson = (name: string, points: [number, number][]) =>
+  JSON.stringify({
+    type: "Feature",
+    geometry: {
+      type: "LineString",
+      coordinates: points.map(([lat, lng]) => [Number(lng.toFixed(6)), Number(lat.toFixed(6))]),
+    },
+    properties: { name },
+  })
+
+const createRouteVertexIcon = (index: number) =>
+  L.divIcon({
+    html: `
+      <div style="
+        display:flex;height:24px;width:24px;align-items:center;justify-content:center;
+        border-radius:999px;border:2px solid #ffffff;background:#DAA22A;color:#1C1C1C;
+        font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25);
+      ">${index + 1}</div>
+    `,
+    className: "",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  })
 
 export function RoutesPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const routeMapContainerRef = useRef<HTMLDivElement | null>(null)
+  const routeMapRef = useRef<L.Map | null>(null)
+  const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [activeAllowedUse, setActiveAllowedUse] = useState<(typeof filterOptions)[number]["value"]>("all")
   const [activeMunicipalityId, setActiveMunicipalityId] = useState(getStoredMunicipalityId())
@@ -92,6 +171,9 @@ export function RoutesPage() {
     allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
     geoJson: defaultRouteGeoJson,
   })
+  const [routeDraftPoints, setRouteDraftPoints] = useState<[number, number][]>(() =>
+    extractLineLatLngs(defaultRouteGeoJson),
+  )
 
   const routeListParams = {
     municipalityId: activeMunicipalityId,
@@ -140,19 +222,80 @@ export function RoutesPage() {
       allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
       geoJson: defaultRouteGeoJson,
     })
+    setRouteDraftPoints(extractLineLatLngs(defaultRouteGeoJson))
   }
+
+  useEffect(() => {
+    if (!isCreateOpen || !routeMapContainerRef.current || routeMapRef.current) return
+
+    const map = L.map(routeMapContainerRef.current, {
+      center: MAPUTO_CENTER,
+      zoom: 11,
+      zoomControl: true,
+      attributionControl: true,
+    })
+
+    L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+      attribution: '&copy; <a href="https://www.google.com/maps">Google</a>',
+      maxZoom: 20,
+    }).addTo(map)
+
+    routeLayerRef.current = L.layerGroup().addTo(map)
+    routeMapRef.current = map
+    map.on("click", (event: L.LeafletMouseEvent) => {
+      setRouteDraftPoints((points) => [...points, [event.latlng.lat, event.latlng.lng]])
+    })
+
+    window.setTimeout(() => map.invalidateSize(), 100)
+
+    return () => {
+      map.remove()
+      routeMapRef.current = null
+      routeLayerRef.current = null
+    }
+  }, [isCreateOpen])
+
+  useEffect(() => {
+    const map = routeMapRef.current
+    const layer = routeLayerRef.current
+    if (!isCreateOpen || !map || !layer) return
+
+    layer.clearLayers()
+
+    routeDraftPoints.forEach((point, index) => {
+      L.marker(point, {
+        draggable: true,
+        icon: createRouteVertexIcon(index),
+      })
+        .on("dragstart", () => map.dragging.disable())
+        .on("dragend", (event) => {
+          const marker = event.target as L.Marker
+          const nextPoint = marker.getLatLng()
+          map.dragging.enable()
+          setRouteDraftPoints((points) =>
+            points.map((currentPoint, currentIndex) =>
+              currentIndex === index ? [nextPoint.lat, nextPoint.lng] : currentPoint
+            )
+          )
+        })
+        .addTo(layer)
+    })
+
+    if (routeDraftPoints.length >= 2) {
+      L.polyline(routeDraftPoints, {
+        color: "#DAA22A",
+        weight: 4,
+      }).addTo(layer)
+    }
+
+    if (routeDraftPoints.length) {
+      map.fitBounds(L.latLngBounds(routeDraftPoints), { padding: [24, 24], maxZoom: 15 })
+    }
+  }, [isCreateOpen, routeDraftPoints])
 
   const openCreateRoute = () => {
     resetForm()
     setIsCreateOpen(true)
-  }
-
-  const toggleAllowedUse = (allowedUse: string) => {
-    const allowedUses = routeForm.allowedUses.includes(allowedUse)
-      ? routeForm.allowedUses.filter((use) => use !== allowedUse)
-      : [...routeForm.allowedUses, allowedUse]
-
-    setRouteForm({ ...routeForm, allowedUses })
   }
 
   const handleCreateRoute = () => {
@@ -165,11 +308,6 @@ export function RoutesPage() {
 
     if (!routeForm.code.trim() || !routeForm.name.trim() || !routeForm.roadType.trim()) {
       toast.error("Route code, name, and road type are required")
-      return
-    }
-
-    if (routeForm.allowedUses.length === 0) {
-      toast.error("Select at least one allowed use")
       return
     }
 
@@ -219,8 +357,9 @@ export function RoutesPage() {
       setRouteForm({
         ...routeForm,
         name: routeForm.name || file.name.replace(/\.(geo)?json$/i, ""),
-        geoJson,
+        geoJson: compactJson(geoJson),
       })
+      setRouteDraftPoints(extractLineLatLngs(geoJson))
       toast.success("GeoJSON route loaded")
     } catch {
       toast.error("Upload a valid GeoJSON file")
@@ -229,6 +368,30 @@ export function RoutesPage() {
         fileInputRef.current.value = ""
       }
     }
+  }
+
+  const handleLoadRouteGeoJsonOnMap = () => {
+    const points = extractLineLatLngs(routeForm.geoJson)
+    if (points.length < 2) {
+      toast.error("GeoJSON route must include at least two line points")
+      return
+    }
+
+    setRouteDraftPoints(points)
+    toast.success("GeoJSON loaded on map")
+  }
+
+  const handleApplyDrawnRoute = () => {
+    if (routeDraftPoints.length < 2) {
+      toast.error("Add at least two points before applying the route")
+      return
+    }
+
+    setRouteForm((current) => ({
+      ...current,
+      geoJson: createRouteGeoJson(current.name, routeDraftPoints),
+    }))
+    toast.success("Map route applied to GeoJSON data")
   }
 
   const getStatusBadge = (active: boolean) => {
@@ -247,6 +410,208 @@ export function RoutesPage() {
 
   const renderAllowedUse = (allowedUse: string) =>
     allowedUseOptions.find((option) => option.value === allowedUse)?.label || allowedUse
+
+  if (isCreateOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsCreateOpen(false)}
+            disabled={createMutation.isPending}
+            aria-label="Back to municipal routes"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-semibold text-foreground">Create Route</h1>
+            <p className="text-base text-muted-foreground">
+              Create a municipal route with GeoJSON LineString data.
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Route Details</CardTitle>
+            <CardDescription className="text-base">
+              Set the route identity, road type, and distance for {getMunicipalityDisplayName(routeForm.municipalityId)}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-base">Municipality</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                {getMunicipalityDisplayName(routeForm.municipalityId)}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="code" className="text-base">Route Code *</Label>
+                <Input
+                  id="code"
+                  value={routeForm.code}
+                  onChange={(event) => setRouteForm({ ...routeForm, code: event.target.value })}
+                  placeholder="e.g., EN4-PORT-UAT"
+                  className="text-base h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="roadType" className="text-base">Road Type *</Label>
+                <Select
+                  value={routeForm.roadType}
+                  onValueChange={(roadType) => setRouteForm({ ...routeForm, roadType })}
+                >
+                  <SelectTrigger id="roadType" className="text-base h-11">
+                    <SelectValue placeholder="Select road type" />
+                  </SelectTrigger>
+                  <SelectContent className="text-base">
+                    {roadTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="text-base">
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-base">Route Name *</Label>
+                <Input
+                  id="name"
+                  value={routeForm.name}
+                  onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })}
+                  placeholder="e.g., EN4 Avenida de Mocambique to Port of Maputo"
+                  className="text-base h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="distanceKm" className="text-base">Distance (km)</Label>
+                <Input
+                  id="distanceKm"
+                  type="number"
+                  value={routeForm.distanceKm}
+                  onChange={(event) => setRouteForm({ ...routeForm, distanceKm: event.target.value })}
+                  placeholder="e.g., 14.5"
+                  className="text-base h-11"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <CardTitle className="text-2xl">Route Map</CardTitle>
+                <CardDescription className="text-base">
+                  Click along the route, drag points to adjust, then apply the line to GeoJSON data.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="w-fit">
+                {routeDraftPoints.length} points
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="h-[420px] overflow-hidden rounded-md border border-border">
+              <div ref={routeMapContainerRef} className="h-full w-full" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <Button type="button" variant="outline" onClick={handleLoadRouteGeoJsonOnMap}>
+                <MapPin className="mr-2 h-4 w-4" />
+                Load GeoJSON
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRouteDraftPoints((points) => points.slice(0, -1))}
+                disabled={!routeDraftPoints.length}
+              >
+                Undo Point
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRouteDraftPoints([])}
+                disabled={!routeDraftPoints.length}
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Clear Map
+              </Button>
+              <Button type="button" onClick={handleApplyDrawnRoute} disabled={routeDraftPoints.length < 2}>
+                Apply Route
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">GeoJSON Route Data</CardTitle>
+            <CardDescription className="text-base">
+              Paste a GeoJSON Feature or LineString for the route, or upload a .geojson file.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              id="geoJson"
+              value={routeForm.geoJson}
+              onChange={(event) => setRouteForm({ ...routeForm, geoJson: event.target.value })}
+              onBlur={() => setRouteForm((current) => ({ ...current, geoJson: compactJson(current.geoJson) }))}
+              placeholder={defaultRouteGeoJson}
+              rows={1}
+              wrap="off"
+              className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
+            />
+
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".geojson,.json,application/geo+json,application/json"
+                className="hidden"
+                onChange={(event) => handleRouteFileUpload(event.target.files?.[0])}
+              />
+              <Button
+                variant="outline"
+                className="w-full"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={createMutation.isPending}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload GeoJSON File
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-between gap-4">
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateRoute} disabled={createMutation.isPending}>
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Route"
+            )}
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -346,146 +711,6 @@ export function RoutesPage() {
         </CardContent>
       </Card>
 
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-3xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>Create Route</ModalTitle>
-          <ModalDescription>POST /municipal-routes with GeoJSON LineString data</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-base">Municipality</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
-                {getMunicipalityDisplayName(routeForm.municipalityId)}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="code" className="text-base">Route Code *</Label>
-                <Input
-                  id="code"
-                  value={routeForm.code}
-                  onChange={(event) => setRouteForm({ ...routeForm, code: event.target.value })}
-                  placeholder="e.g., EN4-PORT-UAT"
-                  className="text-base h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="roadType" className="text-base">Road Type *</Label>
-                <Select
-                  value={routeForm.roadType}
-                  onValueChange={(roadType) => setRouteForm({ ...routeForm, roadType })}
-                >
-                  <SelectTrigger id="roadType" className="text-base h-11">
-                    <SelectValue placeholder="Select road type" />
-                  </SelectTrigger>
-                  <SelectContent className="text-base">
-                    {roadTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value} className="text-base">
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-base">Route Name *</Label>
-              <Input
-                id="name"
-                value={routeForm.name}
-                onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })}
-                placeholder="e.g., EN4 Avenida de Mocambique to Port of Maputo"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="distanceKm" className="text-base">Distance (km)</Label>
-              <Input
-                id="distanceKm"
-                type="number"
-                value={routeForm.distanceKm}
-                onChange={(event) => setRouteForm({ ...routeForm, distanceKm: event.target.value })}
-                placeholder="e.g., 14.5"
-                className="text-base h-11"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-base">Allowed Uses *</Label>
-              <div className="flex flex-wrap gap-2">
-                {allowedUseOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => toggleAllowedUse(option.value)}
-                    className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                      routeForm.allowedUses.includes(option.value)
-                        ? "border-[#5B8C5A] bg-[#5B8C5A]/10 text-[#5B8C5A]"
-                        : "border-border hover:border-muted-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="geoJson" className="text-base">GeoJSON Route Data *</Label>
-              <Textarea
-                id="geoJson"
-                value={routeForm.geoJson}
-                onChange={(event) => setRouteForm({ ...routeForm, geoJson: event.target.value })}
-                placeholder={defaultRouteGeoJson}
-                className="text-base min-h-[200px] font-mono text-sm"
-              />
-              <p className="text-sm text-muted-foreground">
-                Paste a GeoJSON Feature or LineString for the route.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".geojson,.json,application/geo+json,application/json"
-                className="hidden"
-                onChange={(event) => handleRouteFileUpload(event.target.files?.[0])}
-              />
-              <Button
-                variant="outline"
-                className="w-full"
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={createMutation.isPending}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload GeoJSON File
-              </Button>
-            </div>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreateRoute} disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Route"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
     </div>
   )
 }

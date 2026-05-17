@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,9 +6,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { AlertCircle, CheckCircle, Edit, Loader2, Plus, XCircle } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { AlertCircle, ArrowLeft, CheckCircle, Edit, Loader2, MoreHorizontal, Plus, XCircle } from "lucide-react"
 import { toast } from "sonner"
+import L from "leaflet"
+import "leaflet/dist/leaflet.css"
 import {
   useCreateExemptArea,
   useExemptAreasList,
@@ -33,11 +35,105 @@ const defaultGeoJson = JSON.stringify(
       ],
     ],
   },
-  null,
-  2,
 )
 
+const compactJson = (value: string) => {
+  try {
+    return JSON.stringify(JSON.parse(value))
+  } catch {
+    return value
+  }
+}
+
+const toLatLngFromGeoJsonCoordinate = (coordinate: unknown): [number, number] | null => {
+  if (!Array.isArray(coordinate) || coordinate.length < 2) return null
+  const [lng, lat] = coordinate
+  if (typeof lat !== "number" || typeof lng !== "number") return null
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+
+  return [lat, lng]
+}
+
+const getPolygonCoordinates = (value: unknown): unknown[] | null => {
+  if (!value || typeof value !== "object") return null
+
+  const record = value as Record<string, unknown>
+  if (record.type === "Feature") return getPolygonCoordinates(record.geometry)
+
+  if (record.type === "FeatureCollection" && Array.isArray(record.features)) {
+    const polygonFeature = record.features
+      .map((feature) => getPolygonCoordinates(feature))
+      .find((coordinates): coordinates is unknown[] => Boolean(coordinates))
+    return polygonFeature ?? null
+  }
+
+  if (record.type === "Polygon" && Array.isArray(record.coordinates)) {
+    const [outerRing] = record.coordinates
+    return Array.isArray(outerRing) ? outerRing : null
+  }
+
+  if (record.type === "MultiPolygon" && Array.isArray(record.coordinates)) {
+    const [firstPolygon] = record.coordinates
+    if (!Array.isArray(firstPolygon)) return null
+    const [outerRing] = firstPolygon
+    return Array.isArray(outerRing) ? outerRing : null
+  }
+
+  return null
+}
+
+const extractPolygonLatLngs = (boundaryData: string): [number, number][] => {
+  try {
+    const parsed = JSON.parse(boundaryData)
+    const coordinates = getPolygonCoordinates(parsed)
+    if (!coordinates) return []
+
+    const latLngs = coordinates
+      .map(toLatLngFromGeoJsonCoordinate)
+      .filter((point): point is [number, number] => Boolean(point))
+
+    if (latLngs.length > 1) {
+      const first = latLngs[0]
+      const last = latLngs[latLngs.length - 1]
+      if (first[0] === last[0] && first[1] === last[1]) return latLngs.slice(0, -1)
+    }
+
+    return latLngs
+  } catch {
+    return []
+  }
+}
+
+const createBoundaryGeoJson = (points: [number, number][]) => {
+  const coordinates = points.map(([lat, lng]) => [Number(lng.toFixed(6)), Number(lat.toFixed(6))])
+  if (coordinates.length) {
+    const first = coordinates[0]
+    const last = coordinates[coordinates.length - 1]
+    if (first[0] !== last[0] || first[1] !== last[1]) coordinates.push(first)
+  }
+
+  return JSON.stringify({
+    type: "Polygon",
+    coordinates: [coordinates],
+  })
+}
+
+const createBoundaryVertexIcon = (index: number) =>
+  L.divIcon({
+    html: `
+      <div style="
+        display:flex;height:24px;width:24px;align-items:center;justify-content:center;
+        border-radius:999px;border:2px solid #ffffff;background:#5B8C5A;color:#ffffff;
+        font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25);
+      ">${index + 1}</div>
+    `,
+    className: "",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  })
+
 const createDefaultAreaCode = () => `PORT-EXEMPT-${Date.now()}`
+const MAPUTO_CENTER: [number, number] = [-25.9655, 32.5832]
 
 const getBoundaryDataSize = (area: ExemptArea) => {
   if (!area.boundaryData) return "-"
@@ -46,6 +142,10 @@ const getBoundaryDataSize = (area: ExemptArea) => {
 }
 
 export function GeofencingZonesPage() {
+  const boundaryMapContainerRef = useRef<HTMLDivElement | null>(null)
+  const boundaryMapRef = useRef<L.Map | null>(null)
+  const boundaryLayerRef = useRef<L.LayerGroup | null>(null)
+  const areaDraftPointsRef = useRef<[number, number][]>([])
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(getStoredMunicipalityId())
   const [selectedArea, setSelectedArea] = useState<ExemptArea | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -59,6 +159,9 @@ export function GeofencingZonesPage() {
     boundaryData: defaultGeoJson,
     active: true,
   })
+  const [areaDraftPoints, setAreaDraftPoints] = useState<[number, number][]>(() =>
+    extractPolygonLatLngs(defaultGeoJson),
+  )
 
   const { data, isLoading, error, refetch } = useExemptAreasList({
     municipalityId: selectedMunicipalityId,
@@ -70,6 +173,7 @@ export function GeofencingZonesPage() {
 
   const resetForm = (municipalityId = getStoredMunicipalityId()) => {
     setSelectedMunicipalityId(municipalityId)
+    setAreaDraftPoints(extractPolygonLatLngs(defaultGeoJson))
     setAreaForm({
       municipalityId,
       code: createDefaultAreaCode(),
@@ -97,6 +201,7 @@ export function GeofencingZonesPage() {
   }
 
   const openEditArea = (area: ExemptArea) => {
+    const boundaryData = area.boundaryData || defaultGeoJson
     setSelectedArea(area)
     setAreaForm({
       municipalityId: area.municipalityId || selectedMunicipalityId,
@@ -104,10 +209,146 @@ export function GeofencingZonesPage() {
       name: area.name,
       description: area.description || "",
       format: area.format || "GEOJSON",
-      boundaryData: area.boundaryData || defaultGeoJson,
+      boundaryData,
       active: area.active,
     })
+    setAreaDraftPoints(extractPolygonLatLngs(boundaryData))
     setIsEditOpen(true)
+  }
+
+  const closeEditArea = () => {
+    setIsEditOpen(false)
+    setSelectedArea(null)
+  }
+
+  useEffect(() => {
+    const isBoundaryEditorOpen = isCreateOpen || isEditOpen
+    if (!isBoundaryEditorOpen || !boundaryMapContainerRef.current || boundaryMapRef.current) return
+
+    const map = L.map(boundaryMapContainerRef.current, {
+      center: MAPUTO_CENTER,
+      zoom: 11,
+      zoomControl: true,
+      attributionControl: true,
+    })
+
+    L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+      attribution: '&copy; <a href="https://www.google.com/maps">Google</a>',
+      maxZoom: 20,
+    }).addTo(map)
+
+    boundaryLayerRef.current = L.layerGroup().addTo(map)
+    boundaryMapRef.current = map
+    map.on("click", (event: L.LeafletMouseEvent) => {
+      setAreaDraftPoints((points) => [...points, [event.latlng.lat, event.latlng.lng]])
+    })
+
+    window.setTimeout(() => map.invalidateSize(), 100)
+
+    return () => {
+      map.remove()
+      boundaryMapRef.current = null
+      boundaryLayerRef.current = null
+    }
+  }, [isCreateOpen, isEditOpen])
+
+  useEffect(() => {
+    const map = boundaryMapRef.current
+    const layer = boundaryLayerRef.current
+    if ((!isCreateOpen && !isEditOpen) || !map || !layer) return
+
+    areaDraftPointsRef.current = areaDraftPoints
+    layer.clearLayers()
+
+    areaDraftPoints.forEach((point, index) => {
+      L.marker(point, {
+        draggable: true,
+        icon: createBoundaryVertexIcon(index),
+      })
+        .on("dragstart", () => map.dragging.disable())
+        .on("dragend", (event) => {
+          const marker = event.target as L.Marker
+          const nextPoint = marker.getLatLng()
+          map.dragging.enable()
+          setAreaDraftPoints((points) =>
+            points.map((currentPoint, currentIndex) =>
+              currentIndex === index ? [nextPoint.lat, nextPoint.lng] : currentPoint
+            )
+          )
+        })
+        .addTo(layer)
+    })
+
+    if (areaDraftPoints.length >= 2) {
+      L.polyline(areaDraftPoints, {
+        color: "#DAA22A",
+        weight: 3,
+        dashArray: areaDraftPoints.length >= 3 ? undefined : "6 6",
+      }).addTo(layer)
+    }
+
+    if (areaDraftPoints.length >= 3) {
+      const polygon = L.polygon(areaDraftPoints, {
+        color: "#5B8C5A",
+        weight: 3,
+        fillColor: "#5B8C5A",
+        fillOpacity: 0.25,
+      }).addTo(layer)
+
+      polygon.on("mouseover", () => {
+        const element = polygon.getElement() as HTMLElement | undefined
+        if (element) element.style.cursor = "move"
+      })
+
+      polygon.on("mousedown", (event: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(event)
+        const startLatLng = event.latlng
+        const originalPoints = areaDraftPointsRef.current
+        map.dragging.disable()
+
+        const handleMouseMove = (moveEvent: L.LeafletMouseEvent) => {
+          const latDelta = moveEvent.latlng.lat - startLatLng.lat
+          const lngDelta = moveEvent.latlng.lng - startLatLng.lng
+          setAreaDraftPoints(originalPoints.map(([lat, lng]) => [lat + latDelta, lng + lngDelta]))
+        }
+
+        const handleMouseUp = () => {
+          map.off("mousemove", handleMouseMove)
+          map.dragging.enable()
+        }
+
+        map.on("mousemove", handleMouseMove)
+        map.once("mouseup", handleMouseUp)
+      })
+    }
+
+    if (areaDraftPoints.length) {
+      map.fitBounds(L.latLngBounds(areaDraftPoints), { padding: [24, 24], maxZoom: 15 })
+    }
+  }, [areaDraftPoints, isCreateOpen, isEditOpen])
+
+  const handleLoadGeoJsonOnMap = () => {
+    const points = extractPolygonLatLngs(areaForm.boundaryData)
+    if (points.length < 3) {
+      toast.error("GeoJSON boundary must include at least three polygon points")
+      return
+    }
+
+    setAreaDraftPoints(points)
+    toast.success("GeoJSON loaded on map")
+  }
+
+  const handleApplyDrawnBoundary = () => {
+    if (areaDraftPoints.length < 3) {
+      toast.error("Add at least three points before applying the polygon")
+      return
+    }
+
+    setAreaForm((current) => ({
+      ...current,
+      boundaryData: createBoundaryGeoJson(areaDraftPoints),
+    }))
+    toast.success("Map polygon applied to boundary data")
   }
 
   const handleCreateArea = () => {
@@ -125,12 +366,12 @@ export function GeofencingZonesPage() {
       },
       {
         onSuccess: () => {
-          toast.success("Exempt area created successfully")
+          toast.success("Exempted area created successfully")
           setIsCreateOpen(false)
           resetForm(areaForm.municipalityId)
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to create exempt area")
+          toast.error(error instanceof Error ? error.message : "Failed to create exempted area")
         },
       },
     )
@@ -155,12 +396,12 @@ export function GeofencingZonesPage() {
       },
       {
         onSuccess: () => {
-          toast.success("Exempt area updated successfully")
+          toast.success("Exempted area updated successfully")
           setIsEditOpen(false)
           setSelectedArea(null)
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to update exempt area")
+          toast.error(error instanceof Error ? error.message : "Failed to update exempted area")
         },
       },
     )
@@ -207,7 +448,7 @@ export function GeofencingZonesPage() {
             id={`${isEdit ? "edit-" : ""}name`}
             value={areaForm.name}
             onChange={(event) => setAreaForm({ ...areaForm, name: event.target.value })}
-            placeholder="e.g., Port Exempt Area"
+            placeholder="e.g., Port Exempted Area"
             className="text-base h-11"
           />
         </div>
@@ -233,25 +474,171 @@ export function GeofencingZonesPage() {
         </div>
       </div>
 
+      <div className="space-y-4 rounded-md border border-border p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <Label className="text-base font-semibold">Map Boundary</Label>
+            <p className="text-sm text-muted-foreground">
+              Click around the exempted area, drag points to adjust, then apply the polygon.
+            </p>
+          </div>
+          <Badge variant="outline" className="w-fit">
+            {areaDraftPoints.length} points
+          </Badge>
+        </div>
+        <div className="h-[420px] overflow-hidden rounded-md border border-border">
+          <div ref={boundaryMapContainerRef} className="h-full w-full" />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Button type="button" variant="outline" onClick={handleLoadGeoJsonOnMap}>
+            <MapPin className="mr-2 h-4 w-4" />
+            Load GeoJSON
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAreaDraftPoints((points) => points.slice(0, -1))}
+            disabled={!areaDraftPoints.length}
+          >
+            Undo Point
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAreaDraftPoints([])}
+            disabled={!areaDraftPoints.length}
+          >
+            <XCircle className="mr-2 h-4 w-4" />
+            Clear Map
+          </Button>
+          <Button type="button" onClick={handleApplyDrawnBoundary} disabled={areaDraftPoints.length < 3}>
+            Apply Polygon
+          </Button>
+        </div>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor={`${isEdit ? "edit-" : ""}boundaryData`} className="text-base">Boundary Data *</Label>
         <Textarea
           id={`${isEdit ? "edit-" : ""}boundaryData`}
           value={areaForm.boundaryData}
           onChange={(event) => setAreaForm({ ...areaForm, boundaryData: event.target.value })}
+          onBlur={() => setAreaForm((current) => ({ ...current, boundaryData: compactJson(current.boundaryData) }))}
           placeholder='{"type":"Polygon","coordinates":[[[...]]]}'
-          className="text-base min-h-[220px] font-mono text-sm"
+          rows={1}
+          wrap="off"
+          className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
         />
       </div>
     </div>
   )
 
+  if (isCreateOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsCreateOpen(false)}
+            disabled={createMutation.isPending}
+            className="mt-1"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-4xl font-semibold text-foreground">Create Exempted Area</h1>
+            <p className="text-lg text-muted-foreground">
+              Define an exempted area with GeoJSON boundary data for {getMunicipalityDisplayName(areaForm.municipalityId)}.
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Area Details</CardTitle>
+            <CardDescription className="text-base">
+              Capture the municipal area definition and exemption boundary data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>{renderAreaForm()}</CardContent>
+        </Card>
+
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateArea} disabled={createMutation.isPending || !areaForm.name.trim() || !areaForm.code.trim()}>
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Exempted Area"
+            )}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isEditOpen && selectedArea) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={closeEditArea}
+            disabled={updateMutation.isPending}
+            className="mt-1"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-4xl font-semibold text-foreground">Edit Exempted Area</h1>
+            <p className="text-lg text-muted-foreground">
+              Update the exempted area definition and GeoJSON boundary for {getMunicipalityDisplayName(areaForm.municipalityId)}.
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Area Details</CardTitle>
+            <CardDescription className="text-base">
+              Review the municipal area settings and exemption boundary data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>{renderAreaForm(true)}</CardContent>
+        </Card>
+
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={closeEditArea} disabled={updateMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleUpdateArea} disabled={updateMutation.isPending || !areaForm.name.trim() || !areaForm.code.trim()}>
+            {updateMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-semibold text-foreground">Exempt Areas</h1>
-          <p className="text-lg text-muted-foreground">Manage geofenced areas for {getMunicipalityDisplayName(selectedMunicipalityId)}</p>
+          <h1 className="text-4xl font-semibold text-foreground">Exempted Areas</h1>
+          <p className="text-lg text-muted-foreground">Manage exempted areas for {getMunicipalityDisplayName(selectedMunicipalityId)}</p>
         </div>
         <Button onClick={openCreateArea} disabled={createMutation.isPending}>
           {createMutation.isPending ? (
@@ -259,35 +646,35 @@ export function GeofencingZonesPage() {
           ) : (
             <Plus className="h-4 w-4 mr-2" />
           )}
-          Create Exempt Area
+          Create Exempted Area
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Exempt Areas</CardTitle>
+          <CardTitle className="text-2xl">Exempted Areas</CardTitle>
           <CardDescription className="text-base">
-            Configure GeoJSON boundaries for municipality exemptions
+            Configure GeoJSON boundaries for municipal exemptions
           </CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="mb-4 h-12 w-12 text-destructive" />
-              <h3 className="mb-2 text-lg font-semibold">Failed to load exempt areas</h3>
+              <h3 className="mb-2 text-lg font-semibold">Failed to load exempted areas</h3>
               <p className="mb-4 text-muted-foreground">{(error as Error)?.message || "An error occurred"}</p>
               <Button variant="outline" onClick={() => refetch()}>Try Again</Button>
             </div>
           ) : isLoading ? (
             <div className="flex items-center gap-3 rounded-md border border-dashed p-5 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading exempt areas...</span>
+              <span>Loading exempted areas...</span>
             </div>
           ) : areas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="mb-4 h-12 w-12 text-muted-foreground" />
-              <h3 className="mb-2 text-lg font-semibold">No exempt areas found</h3>
-              <p className="text-muted-foreground">Create an exempt area for {getMunicipalityDisplayName(selectedMunicipalityId)}.</p>
+              <h3 className="mb-2 text-lg font-semibold">No exempted areas found</h3>
+              <p className="text-muted-foreground">Create an exempted area for {getMunicipalityDisplayName(selectedMunicipalityId)}.</p>
             </div>
           ) : (
             <Table>
@@ -306,7 +693,7 @@ export function GeofencingZonesPage() {
                 {areas.map((area) => (
                   <TableRow key={area.id}>
                     <TableCell className="font-medium text-base">{area.name}</TableCell>
-                    <TableCell className="text-base font-mono">{area.code || "-"}</TableCell>
+                    <TableCell className="text-base">{area.code || "-"}</TableCell>
                     <TableCell className="text-base">{area.description || "-"}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{area.format || "GEOJSON"}</Badge>
@@ -314,11 +701,19 @@ export function GeofencingZonesPage() {
                     <TableCell className="text-base">{getBoundaryDataSize(area)}</TableCell>
                     <TableCell>{getStatusBadge(area.active)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => openEditArea(area)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" aria-label={`Actions for ${area.name}`}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem onSelect={() => openEditArea(area)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -328,47 +723,6 @@ export function GeofencingZonesPage() {
         </CardContent>
       </Card>
 
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-3xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>Create Exempt Area</ModalTitle>
-          <ModalDescription>Define a geofenced exempt area with GeoJSON boundary data</ModalDescription>
-        </ModalHeader>
-        <ModalBody>{renderAreaForm()}</ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>Cancel</Button>
-          <Button onClick={handleCreateArea} disabled={createMutation.isPending || !areaForm.name.trim() || !areaForm.code.trim()}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Exempt Area"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      <Modal open={isEditOpen} onOpenChange={setIsEditOpen} className="w-full max-w-3xl">
-        <ModalHeader onClose={() => setIsEditOpen(false)}>
-          <ModalTitle>Edit Exempt Area</ModalTitle>
-          <ModalDescription>Update the exempt area definition and GeoJSON boundary</ModalDescription>
-        </ModalHeader>
-        <ModalBody>{renderAreaForm(true)}</ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={updateMutation.isPending}>Cancel</Button>
-          <Button onClick={handleUpdateArea} disabled={updateMutation.isPending || !areaForm.name.trim() || !areaForm.code.trim()}>
-            {updateMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
     </div>
   )
 }

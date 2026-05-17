@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Truck, Edit, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -191,14 +191,14 @@ export function VehicleClassificationPage() {
         </CardContent>
       </Card>
 
-      {/* Create Classification Modal */}
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-2xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>Create Vehicle Classification</ModalTitle>
-          <ModalDescription>Add a new vehicle type classification</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
+      {/* Create Classification Drawer */}
+      <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <SheetContent side="right" className="w-[560px] p-0 sm:max-w-[560px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle>Create Vehicle Classification</SheetTitle>
+            <SheetDescription>Add a new vehicle type classification</SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <div className="space-y-2">
               <Label htmlFor="vehicleType" className="text-base">Vehicle Type *</Label>
               <Input
@@ -273,21 +273,21 @@ export function VehicleClassificationPage() {
               />
             </div>
           </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateClassification}>Create Classification</Button>
-        </ModalFooter>
-      </Modal>
+          <SheetFooter className="border-t border-border bg-background px-6 py-4">
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateClassification}>Create Classification</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {/* Edit Classifications Modal */}
-      <Modal open={isEditOpen} onOpenChange={setIsEditOpen} className="w-full max-w-6xl">
-        <ModalHeader onClose={() => setIsEditOpen(false)}>
-          <ModalTitle>Edit Vehicle Classifications</ModalTitle>
-          <ModalDescription>Update vehicle type definitions and thresholds</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-4">
+      {/* Edit Classifications Drawer */}
+      <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <SheetContent side="right" className="w-[720px] p-0 sm:max-w-[720px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle>Edit Vehicle Classifications</SheetTitle>
+            <SheetDescription>Update vehicle type definitions and thresholds</SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <div className="flex items-center justify-between mb-4">
               <Label className="text-base font-semibold">Vehicle Classifications</Label>
               <Button size="sm" onClick={handleAddClassification}>
@@ -383,12 +383,12 @@ export function VehicleClassificationPage() {
               ))}
             </div>
           </div>
-        </ModalBody>
-        <ModalFooter>
+        <SheetFooter className="border-t border-border bg-background px-6 py-4">
           <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
           <Button onClick={handleUpdateClassifications}>Save Changes</Button>
-        </ModalFooter>
-      </Modal>
+        </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

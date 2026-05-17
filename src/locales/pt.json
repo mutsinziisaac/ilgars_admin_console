@@ -47,7 +47,7 @@
     "routes": "Rotas",
     "roadClosureRates": "Taxas de Interdicao",
     "finesConfiguration": "Configuracao de Multas",
-    "geofencingZones": "Zonas de Geofencing",
+    "geofencingZones": "Areas Isentas",
     "vehicleClassification": "Classificacao de Veiculos",
     "weightCategories": "Categorias de Peso",
     "timeWindows": "Janelas Horarias"
@@ -77,7 +77,7 @@
     "Routes": "Rotas",
     "Road Closure Rates": "Taxas de Interdicao de Estradas",
     "Fines Configuration": "Configuracao de Multas",
-    "Geofencing Zones": "Zonas de Geofencing",
+    "Geofencing Zones": "Areas Isentas",
     "Vehicle Classification": "Classificacao de Veiculos",
     "Weight Categories": "Categorias de Peso",
     "Time Windows": "Janelas Horarias",

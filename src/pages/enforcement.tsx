@@ -10,7 +10,7 @@ import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFoote
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { MapPin, AlertTriangle, CheckCircle, XCircle, Truck, FileText, Eye, User, Calendar, Map, BellRing, Search } from "lucide-react"
+import { ArrowLeft, MapPin, AlertTriangle, CheckCircle, XCircle, Truck, FileText, Eye, User, Calendar, Map, BellRing, Search } from "lucide-react"
 import { toast } from "sonner"
 import { EnforcementMap, UNENFORCED_VIOLATIONS, severityColor } from "@/components/enforcement-map"
 
@@ -357,6 +357,448 @@ export function EnforcementPage() {
       <Badge className={`${colors[action] || "bg-secondary"} text-sm px-3 py-1`}>
         {action}
       </Badge>
+    )
+  }
+
+  if (isMapOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setIsMapOpen(false)} className="mt-1">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-4xl font-semibold text-foreground">Enforcement Heatmap - Maputo</h1>
+              <p className="text-lg text-muted-foreground">Real-time enforcement activity and alerts for nearby officers</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {(["both", "heatmap", "violations"] as const).map((layer) => (
+              <Button
+                key={layer}
+                size="sm"
+                variant={mapLayer === layer ? "default" : "outline"}
+                className="h-9 text-sm capitalize"
+                onClick={() => setMapLayer(layer)}
+              >
+                {layer === "both" ? "All Layers" : layer === "heatmap" ? "Heatmap" : "Violations"}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            <div className="flex h-[calc(100vh-220px)] min-h-[560px] overflow-hidden rounded-lg">
+              <div className="relative flex-1 overflow-hidden">
+                <EnforcementMap
+                  layer={mapLayer}
+                  hoveredId={hoveredViolation?.id ?? null}
+                  selectedId={selectedViolationId}
+                  violations={filteredEnforcementAlerts}
+                  onSelect={handleSelectViolation}
+                  onHover={handleHoverViolation}
+                />
+              </div>
+
+              <div className="flex w-80 flex-col border-l border-border bg-card">
+                <div className="border-b border-border p-4">
+                  <p className="flex items-center gap-2 text-base font-semibold">
+                    <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
+                    Enforcement Alerts
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {filteredEnforcementAlerts.length} of {UNENFORCED_VIOLATIONS.length} visible, sorted by urgency
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={alertSearch}
+                        onChange={(event) => {
+                          setAlertSearch(event.target.value)
+                          setAlertPage(1)
+                        }}
+                        placeholder="Plate, type, source..."
+                        className="h-9 pl-8 text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={alertSeverityFilter} onValueChange={(value) => {
+                        setAlertSeverityFilter(value)
+                        setAlertPage(1)
+                      }}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All severity</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="Low">Low</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={alertStatusFilter} onValueChange={(value) => {
+                        setAlertStatusFilter(value)
+                        setAlertPage(1)
+                      }}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All status</SelectItem>
+                          <SelectItem value="new">New</SelectItem>
+                          <SelectItem value="sent">Alert Sent</SelectItem>
+                          <SelectItem value="responding">Officer Responding</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Select value={alertTypeFilter} onValueChange={(value) => {
+                      setAlertTypeFilter(value)
+                      setAlertPage(1)
+                    }}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All alert types</SelectItem>
+                        {alertTypes.map((type) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex-1 divide-y divide-border overflow-y-auto">
+                  {visibleEnforcementAlerts.map((vio) => {
+                    const color = severityColor(vio.severity)
+                    const isActive = hoveredViolation?.id === vio.id || selectedViolationId === vio.id
+                    const dispatchState = alertDispatchStates[vio.id] ?? "new"
+                    return (
+                      <div
+                        key={vio.id}
+                        className={`cursor-pointer p-3 transition-colors ${isActive ? "bg-muted" : "hover:bg-muted/50"}`}
+                        onClick={() => handleSelectViolation(vio.id)}
+                        onMouseEnter={() => setHoveredViolation(vio)}
+                        onMouseLeave={() => setHoveredViolation(null)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm font-bold">{vio.plateNumber}</span>
+                              <Badge className="border-0 px-1.5 py-0 text-xs" style={{ backgroundColor: color + "22", color }}>
+                                {vio.severity}
+                              </Badge>
+                              {dispatchState !== "new" && (
+                                <Badge
+                                  variant="outline"
+                                  className={`px-1.5 py-0 text-xs ${dispatchState === "responding" ? "border-[#5B8C5A] text-[#5B8C5A]" : "border-[#DAA22A] text-[#DAA22A]"}`}
+                                >
+                                  {dispatchState === "responding" ? "Officer Responding" : "Alert Sent"}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-0.5 truncate text-xs text-foreground">{vio.violationType}</p>
+                            <p className="truncate text-xs text-muted-foreground">{vio.location}</p>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">{vio.detectedAt}</span>
+                              <span className="text-xs font-semibold" style={{ color }}>{vio.estimatedPenalty}</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={dispatchState === "responding" ? "default" : dispatchState === "sent" ? "secondary" : "outline"}
+                              className="mt-2 h-8 w-full justify-center text-xs"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                if (dispatchState === "responding") {
+                                  handleOpenFollowUp(vio)
+                                  return
+                                }
+                                handleAlertEnforcement(vio)
+                              }}
+                              disabled={dispatchState === "sent"}
+                            >
+                              <BellRing className="mr-1.5 h-3.5 w-3.5" />
+                              {dispatchState === "responding" ? "Log Officer Follow-up" : dispatchState === "sent" ? "Waiting for Officer" : "Alert Enforcement"}
+                            </Button>
+                          </div>
+                          <div className="mt-1.5 h-2 w-2 flex-shrink-0 animate-pulse rounded-full" style={{ backgroundColor: color }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {visibleEnforcementAlerts.length === 0 && (
+                    <div className="p-4 text-sm text-muted-foreground">
+                      No alerts match the current filters.
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2 border-t border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setAlertPage((page) => Math.max(1, page - 1))}
+                      disabled={normalizedAlertPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Page {normalizedAlertPage} of {alertTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setAlertPage((page) => Math.min(alertTotalPages, page + 1))}
+                      disabled={normalizedAlertPage === alertTotalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Legend</p>
+                  <div className="space-y-1.5">
+                    {[
+                      { color: "#E5533D", label: "Vehicle Impounded / High" },
+                      { color: "#5B8C5A", label: "Fine Issued" },
+                      { color: "#DAA22A", label: "Warning / Medium" },
+                    ].map(({ color, label }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div className="h-3 w-3 flex-shrink-0 rounded-full border border-white shadow-sm" style={{ backgroundColor: color }} />
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                      </div>
+                    ))}
+                    <Separator className="my-1" />
+                    <div className="flex items-center gap-2">
+                      <div className="relative h-3 w-3 flex-shrink-0">
+                        <div className="absolute inset-0 animate-ping rounded-full bg-[#E5533D] opacity-40" />
+                        <div className="h-3 w-3 rounded-full border border-white bg-[#E5533D]" />
+                      </div>
+                      <span className="text-xs text-muted-foreground">Pulsing = alert enforcement candidate</span>
+                    </div>
+                  </div>
+                  <p className="pt-1 text-center text-xs text-muted-foreground">
+                    {mockEnforcementLogs.length} enforcement actions today
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (isDetailsModalOpen && selectedEnforcement) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setIsDetailsModalOpen(false)
+              setSelectedEnforcement(null)
+            }}
+            className="mt-1"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-4xl font-semibold text-foreground">Enforcement Action Details</h1>
+            <p className="text-lg text-muted-foreground">Complete information for {selectedEnforcement.id}</p>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="space-y-6 p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {getActionBadge(selectedEnforcement.action)}
+                {selectedEnforcement.isRepeatOffender && (
+                  <Badge className="bg-[#E5533D] px-3 py-1 text-sm text-white">
+                    <AlertTriangle className="mr-1 h-4 w-4" />
+                    Repeat Offender
+                  </Badge>
+                )}
+                <span className="text-sm text-muted-foreground">{selectedEnforcement.timestamp}</span>
+              </div>
+              <Badge variant="outline" className="text-sm">{selectedEnforcement.id}</Badge>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <AlertTriangle className="h-5 w-5" />
+                Offence Information
+              </h3>
+              <div className="grid grid-cols-2 gap-6">
+                <Card className="bg-muted/40">
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs">Offence Type</CardDescription>
+                    <CardTitle className="text-lg">{selectedEnforcement.offenceType}</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="bg-muted/40">
+                  <CardHeader className="pb-3">
+                    <CardDescription className="text-xs">Category</CardDescription>
+                    <CardTitle className="text-lg">{selectedEnforcement.offenceCategory}</CardTitle>
+                  </CardHeader>
+                </Card>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Penalty Amount</Label>
+                  <p className="text-2xl font-bold text-[#E5533D]">{selectedEnforcement.penaltyAmount}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Prior Offences</Label>
+                  <p className="text-2xl font-bold">{selectedEnforcement.priorOffences}</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <Truck className="h-5 w-5" />
+                Vehicle & Driver Information
+              </h3>
+              <div className="grid grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Plate Number</Label>
+                  <p className="font-mono text-lg font-bold">{selectedEnforcement.plateNumber}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Vehicle Type</Label>
+                  <p className="text-base font-medium">{selectedEnforcement.vehicleType}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Driver Name</Label>
+                  <p className="text-base font-medium">{selectedEnforcement.driverName}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Driver License</Label>
+                <p className="font-mono text-base font-medium">{selectedEnforcement.driverLicense}</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <MapPin className="h-5 w-5" />
+                Location Information
+              </h3>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Location</Label>
+                  <p className="text-base font-medium">{selectedEnforcement.location}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">GPS Coordinates</Label>
+                  <p className="font-mono text-base">{selectedEnforcement.coordinates}</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <User className="h-5 w-5" />
+                Officer Information
+              </h3>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Officer Name</Label>
+                  <p className="text-base font-medium">{selectedEnforcement.officer}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    Timestamp
+                  </Label>
+                  <p className="text-base font-medium">{selectedEnforcement.timestamp}</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                <FileText className="h-5 w-5" />
+                Action Notes
+              </h3>
+              <div className="rounded-lg bg-muted/40 p-4">
+                <p className="text-base leading-relaxed">{selectedEnforcement.notes}</p>
+              </div>
+            </div>
+
+            {selectedEnforcement.action === "Vehicle Impounded" && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+                  <div>
+                    <p className="font-semibold text-destructive">Vehicle Impounded</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Vehicle has been impounded and towed to the impound lot. Owner must pay all outstanding penalties plus impound fees to retrieve the vehicle.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedEnforcement.action === "Fine Issued" && (
+              <div className="rounded-lg border border-[#5B8C5A]/50 bg-[#5B8C5A]/20 p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="mt-0.5 h-5 w-5 text-[#5B8C5A]" />
+                  <div>
+                    <p className="font-semibold">Fine Issued</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Fine has been issued for the offence. Payment must be made within the specified timeframe to avoid further enforcement action.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedEnforcement.action === "Warning Issued" && (
+              <div className="rounded-lg border border-[#DAA22A]/50 bg-[#DAA22A]/20 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-[#DAA22A]" />
+                  <div>
+                    <p className="font-semibold">Warning Issued</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Driver has been issued a formal warning. Corrective action must be taken within the specified timeframe to avoid escalation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedEnforcement.isRepeatOffender && (
+              <div className="rounded-lg border border-[#E5533D]/30 bg-[#E5533D]/10 p-4">
+                <div className="flex items-start gap-3">
+                  <XCircle className="mt-0.5 h-5 w-5 text-[#E5533D]" />
+                  <div>
+                    <p className="font-semibold text-[#E5533D]">Repeat Offender Alert</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      This driver/vehicle has {selectedEnforcement.priorOffences} prior offence(s) on record. Escalated enforcement procedures may apply.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -750,459 +1192,6 @@ export function EnforcementPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Enforcement Details Modal */}
-      <Modal open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen} className="w-[90vw] max-w-[1200px]">
-        <ModalHeader onClose={() => setIsDetailsModalOpen(false)}>
-          <div>
-            <ModalTitle>Enforcement Action Details</ModalTitle>
-            <ModalDescription>
-              Complete information for {selectedEnforcement?.id}
-            </ModalDescription>
-          </div>
-        </ModalHeader>
-        
-        <ModalBody>
-          {selectedEnforcement && (
-            <div className="space-y-6">
-              {/* Action Badge */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {getActionBadge(selectedEnforcement.action)}
-                  {selectedEnforcement.isRepeatOffender && (
-                    <Badge className="bg-[#E5533D] text-white text-sm px-3 py-1">
-                      <AlertTriangle className="h-4 w-4 mr-1" />
-                      Repeat Offender
-                    </Badge>
-                  )}
-                  <span className="text-sm text-muted-foreground">
-                    {selectedEnforcement.timestamp}
-                  </span>
-                </div>
-                <Badge variant="outline" className="text-sm">
-                  {selectedEnforcement.id}
-                </Badge>
-              </div>
-
-              <Separator />
-
-              {/* Offence Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  Offence Information
-                </h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <Card className="bg-muted/40">
-                    <CardHeader className="pb-3">
-                      <CardDescription className="text-xs">Offence Type</CardDescription>
-                      <CardTitle className="text-lg">{selectedEnforcement.offenceType}</CardTitle>
-                    </CardHeader>
-                  </Card>
-                  <Card className="bg-muted/40">
-                    <CardHeader className="pb-3">
-                      <CardDescription className="text-xs">Category</CardDescription>
-                      <CardTitle className="text-lg">{selectedEnforcement.offenceCategory}</CardTitle>
-                    </CardHeader>
-                  </Card>
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Penalty Amount</Label>
-                    <p className="text-2xl font-bold text-[#E5533D]">{selectedEnforcement.penaltyAmount}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Prior Offences</Label>
-                    <p className="text-2xl font-bold">{selectedEnforcement.priorOffences}</p>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Vehicle & Driver Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Truck className="h-5 w-5" />
-                  Vehicle & Driver Information
-                </h3>
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Plate Number</Label>
-                    <p className="text-lg font-mono font-bold">{selectedEnforcement.plateNumber}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Vehicle Type</Label>
-                    <p className="text-base font-medium">{selectedEnforcement.vehicleType}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Driver Name</Label>
-                    <p className="text-base font-medium">{selectedEnforcement.driverName}</p>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm text-muted-foreground">Driver License</Label>
-                  <p className="text-base font-mono font-medium">{selectedEnforcement.driverLicense}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Location Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Location Information
-                </h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Location</Label>
-                    <p className="text-base font-medium">{selectedEnforcement.location}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">GPS Coordinates</Label>
-                    <p className="text-base font-mono">{selectedEnforcement.coordinates}</p>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Officer Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Officer Information
-                </h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Officer Name</Label>
-                    <p className="text-base font-medium">{selectedEnforcement.officer}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Timestamp
-                    </Label>
-                    <p className="text-base font-medium">{selectedEnforcement.timestamp}</p>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Action Notes */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Action Notes
-                </h3>
-                <div className="rounded-lg bg-muted/40 p-4">
-                  <p className="text-base leading-relaxed">{selectedEnforcement.notes}</p>
-                </div>
-              </div>
-
-              {/* Action Summary */}
-              {selectedEnforcement.action === "Vehicle Impounded" && (
-                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-destructive">Vehicle Impounded</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Vehicle has been impounded and towed to the impound lot. Owner must pay all outstanding penalties plus impound fees to retrieve the vehicle.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedEnforcement.action === "Fine Issued" && (
-                <div className="rounded-lg bg-[#5B8C5A]/20 border border-[#5B8C5A]/50 p-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-[#5B8C5A] mt-0.5" />
-                    <div>
-                      <p className="font-semibold">Fine Issued</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Fine has been issued for the offence. Payment must be made within the specified timeframe to avoid further enforcement action.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedEnforcement.action === "Warning Issued" && (
-                <div className="rounded-lg bg-[#DAA22A]/20 border border-[#DAA22A]/50 p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-[#DAA22A] mt-0.5" />
-                    <div>
-                      <p className="font-semibold">Warning Issued</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Driver has been issued a formal warning. Corrective action must be taken within the specified timeframe to avoid escalation.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedEnforcement.isRepeatOffender && (
-                <div className="rounded-lg bg-[#E5533D]/10 border border-[#E5533D]/30 p-4">
-                  <div className="flex items-start gap-3">
-                    <XCircle className="h-5 w-5 text-[#E5533D] mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-[#E5533D]">Repeat Offender Alert</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        This driver/vehicle has {selectedEnforcement.priorOffences} prior offence(s) on record. Escalated enforcement procedures may apply.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </ModalBody>
-
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)} className="text-base h-11 px-6">
-            Close
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-
-      {/* ── Enforcement Heatmap Modal ── */}
-      <Modal open={isMapOpen} onOpenChange={setIsMapOpen} className="w-[95vw] max-w-7xl">
-        <ModalHeader onClose={() => setIsMapOpen(false)}>
-          <div className="flex items-center justify-between w-full pr-4">
-            <div>
-              <ModalTitle>Enforcement Heatmap — Maputo</ModalTitle>
-              <ModalDescription>
-                Real-time enforcement activity and alerts for nearby officers
-              </ModalDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              {(["both", "heatmap", "violations"] as const).map((layer) => (
-                <Button
-                  key={layer}
-                  size="sm"
-                  variant={mapLayer === layer ? "default" : "outline"}
-                  className="h-8 text-sm capitalize"
-                  onClick={() => setMapLayer(layer)}
-                >
-                  {layer === "both" ? "All Layers" : layer === "heatmap" ? "Heatmap" : "Violations"}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </ModalHeader>
-
-        <ModalBody className="p-0">
-          <div className="flex h-[75vh]">
-            {/* Real Leaflet map */}
-            <div className="relative flex-1 overflow-hidden">
-              {isMapOpen && (
-                <EnforcementMap
-                  layer={mapLayer}
-                  hoveredId={hoveredViolation?.id ?? null}
-                  selectedId={selectedViolationId}
-                  violations={filteredEnforcementAlerts}
-                  onSelect={handleSelectViolation}
-                  onHover={handleHoverViolation}
-                />
-              )}
-            </div>
-
-            {/* Side panel */}
-            <div className="w-80 border-l border-border bg-card flex flex-col">
-              <div className="p-4 border-b border-border">
-                <p className="font-semibold text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
-                  Enforcement Alerts
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {filteredEnforcementAlerts.length} of {UNENFORCED_VIOLATIONS.length} visible, sorted by urgency
-                </p>
-                <div className="mt-3 space-y-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={alertSearch}
-                      onChange={(event) => {
-                        setAlertSearch(event.target.value)
-                        setAlertPage(1)
-                      }}
-                      placeholder="Plate, type, source..."
-                      className="h-9 pl-8 text-sm"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select value={alertSeverityFilter} onValueChange={(value) => {
-                      setAlertSeverityFilter(value)
-                      setAlertPage(1)
-                    }}>
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All severity</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="Low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={alertStatusFilter} onValueChange={(value) => {
-                      setAlertStatusFilter(value)
-                      setAlertPage(1)
-                    }}>
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All status</SelectItem>
-                        <SelectItem value="new">New</SelectItem>
-                        <SelectItem value="sent">Alert Sent</SelectItem>
-                        <SelectItem value="responding">Officer Responding</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Select value={alertTypeFilter} onValueChange={(value) => {
-                    setAlertTypeFilter(value)
-                    setAlertPage(1)
-                  }}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All alert types</SelectItem>
-                      {alertTypes.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-border">
-                {visibleEnforcementAlerts.map((vio) => {
-                  const color = severityColor(vio.severity)
-                  const isActive = hoveredViolation?.id === vio.id || selectedViolationId === vio.id
-                  const dispatchState = alertDispatchStates[vio.id] ?? "new"
-                  return (
-                    <div
-                      key={vio.id}
-                      className={`p-3 cursor-pointer transition-colors ${isActive ? "bg-muted" : "hover:bg-muted/50"}`}
-                      onClick={() => handleSelectViolation(vio.id)}
-                      onMouseEnter={() => setHoveredViolation(vio)}
-                      onMouseLeave={() => setHoveredViolation(null)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm font-mono">{vio.plateNumber}</span>
-                            <Badge
-                              className="text-xs px-1.5 py-0 border-0"
-                              style={{ backgroundColor: color + "22", color }}
-                            >
-                              {vio.severity}
-                            </Badge>
-                            {dispatchState !== "new" && (
-                              <Badge
-                                variant="outline"
-                                className={`text-xs px-1.5 py-0 ${dispatchState === "responding" ? "border-[#5B8C5A] text-[#5B8C5A]" : "border-[#DAA22A] text-[#DAA22A]"}`}
-                              >
-                                {dispatchState === "responding" ? "Officer Responding" : "Alert Sent"}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-foreground mt-0.5 truncate">{vio.violationType}</p>
-                          <p className="text-xs text-muted-foreground truncate">{vio.location}</p>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-xs text-muted-foreground">{vio.detectedAt}</span>
-                            <span className="text-xs font-semibold" style={{ color }}>{vio.estimatedPenalty}</span>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant={dispatchState === "responding" ? "default" : dispatchState === "sent" ? "secondary" : "outline"}
-                            className="mt-2 h-8 w-full justify-center text-xs"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              if (dispatchState === "responding") {
-                                handleOpenFollowUp(vio)
-                                return
-                              }
-                              handleAlertEnforcement(vio)
-                            }}
-                            disabled={dispatchState === "sent"}
-                          >
-                            <BellRing className="mr-1.5 h-3.5 w-3.5" />
-                            {dispatchState === "responding" ? "Log Officer Follow-up" : dispatchState === "sent" ? "Waiting for Officer" : "Alert Enforcement"}
-                          </Button>
-                        </div>
-                        <div
-                          className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 animate-pulse"
-                          style={{ backgroundColor: color }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-                {visibleEnforcementAlerts.length === 0 && (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    No alerts match the current filters.
-                  </div>
-                )}
-              </div>
-              <div className="p-3 border-t border-border space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => setAlertPage((page) => Math.max(1, page - 1))}
-                    disabled={normalizedAlertPage === 1}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {normalizedAlertPage} of {alertTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => setAlertPage((page) => Math.min(alertTotalPages, page + 1))}
-                    disabled={normalizedAlertPage === alertTotalPages}
-                  >
-                    Next
-                  </Button>
-                </div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Legend</p>
-                <div className="space-y-1.5">
-                  {[
-                    { color: "#E5533D", label: "Vehicle Impounded / High" },
-                    { color: "#5B8C5A", label: "Fine Issued" },
-                    { color: "#DAA22A", label: "Warning / Medium" },
-                  ].map(({ color, label }) => (
-                    <div key={label} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full border border-white shadow-sm flex-shrink-0" style={{ backgroundColor: color }} />
-                      <span className="text-xs text-muted-foreground">{label}</span>
-                    </div>
-                  ))}
-                  <Separator className="my-1" />
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-3 h-3 flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full bg-[#E5533D] opacity-40 animate-ping" />
-                      <div className="w-3 h-3 rounded-full bg-[#E5533D] border border-white" />
-                    </div>
-                    <span className="text-xs text-muted-foreground">Pulsing = alert enforcement candidate</span>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground text-center pt-1">
-                  {mockEnforcementLogs.length} enforcement actions today
-                </p>
-              </div>
-            </div>
-          </div>
-        </ModalBody>
-      </Modal>
     </div>
   )
 }

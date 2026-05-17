@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Settings, Edit, Info, Plus, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
@@ -339,14 +340,34 @@ export function RUCPolicyPage() {
         </CardContent>
       </Card>
 
-      {/* Create Policy Modal */}
-      <Modal open={isCreateOpen} onOpenChange={setIsCreateOpen} className="w-full max-w-2xl">
-        <ModalHeader onClose={() => setIsCreateOpen(false)}>
-          <ModalTitle>Create RUC Policy</ModalTitle>
-          <ModalDescription>Define a new Road User Charge policy configuration</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="space-y-6">
+      <Sheet
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          if (!open && createMutation.isPending) return
+          setIsCreateOpen(open)
+        }}
+      >
+        <SheetContent side="right" className="w-[560px] p-0 sm:max-w-[560px]">
+          <SheetHeader className="border-b border-border bg-muted/40 px-6 py-4 pr-14">
+            <SheetTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-[#5B8C5A]" />
+              Create RUC Policy
+            </SheetTitle>
+            <SheetDescription>
+              Define a new Road User Charge policy configuration.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 space-y-5 overflow-y-auto bg-muted/20 px-6 py-4">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Policy Scope</p>
+                <p className="text-sm text-muted-foreground">
+                  This policy will be created for the active municipality and can be activated after review.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="text-base">Municipality</Label>
               <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
@@ -390,23 +411,24 @@ export function RUCPolicyPage() {
               </p>
             </div>
           </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreatePolicy} disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Policy"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
+
+          <SheetFooter className="border-t border-border bg-background px-6 py-4">
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreatePolicy} disabled={createMutation.isPending}>
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Policy"
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Edit Policy Modal */}
       <Modal open={isEditOpen} onOpenChange={setIsEditOpen} className="w-full max-w-2xl">
