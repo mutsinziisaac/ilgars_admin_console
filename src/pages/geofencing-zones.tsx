@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,8 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertCircle, ArrowLeft, CheckCircle, Edit, Loader2, MoreHorizontal, Plus, XCircle } from "lucide-react"
 import { toast } from "sonner"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
+import { EditableGoogleMap } from "@/components/ui/map"
 import {
   useCreateExemptArea,
   useExemptAreasList,
@@ -118,20 +117,6 @@ const createBoundaryGeoJson = (points: [number, number][]) => {
   })
 }
 
-const createBoundaryVertexIcon = (index: number) =>
-  L.divIcon({
-    html: `
-      <div style="
-        display:flex;height:24px;width:24px;align-items:center;justify-content:center;
-        border-radius:999px;border:2px solid #ffffff;background:#5B8C5A;color:#ffffff;
-        font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25);
-      ">${index + 1}</div>
-    `,
-    className: "",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  })
-
 const createDefaultAreaCode = () => `PORT-EXEMPT-${Date.now()}`
 const MAPUTO_CENTER: [number, number] = [-25.9655, 32.5832]
 
@@ -142,10 +127,6 @@ const getBoundaryDataSize = (area: ExemptArea) => {
 }
 
 export function GeofencingZonesPage() {
-  const boundaryMapContainerRef = useRef<HTMLDivElement | null>(null)
-  const boundaryMapRef = useRef<L.Map | null>(null)
-  const boundaryLayerRef = useRef<L.LayerGroup | null>(null)
-  const areaDraftPointsRef = useRef<[number, number][]>([])
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(getStoredMunicipalityId())
   const [selectedArea, setSelectedArea] = useState<ExemptArea | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -219,123 +200,6 @@ export function GeofencingZonesPage() {
   const closeEditArea = () => {
     setIsEditOpen(false)
     setSelectedArea(null)
-  }
-
-  useEffect(() => {
-    const isBoundaryEditorOpen = isCreateOpen || isEditOpen
-    if (!isBoundaryEditorOpen || !boundaryMapContainerRef.current || boundaryMapRef.current) return
-
-    const map = L.map(boundaryMapContainerRef.current, {
-      center: MAPUTO_CENTER,
-      zoom: 11,
-      zoomControl: true,
-      attributionControl: true,
-    })
-
-    L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
-      attribution: '&copy; <a href="https://www.google.com/maps">Google</a>',
-      maxZoom: 20,
-    }).addTo(map)
-
-    boundaryLayerRef.current = L.layerGroup().addTo(map)
-    boundaryMapRef.current = map
-    map.on("click", (event: L.LeafletMouseEvent) => {
-      setAreaDraftPoints((points) => [...points, [event.latlng.lat, event.latlng.lng]])
-    })
-
-    window.setTimeout(() => map.invalidateSize(), 100)
-
-    return () => {
-      map.remove()
-      boundaryMapRef.current = null
-      boundaryLayerRef.current = null
-    }
-  }, [isCreateOpen, isEditOpen])
-
-  useEffect(() => {
-    const map = boundaryMapRef.current
-    const layer = boundaryLayerRef.current
-    if ((!isCreateOpen && !isEditOpen) || !map || !layer) return
-
-    areaDraftPointsRef.current = areaDraftPoints
-    layer.clearLayers()
-
-    areaDraftPoints.forEach((point, index) => {
-      L.marker(point, {
-        draggable: true,
-        icon: createBoundaryVertexIcon(index),
-      })
-        .on("dragstart", () => map.dragging.disable())
-        .on("dragend", (event) => {
-          const marker = event.target as L.Marker
-          const nextPoint = marker.getLatLng()
-          map.dragging.enable()
-          setAreaDraftPoints((points) =>
-            points.map((currentPoint, currentIndex) =>
-              currentIndex === index ? [nextPoint.lat, nextPoint.lng] : currentPoint
-            )
-          )
-        })
-        .addTo(layer)
-    })
-
-    if (areaDraftPoints.length >= 2) {
-      L.polyline(areaDraftPoints, {
-        color: "#DAA22A",
-        weight: 3,
-        dashArray: areaDraftPoints.length >= 3 ? undefined : "6 6",
-      }).addTo(layer)
-    }
-
-    if (areaDraftPoints.length >= 3) {
-      const polygon = L.polygon(areaDraftPoints, {
-        color: "#5B8C5A",
-        weight: 3,
-        fillColor: "#5B8C5A",
-        fillOpacity: 0.25,
-      }).addTo(layer)
-
-      polygon.on("mouseover", () => {
-        const element = polygon.getElement() as HTMLElement | undefined
-        if (element) element.style.cursor = "move"
-      })
-
-      polygon.on("mousedown", (event: L.LeafletMouseEvent) => {
-        L.DomEvent.stopPropagation(event)
-        const startLatLng = event.latlng
-        const originalPoints = areaDraftPointsRef.current
-        map.dragging.disable()
-
-        const handleMouseMove = (moveEvent: L.LeafletMouseEvent) => {
-          const latDelta = moveEvent.latlng.lat - startLatLng.lat
-          const lngDelta = moveEvent.latlng.lng - startLatLng.lng
-          setAreaDraftPoints(originalPoints.map(([lat, lng]) => [lat + latDelta, lng + lngDelta]))
-        }
-
-        const handleMouseUp = () => {
-          map.off("mousemove", handleMouseMove)
-          map.dragging.enable()
-        }
-
-        map.on("mousemove", handleMouseMove)
-        map.once("mouseup", handleMouseUp)
-      })
-    }
-
-    if (areaDraftPoints.length) {
-      map.fitBounds(L.latLngBounds(areaDraftPoints), { padding: [24, 24], maxZoom: 15 })
-    }
-  }, [areaDraftPoints, isCreateOpen, isEditOpen])
-
-  const handleLoadGeoJsonOnMap = () => {
-    const points = extractPolygonLatLngs(areaForm.boundaryData)
-    if (points.length < 3) {
-      toast.error("GeoJSON boundary must include at least three polygon points")
-      return
-    }
-
-    setAreaDraftPoints(points)
-    toast.success("GeoJSON loaded on map")
   }
 
   const handleApplyDrawnBoundary = () => {
@@ -487,13 +351,19 @@ export function GeofencingZonesPage() {
           </Badge>
         </div>
         <div className="h-[420px] overflow-hidden rounded-md border border-border">
-          <div ref={boundaryMapContainerRef} className="h-full w-full" />
+          <EditableGoogleMap
+            points={areaDraftPoints}
+            onPointsChange={setAreaDraftPoints}
+            shape="polygon"
+            center={MAPUTO_CENTER}
+            zoom={11}
+            height="100%"
+            markerColor="#5B8C5A"
+            strokeColor="#DAA22A"
+            fillColor="#5B8C5A"
+          />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Button type="button" variant="outline" onClick={handleLoadGeoJsonOnMap}>
-            <MapPin className="mr-2 h-4 w-4" />
-            Load GeoJSON
-          </Button>
+        <div className="grid gap-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,10 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Route, MapPin, Plus, Upload, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Route, Plus, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
+import { EditableGoogleMap } from "@/components/ui/map"
 import { useCreateMunicipalRoute, useMunicipalRoutesList } from "@/lib/api/municipal-routes/hooks"
 import type { MunicipalRoute } from "@/lib/api/municipal-routes/schemas"
 import { MUNICIPAL_ROUTES_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
@@ -136,25 +135,7 @@ const createRouteGeoJson = (name: string, points: [number, number][]) =>
     properties: { name },
   })
 
-const createRouteVertexIcon = (index: number) =>
-  L.divIcon({
-    html: `
-      <div style="
-        display:flex;height:24px;width:24px;align-items:center;justify-content:center;
-        border-radius:999px;border:2px solid #ffffff;background:#DAA22A;color:#1C1C1C;
-        font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.25);
-      ">${index + 1}</div>
-    `,
-    className: "",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  })
-
 export function RoutesPage() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const routeMapContainerRef = useRef<HTMLDivElement | null>(null)
-  const routeMapRef = useRef<L.Map | null>(null)
-  const routeLayerRef = useRef<L.LayerGroup | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [activeAllowedUse, setActiveAllowedUse] = useState<(typeof filterOptions)[number]["value"]>("all")
   const [activeMunicipalityId, setActiveMunicipalityId] = useState(getStoredMunicipalityId())
@@ -225,74 +206,6 @@ export function RoutesPage() {
     setRouteDraftPoints(extractLineLatLngs(defaultRouteGeoJson))
   }
 
-  useEffect(() => {
-    if (!isCreateOpen || !routeMapContainerRef.current || routeMapRef.current) return
-
-    const map = L.map(routeMapContainerRef.current, {
-      center: MAPUTO_CENTER,
-      zoom: 11,
-      zoomControl: true,
-      attributionControl: true,
-    })
-
-    L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
-      attribution: '&copy; <a href="https://www.google.com/maps">Google</a>',
-      maxZoom: 20,
-    }).addTo(map)
-
-    routeLayerRef.current = L.layerGroup().addTo(map)
-    routeMapRef.current = map
-    map.on("click", (event: L.LeafletMouseEvent) => {
-      setRouteDraftPoints((points) => [...points, [event.latlng.lat, event.latlng.lng]])
-    })
-
-    window.setTimeout(() => map.invalidateSize(), 100)
-
-    return () => {
-      map.remove()
-      routeMapRef.current = null
-      routeLayerRef.current = null
-    }
-  }, [isCreateOpen])
-
-  useEffect(() => {
-    const map = routeMapRef.current
-    const layer = routeLayerRef.current
-    if (!isCreateOpen || !map || !layer) return
-
-    layer.clearLayers()
-
-    routeDraftPoints.forEach((point, index) => {
-      L.marker(point, {
-        draggable: true,
-        icon: createRouteVertexIcon(index),
-      })
-        .on("dragstart", () => map.dragging.disable())
-        .on("dragend", (event) => {
-          const marker = event.target as L.Marker
-          const nextPoint = marker.getLatLng()
-          map.dragging.enable()
-          setRouteDraftPoints((points) =>
-            points.map((currentPoint, currentIndex) =>
-              currentIndex === index ? [nextPoint.lat, nextPoint.lng] : currentPoint
-            )
-          )
-        })
-        .addTo(layer)
-    })
-
-    if (routeDraftPoints.length >= 2) {
-      L.polyline(routeDraftPoints, {
-        color: "#DAA22A",
-        weight: 4,
-      }).addTo(layer)
-    }
-
-    if (routeDraftPoints.length) {
-      map.fitBounds(L.latLngBounds(routeDraftPoints), { padding: [24, 24], maxZoom: 15 })
-    }
-  }, [isCreateOpen, routeDraftPoints])
-
   const openCreateRoute = () => {
     resetForm()
     setIsCreateOpen(true)
@@ -346,39 +259,6 @@ export function RoutesPage() {
         },
       },
     )
-  }
-
-  const handleRouteFileUpload = async (file: File | undefined) => {
-    if (!file) return
-
-    try {
-      const geoJson = await file.text()
-      JSON.parse(geoJson)
-      setRouteForm({
-        ...routeForm,
-        name: routeForm.name || file.name.replace(/\.(geo)?json$/i, ""),
-        geoJson: compactJson(geoJson),
-      })
-      setRouteDraftPoints(extractLineLatLngs(geoJson))
-      toast.success("GeoJSON route loaded")
-    } catch {
-      toast.error("Upload a valid GeoJSON file")
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
-      }
-    }
-  }
-
-  const handleLoadRouteGeoJsonOnMap = () => {
-    const points = extractLineLatLngs(routeForm.geoJson)
-    if (points.length < 2) {
-      toast.error("GeoJSON route must include at least two line points")
-      return
-    }
-
-    setRouteDraftPoints(points)
-    toast.success("GeoJSON loaded on map")
   }
 
   const handleApplyDrawnRoute = () => {
@@ -522,13 +402,18 @@ export function RoutesPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="h-[420px] overflow-hidden rounded-md border border-border">
-              <div ref={routeMapContainerRef} className="h-full w-full" />
+              <EditableGoogleMap
+                points={routeDraftPoints}
+                onPointsChange={setRouteDraftPoints}
+                shape="line"
+                center={MAPUTO_CENTER}
+                zoom={11}
+                height="100%"
+                markerColor="#DAA22A"
+                strokeColor="#DAA22A"
+              />
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <Button type="button" variant="outline" onClick={handleLoadRouteGeoJsonOnMap}>
-                <MapPin className="mr-2 h-4 w-4" />
-                Load GeoJSON
-              </Button>
+            <div className="grid gap-2 sm:grid-cols-3">
               <Button
                 type="button"
                 variant="outline"
@@ -557,7 +442,7 @@ export function RoutesPage() {
           <CardHeader>
             <CardTitle className="text-2xl">GeoJSON Route Data</CardTitle>
             <CardDescription className="text-base">
-              Paste a GeoJSON Feature or LineString for the route, or upload a .geojson file.
+              Paste a GeoJSON Feature or LineString for the route.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -571,26 +456,6 @@ export function RoutesPage() {
               wrap="off"
               className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
             />
-
-            <div className="flex items-center gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".geojson,.json,application/geo+json,application/json"
-                className="hidden"
-                onChange={(event) => handleRouteFileUpload(event.target.files?.[0])}
-              />
-              <Button
-                variant="outline"
-                className="w-full"
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={createMutation.isPending}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload GeoJSON File
-              </Button>
-            </div>
           </CardContent>
         </Card>
 

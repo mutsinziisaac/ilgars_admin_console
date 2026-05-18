@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react"
-import L from "leaflet"
+import { Map as GoogleMap, type MapCircle, type MapMarker } from "@/components/ui/map"
 
 // ── Real Maputo coordinates ──────────────────────────────────────────────────
 // Centre of Maputo city
@@ -214,32 +213,6 @@ const actionColor = (action: string) =>
 const severityColor = (s: EnforcementSeverity) =>
   s === "High" ? "#E5533D" : s === "Medium" ? "#DAA22A" : "#5B8C5A"
 
-// ── SVG circle icon factory ───────────────────────────────────────────────────
-function circleIcon(color: string, pulse = false, active = false) {
-  const size = active ? 42 : 28
-  const center = size / 2
-  const markerRadius = active ? 11 : 9
-  const pulseRadius = active ? 18 : 13
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      ${active ? `<circle cx="${center}" cy="${center}" r="${center - 3}" fill="none" stroke="#111827" stroke-width="3"/>` : ""}
-      ${pulse ? `<circle cx="${center}" cy="${center}" r="${pulseRadius}" fill="${color}" opacity="${active ? "0.36" : "0.25"}">
-        <animate attributeName="r" values="${markerRadius};${pulseRadius};${markerRadius}" dur="1.2s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" repeatCount="indefinite"/>
-      </circle>` : ""}
-      <circle cx="${center}" cy="${center}" r="${markerRadius}" fill="${color}" stroke="white" stroke-width="${active ? "3.5" : "2.5"}"/>
-      ${pulse ? `<path d="M${center} ${center - 5}v5l3 2" stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>` :
-               `<circle cx="${center}" cy="${center}" r="4" fill="white" opacity="0.8"/>`}
-    </svg>`
-  return L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [size, size],
-    iconAnchor: [center, center],
-    popupAnchor: [0, -center],
-  })
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface EnforcementMapProps {
   layer: "both" | "heatmap" | "violations"
@@ -259,190 +232,122 @@ export function EnforcementMap({
   violations = UNENFORCED_VIOLATIONS,
   onSelect,
 }: EnforcementMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const heatLayerRef = useRef<L.LayerGroup | null>(null)
-  const enfLayerRef = useRef<L.LayerGroup | null>(null)
-  const vioLayerRef = useRef<L.LayerGroup | null>(null)
-  const vioMarkersRef = useRef<Map<string, L.Marker>>(new Map())
+  const showHeat = layer === "heatmap" || layer === "both"
+  const showViolations = layer === "violations" || layer === "both"
+  const heatCircles: MapCircle[] = showHeat
+    ? HEATMAP_ZONES.flatMap(({ latlng, radius, intensity }) => [
+        {
+          center: latlng,
+          radius,
+          color: "#E5533D",
+          fillOpacity: intensity * 0.25,
+        },
+        {
+          center: latlng,
+          radius: radius * 0.45,
+          color: "#E5533D",
+          fillOpacity: intensity * 0.55,
+        },
+      ])
+    : []
+  const enforcementMarkers: MapMarker[] = showHeat
+    ? ENFORCEMENT_POINTS.map((pt) => {
+        const color = actionColor(pt.action)
+        return {
+          position: pt.latlng,
+          label: pt.plateNumber,
+          color,
+          popupHtml: `
+            <div style="width:260px;font-family:Outfit,system-ui,sans-serif">
+              <div style="background:${color};color:white;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <strong style="font-size:15px;line-height:1.1">${pt.plateNumber}</strong>
+                <span style="font-size:11px;opacity:.85">${pt.timestamp}</span>
+              </div>
+              <div style="padding:12px">
+                <div style="font-size:13px;font-weight:700;margin-bottom:6px">${pt.offenceType}</div>
+                <div style="font-size:12px;color:#555;margin-bottom:4px">${pt.location}</div>
+                <div style="font-size:12px;color:#555;margin-bottom:10px">${pt.officer}</div>
+                <span style="display:inline-block;background:${color}22;color:${color};padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700">${pt.action}</span>
+              </div>
+            </div>
+          `,
+        }
+      })
+    : []
+  const locationCounts = new Map<string, number>()
+  const violationMarkers: MapMarker[] = showViolations
+    ? violations.map((vio) => {
+        const key = `${Math.round(vio.latlng[0] * 250)}:${Math.round(vio.latlng[1] * 250)}`
+        const countAtLocation = locationCounts.get(key) ?? 0
+        locationCounts.set(key, countAtLocation + 1)
+        const angle = countAtLocation * 0.95
+        const radius = countAtLocation === 0 ? 0 : 0.00018 + Math.floor(countAtLocation / 6) * 0.00008
+        const markerPosition: [number, number] = [
+          vio.latlng[0] + Math.sin(angle) * radius,
+          vio.latlng[1] + Math.cos(angle) * radius,
+        ]
+        const color = severityColor(vio.severity)
+        const active = vio.id === hoveredId || vio.id === selectedId
 
-  // ── Init map once ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
-
-    const map = L.map(containerRef.current, {
-      center: MAPUTO_CENTER,
-      zoom: DEFAULT_ZOOM,
-      zoomControl: true,
-      attributionControl: true,
-    })
-
-    // OpenStreetMap tiles
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(map)
-
-    // ── Heatmap layer (CSS radial circles via L.circle) ──────────────────────
-    const heatLayer = L.layerGroup()
-    HEATMAP_ZONES.forEach(({ latlng, radius, intensity }) => {
-      // Outer glow
-      L.circle(latlng, {
-        radius,
-        color: "transparent",
-        fillColor: "#E5533D",
-        fillOpacity: intensity * 0.25,
-        interactive: false,
-      }).addTo(heatLayer)
-      // Inner core
-      L.circle(latlng, {
-        radius: radius * 0.45,
-        color: "transparent",
-        fillColor: "#E5533D",
-        fillOpacity: intensity * 0.55,
-        interactive: false,
-      }).addTo(heatLayer)
-    })
-    heatLayerRef.current = heatLayer
-
-    // ── Enforcement action markers ────────────────────────────────────────────
-    const enfLayer = L.layerGroup()
-    ENFORCEMENT_POINTS.forEach((pt) => {
-      const color = actionColor(pt.action)
-      const marker = L.marker(pt.latlng, { icon: circleIcon(color) })
-      marker.bindPopup(`
-        <div style="min-width:200px;font-family:inherit">
-          <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px">
-            <strong>${pt.plateNumber}</strong>
-            <span style="float:right;font-size:11px;opacity:.85">${pt.timestamp}</span>
-          </div>
-          <div style="font-size:12px;color:#555;margin-bottom:4px">${pt.offenceType}</div>
-          <div style="font-size:12px;margin-bottom:2px">📍 ${pt.location}</div>
-          <div style="font-size:12px;margin-bottom:2px">👮 ${pt.officer}</div>
-          <div style="margin-top:6px">
-            <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${pt.action}</span>
-          </div>
-        </div>
-      `, { maxWidth: 260 })
-      marker.addTo(enfLayer)
-    })
-    enfLayerRef.current = enfLayer
-
-    mapRef.current = map
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-    }
-  }, [])
-
-  // ── Render one marker per enforcement alert ────────────────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    if (vioLayerRef.current) {
-      map.removeLayer(vioLayerRef.current)
-    }
-
-    const vioLayer = L.layerGroup()
-    const vioMarkers = new Map<string, L.Marker>()
-    const locationCounts = new Map<string, number>()
-
-    violations.forEach((vio) => {
-      const key = `${Math.round(vio.latlng[0] * 250)}:${Math.round(vio.latlng[1] * 250)}`
-      const countAtLocation = locationCounts.get(key) ?? 0
-      locationCounts.set(key, countAtLocation + 1)
-      const angle = countAtLocation * 0.95
-      const radius = countAtLocation === 0 ? 0 : 0.00018 + Math.floor(countAtLocation / 6) * 0.00008
-      const markerPosition: [number, number] = [
-        vio.latlng[0] + Math.sin(angle) * radius,
-        vio.latlng[1] + Math.cos(angle) * radius,
-      ]
-      const color = severityColor(vio.severity)
-      const marker = L.marker(markerPosition, { icon: circleIcon(color, true) })
-
-      marker.bindPopup(`
-        <div style="min-width:220px;font-family:inherit">
-          <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px;display:flex;justify-content:space-between;align-items:center">
-            <strong>${vio.plateNumber}</strong>
-            <span style="background:rgba(255,255,255,.25);padding:1px 6px;border-radius:3px;font-size:10px">${vio.severity}</span>
-          </div>
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px">${vio.violationType}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#555;margin-bottom:6px">
-            <div><span style="color:#999">Vehicle</span><br/>${vio.vehicleType}</div>
-            <div><span style="color:#999">Owner</span><br/>${vio.owner}</div>
-            <div><span style="color:#999">Detected</span><br/>${vio.detectedAt}</div>
-            <div><span style="color:#999">Source</span><br/>${vio.detectedBy}</div>
-          </div>
-          <div style="font-size:11px;color:#555;margin-bottom:6px">📍 ${vio.location}</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eee;padding-top:6px">
-            <span style="font-size:11px;color:#888">Est. Penalty</span>
-            <strong style="color:${color};font-size:14px">${vio.estimatedPenalty}</strong>
-          </div>
-          <div style="margin-top:6px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:4px;padding:4px 8px;text-align:center;font-size:11px;font-weight:600;color:#92400E">
-            Alert Enforcement
-          </div>
-        </div>
-      `, { maxWidth: 280 })
-
-      marker.on("mouseover", () => onHover(vio.id))
-      marker.on("mouseout", () => onHover(null))
-      marker.on("click", () => onSelect?.(vio.id))
-      marker.addTo(vioLayer)
-      vioMarkers.set(vio.id, marker)
-    })
-
-    vioLayerRef.current = vioLayer
-    vioMarkersRef.current = vioMarkers
-
-    if (layer === "violations" || layer === "both") {
-      vioLayer.addTo(map)
-    }
-  }, [violations, layer, onHover, onSelect])
-
-  // ── Toggle layers when prop changes ───────────────────────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const showHeat = layer === "heatmap" || layer === "both"
-    const showVio  = layer === "violations" || layer === "both"
-
-    if (heatLayerRef.current) {
-      showHeat ? heatLayerRef.current.addTo(map) : map.removeLayer(heatLayerRef.current)
-    }
-    if (enfLayerRef.current) {
-      showHeat ? enfLayerRef.current.addTo(map) : map.removeLayer(enfLayerRef.current)
-    }
-    if (vioLayerRef.current) {
-      showVio ? vioLayerRef.current.addTo(map) : map.removeLayer(vioLayerRef.current)
-    }
-  }, [layer])
-
-  // ── Highlight hovered violation marker ────────────────────────────────────
-  useEffect(() => {
-    vioMarkersRef.current.forEach((marker, id) => {
-      const vio = violations.find((v) => v.id === id)
-      if (!vio) return
-      const color = severityColor(vio.severity)
-      const isActiveAlert = id === hoveredId || id === selectedId
-
-      if (isActiveAlert) {
-        marker.setIcon(circleIcon(color, true, true))
-        mapRef.current?.setView(vio.latlng, Math.max(mapRef.current.getZoom(), 15))
-        marker.openPopup()
-      } else {
-        marker.setIcon(circleIcon(color, true, false))
-      }
-    })
-  }, [hoveredId, selectedId, violations])
+        return {
+          position: markerPosition,
+          label: vio.plateNumber,
+          color,
+          active,
+          onMouseEnter: () => onHover(vio.id),
+          onMouseLeave: () => onHover(null),
+          onClick: () => onSelect?.(vio.id),
+          popupHtml: `
+            <div style="width:320px;font-family:Outfit,system-ui,sans-serif;color:#1C1C1C">
+              <div style="background:${color};color:white;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <strong style="font-size:16px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${vio.plateNumber}</strong>
+                <span style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.28);padding:2px 8px;border-radius:5px;font-size:12px;line-height:1;font-weight:700">${vio.severity}</span>
+              </div>
+              <div style="padding:14px 14px 12px">
+                <div style="font-size:18px;line-height:1.2;font-weight:800;margin-bottom:10px">${vio.violationType}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:18px;row-gap:8px;margin-bottom:10px">
+                  <div>
+                    <div style="font-size:12px;line-height:1;color:#8C8C8C">Vehicle</div>
+                    <div style="font-size:14px;line-height:1.2;color:#4A4A4A;margin-top:3px">${vio.vehicleType}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:12px;line-height:1;color:#8C8C8C">Owner</div>
+                    <div style="font-size:14px;line-height:1.2;color:#4A4A4A;margin-top:3px">${vio.owner}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:12px;line-height:1;color:#8C8C8C">Detected</div>
+                    <div style="font-size:14px;line-height:1.2;color:#4A4A4A;margin-top:3px">${vio.detectedAt}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:12px;line-height:1;color:#8C8C8C">Source</div>
+                    <div style="font-size:14px;line-height:1.2;color:#4A4A4A;margin-top:3px">${vio.detectedBy}</div>
+                  </div>
+                </div>
+                <div style="font-size:14px;line-height:1.3;color:#555;margin-bottom:12px">${vio.location}</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #ECECEC;padding-top:10px;margin-bottom:10px">
+                  <span style="font-size:13px;color:#7A7A7A">Est. Penalty</span>
+                  <strong style="color:${color};font-size:18px;line-height:1">${vio.estimatedPenalty}</strong>
+                </div>
+                <div style="background:#FEF3C7;border:1px solid #F2CC58;border-radius:6px;padding:8px 10px;text-align:center;font-size:14px;line-height:1.1;font-weight:800;color:#8A3A0A">
+                  Alert Enforcement
+                </div>
+              </div>
+            </div>
+          `,
+        }
+      })
+    : []
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full"
-      style={{ minHeight: 0 }}
+    <GoogleMap
+      center={MAPUTO_CENTER}
+      zoom={DEFAULT_ZOOM}
+      markers={[...enforcementMarkers, ...violationMarkers]}
+      circles={heatCircles}
+      height="100%"
+      className="h-full w-full"
+      defaultView="street"
+      activeMarkerZoom={15}
     />
   )
 }

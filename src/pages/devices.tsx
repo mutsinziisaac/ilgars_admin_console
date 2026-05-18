@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,8 +22,7 @@ import { ApiError, getApiErrorMessage } from "@/lib/api/errors"
 import { buildDeviceAssignmentPayload } from "@/lib/api/devices/assignmentPayload"
 import { buildDefaultRegisterDevicePayload } from "@/lib/api/devices/registerPayload"
 import { getCurrentUsername } from "@/lib/auth/currentUser"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
+import { Map, type MapMarker } from "@/components/ui/map"
 
 // Maputo center coordinates
 const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
@@ -174,56 +173,15 @@ const mapVehicleToTrackingDevice = (
   }
 }
 
-// Helper function to create device icon for Leaflet
-function deviceIcon(status: string) {
-  const color = status === "Active" ? "#5B8C5A" : status === "Idle" ? "#DAA22A" : "#E5533D"
-  const pulse = status === "Active"
-  
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      ${pulse ? `<circle cx="14" cy="14" r="13" fill="${color}" opacity="0.25">
-        <animate attributeName="r" values="10;14;10" dur="1.6s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" repeatCount="indefinite"/>
-      </circle>` : ""}
-      <circle cx="14" cy="14" r="9" fill="${color}" stroke="white" stroke-width="2.5"/>
-      <circle cx="14" cy="14" r="4" fill="white" opacity="0.8"/>
-    </svg>`
-  
-  return L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
-  })
-}
+const deviceStatusColor = (status: string) =>
+  status === "Active" ? "#5B8C5A" : status === "Idle" ? "#DAA22A" : "#E5533D"
 
-// Helper function to create camera icon for Leaflet
-function cameraIcon(status: string) {
-  const color = status === "Online" ? "#5B8C5A" : "#E5533D"
-  
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      <circle cx="14" cy="14" r="9" fill="${color}" stroke="white" stroke-width="2.5"/>
-      <path d="M10 11h4l1-2h2l1 2h4v6H10v-6z" fill="white" opacity="0.9"/>
-      <circle cx="16" cy="14" r="2" fill="${color}"/>
-    </svg>`
-  
-  return L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
-  })
-}
+const cameraStatusColor = (status: string) => status === "Online" ? "#5B8C5A" : "#E5533D"
 
 export function DevicesPage() {
   const [activeTab, setActiveTab] = useState("tracking")
   const [searchQuery, setSearchQuery] = useState("")
   const [isMapOpen, setIsMapOpen] = useState(false)
-  const mapContainerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
   const registerDeviceMutation = useRegisterDevice()
   const queryClient = useQueryClient()
   const {
@@ -459,107 +417,63 @@ export function DevicesPage() {
 
   const onlineCameras = cameras.filter(c => c.status === "Online").length
   const offlineCameras = cameras.filter(c => c.status === "Offline").length
-
-  // Initialize Leaflet map when map page opens
-  useEffect(() => {
-    if (!isMapOpen || !mapContainerRef.current || mapRef.current) return
-
-    try {
-      // Create map
-      const map = L.map(mapContainerRef.current, {
-        center: MAPUTO_CENTER,
-        zoom: DEFAULT_ZOOM,
-        zoomControl: true,
-        attributionControl: true,
-      })
-
-      // Add OpenStreetMap tiles
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map)
-
-      // Add GPS device markers
-      trackingDevices.forEach((device) => {
-        const marker = L.marker(device.latlng, { icon: deviceIcon(device.status) })
-        
-        const color = device.status === "Active" ? "#5B8C5A" : device.status === "Idle" ? "#DAA22A" : "#E5533D"
-        
-        marker.bindPopup(`
-          <div style="min-width:220px;font-family:inherit">
-            <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px">
-              <strong>${device.plateNumber}</strong>
-              <span style="float:right;font-size:11px;opacity:.85">${device.lastUpdate}</span>
+  const mapMarkers: MapMarker[] = [
+    ...trackingDevices.map((device) => {
+      const color = deviceStatusColor(device.status)
+      return {
+        position: device.latlng,
+        label: device.plateNumber,
+        color,
+        glyph: "T",
+        popupHtml: `
+          <div style="width:280px;font-family:Outfit,system-ui,sans-serif">
+            <div style="background:${color};color:white;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <strong style="font-size:14px;line-height:1.1">${device.plateNumber}</strong>
+              <span style="font-size:11px;opacity:.85">${device.lastUpdate}</span>
             </div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px">${device.vehicleType}</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#555;margin-bottom:6px">
-              <div><span style="color:#999">Owner</span><br/>${device.owner}</div>
-              <div><span style="color:#999">Speed</span><br/>${device.speed}</div>
-              <div><span style="color:#999">Battery</span><br/>${device.battery}</div>
-              <div><span style="color:#999">Signal</span><br/>${device.signal}</div>
-            </div>
-            <div style="font-size:11px;color:#555;margin-bottom:6px">📍 ${device.location}</div>
-            <div style="margin-top:6px">
-              <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${device.status}</span>
+            <div style="padding:12px">
+              <div style="font-size:14px;font-weight:700;margin-bottom:8px">${device.vehicleType}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:#555;margin-bottom:8px">
+                <div><span style="color:#999">Owner</span><br/>${device.owner}</div>
+                <div><span style="color:#999">Speed</span><br/>${device.speed}</div>
+                <div><span style="color:#999">Battery</span><br/>${device.battery}</div>
+                <div><span style="color:#999">Signal</span><br/>${device.signal}</div>
+              </div>
+              <div style="font-size:12px;color:#555;margin-bottom:8px">${device.location}</div>
+              <span style="display:inline-block;background:${color}22;color:${color};padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700">${device.status}</span>
             </div>
           </div>
-        `, { maxWidth: 280 })
-        
-        // Show popup on hover instead of click
-        marker.on('mouseover', () => marker.openPopup())
-        marker.on('mouseout', () => marker.closePopup())
-        
-        marker.addTo(map)
-      })
-
-      // Add camera markers
-      cameras.forEach((camera) => {
-        const marker = L.marker(camera.latlng, { icon: cameraIcon(camera.status) })
-        
-        const color = camera.status === "Online" ? "#5B8C5A" : "#E5533D"
-        
-        marker.bindPopup(`
-          <div style="min-width:220px;font-family:inherit">
-            <div style="background:${color};color:white;padding:6px 10px;border-radius:6px 6px 0 0;margin:-10px -10px 8px -10px">
-              <strong>${camera.name}</strong>
+        `,
+      } satisfies MapMarker
+    }),
+    ...cameras.map((camera) => {
+      const color = cameraStatusColor(camera.status)
+      return {
+        position: camera.latlng,
+        label: camera.name,
+        color,
+        glyph: "C",
+        popupHtml: `
+          <div style="width:280px;font-family:Outfit,system-ui,sans-serif">
+            <div style="background:${color};color:white;padding:10px 12px">
+              <strong style="font-size:14px;line-height:1.1">${camera.name}</strong>
             </div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px">${camera.type} Camera</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#555;margin-bottom:6px">
-              <div><span style="color:#999">Resolution</span><br/>${camera.resolution}</div>
-              <div><span style="color:#999">FPS</span><br/>${camera.fps}</div>
-              <div><span style="color:#999">Detections</span><br/>${camera.detections}</div>
-              <div><span style="color:#999">Last</span><br/>${camera.lastDetection}</div>
-            </div>
-            <div style="font-size:11px;color:#555;margin-bottom:6px">📍 ${camera.location}</div>
-            <div style="margin-top:6px">
-              <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${camera.status}</span>
+            <div style="padding:12px">
+              <div style="font-size:14px;font-weight:700;margin-bottom:8px">${camera.type} Camera</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:#555;margin-bottom:8px">
+                <div><span style="color:#999">Resolution</span><br/>${camera.resolution}</div>
+                <div><span style="color:#999">FPS</span><br/>${camera.fps}</div>
+                <div><span style="color:#999">Detections</span><br/>${camera.detections}</div>
+                <div><span style="color:#999">Last</span><br/>${camera.lastDetection}</div>
+              </div>
+              <div style="font-size:12px;color:#555;margin-bottom:8px">${camera.location}</div>
+              <span style="display:inline-block;background:${color}22;color:${color};padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700">${camera.status}</span>
             </div>
           </div>
-        `, { maxWidth: 280 })
-        
-        // Show popup on hover instead of click
-        marker.on('mouseover', () => marker.openPopup())
-        marker.on('mouseout', () => marker.closePopup())
-        
-        marker.addTo(map)
-      })
-
-      mapRef.current = map
-    } catch (error) {
-      console.error("Error initializing map:", error)
-    }
-
-    return () => {
-      if (mapRef.current) {
-        try {
-          mapRef.current.remove()
-          mapRef.current = null
-        } catch (error) {
-          console.error("Error removing map:", error)
-        }
-      }
-    }
-  }, [isMapOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+        `,
+      } satisfies MapMarker
+    }),
+  ]
 
   if (isMapOpen) {
     return (
@@ -577,7 +491,14 @@ export function DevicesPage() {
         <Card>
           <CardContent className="p-0">
             <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
-              <div ref={mapContainerRef} className="h-full w-full" />
+              <Map
+                center={MAPUTO_CENTER}
+                zoom={DEFAULT_ZOOM}
+                markers={mapMarkers}
+                height="100%"
+                className="h-full w-full"
+                defaultView="street"
+              />
 
               <div className="absolute top-4 right-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
                 <h3 className="mb-3 text-sm font-semibold">Legend</h3>

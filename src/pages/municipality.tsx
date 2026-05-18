@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,8 +7,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { ArrowLeft, Building2, MapPin, Clock, Plus, Edit, CheckCircle, XCircle, Upload, Loader2, AlertCircle, Search } from "lucide-react"
-import L from "leaflet"
+import { ArrowLeft, Building2, MapPin, Clock, Plus, Edit, CheckCircle, XCircle, Loader2, AlertCircle, Search } from "lucide-react"
+import { EditableGoogleMap } from "@/components/ui/map"
 import { toast } from "sonner"
 import { MunicipalitiesApi } from "@/lib/api"
 import type { BoundaryVersion, Municipality } from "@/lib/api"
@@ -195,30 +195,6 @@ const createBoundaryGeoJson = (points: [number, number][]) => {
   })
 }
 
-const createBoundaryVertexIcon = (index: number) =>
-  L.divIcon({
-    html: `
-      <div style="
-        display:flex;
-        height:24px;
-        width:24px;
-        align-items:center;
-        justify-content:center;
-        border-radius:999px;
-        border:2px solid #ffffff;
-        background:#5B8C5A;
-        color:#ffffff;
-        font-size:11px;
-        font-weight:700;
-        box-shadow:0 6px 16px rgba(0,0,0,.32);
-        cursor:grab;
-      ">${index + 1}</div>
-    `,
-    className: "",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  })
-
 const normalizeConfiguration = (
   response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
 ): { municipality?: Municipality; boundaryVersions: BoundaryVersion[] } => {
@@ -246,11 +222,6 @@ const normalizeConfiguration = (
 }
 
 export function MunicipalityPage() {
-  const boundaryFileInputRef = useRef<HTMLInputElement | null>(null)
-  const boundaryMapContainerRef = useRef<HTMLDivElement | null>(null)
-  const boundaryMapRef = useRef<L.Map | null>(null)
-  const boundaryLayerRef = useRef<L.LayerGroup | null>(null)
-  const boundaryDraftPointsRef = useRef<[number, number][]>([])
   const [municipality, setMunicipality] = useState<Municipality | null>(() => getStoredMunicipality())
   const [municipalities, setMunicipalities] = useState<Municipality[]>(() => getStoredMunicipalities())
   const [municipalitySearch, setMunicipalitySearch] = useState("")
@@ -455,116 +426,6 @@ export function MunicipalityPage() {
     return () => controller.abort()
   }, [])
 
-  useEffect(() => {
-    if (!isAddBoundaryOpen || !boundaryMapContainerRef.current || boundaryMapRef.current) return
-
-    const map = L.map(boundaryMapContainerRef.current, {
-      center: MAPUTO_CENTER,
-      zoom: 11,
-      zoomControl: true,
-      attributionControl: true,
-    })
-
-    L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
-      attribution: '&copy; <a href="https://www.google.com/maps">Google</a>',
-      maxZoom: 20,
-    }).addTo(map)
-
-    boundaryLayerRef.current = L.layerGroup().addTo(map)
-    boundaryMapRef.current = map
-    map.on("click", (event: L.LeafletMouseEvent) => {
-      setBoundaryDraftPoints((points) => [...points, [event.latlng.lat, event.latlng.lng]])
-    })
-
-    window.setTimeout(() => map.invalidateSize(), 100)
-
-    return () => {
-      map.remove()
-      boundaryMapRef.current = null
-      boundaryLayerRef.current = null
-    }
-  }, [isAddBoundaryOpen])
-
-  useEffect(() => {
-    const map = boundaryMapRef.current
-    const layer = boundaryLayerRef.current
-    if (!isAddBoundaryOpen || !map || !layer) return
-
-    boundaryDraftPointsRef.current = boundaryDraftPoints
-    layer.clearLayers()
-
-    boundaryDraftPoints.forEach((point, index) => {
-      L.marker(point, {
-        draggable: true,
-        icon: createBoundaryVertexIcon(index),
-      })
-        .on("dragstart", () => {
-          map.dragging.disable()
-        })
-        .on("dragend", (event) => {
-          const marker = event.target as L.Marker
-          const nextPoint = marker.getLatLng()
-          map.dragging.enable()
-          setBoundaryDraftPoints((points) =>
-            points.map((currentPoint, currentIndex) =>
-              currentIndex === index ? [nextPoint.lat, nextPoint.lng] : currentPoint
-            )
-          )
-        })
-        .addTo(layer)
-    })
-
-    if (boundaryDraftPoints.length >= 2) {
-      L.polyline(boundaryDraftPoints, {
-        color: "#DAA22A",
-        weight: 3,
-        dashArray: boundaryDraftPoints.length >= 3 ? undefined : "6 6",
-      }).addTo(layer)
-    }
-
-    if (boundaryDraftPoints.length >= 3) {
-      const polygon = L.polygon(boundaryDraftPoints, {
-        color: "#5B8C5A",
-        weight: 3,
-        fillColor: "#5B8C5A",
-        fillOpacity: 0.25,
-      }).addTo(layer)
-
-      polygon.on("mouseover", () => {
-        const element = polygon.getElement() as HTMLElement | undefined
-        if (element) element.style.cursor = "move"
-      })
-
-      polygon.on("mousedown", (event: L.LeafletMouseEvent) => {
-        L.DomEvent.stopPropagation(event)
-        const startLatLng = event.latlng
-        const originalPoints = boundaryDraftPointsRef.current
-        map.dragging.disable()
-
-        const handleMouseMove = (moveEvent: L.LeafletMouseEvent) => {
-          const latDelta = moveEvent.latlng.lat - startLatLng.lat
-          const lngDelta = moveEvent.latlng.lng - startLatLng.lng
-          setBoundaryDraftPoints(
-            originalPoints.map(([lat, lng]) => [lat + latDelta, lng + lngDelta])
-          )
-        }
-
-        const handleMouseUp = () => {
-          map.off("mousemove", handleMouseMove)
-          map.dragging.enable()
-        }
-
-        map.on("mousemove", handleMouseMove)
-        map.once("mouseup", handleMouseUp)
-      })
-    }
-
-    if (boundaryDraftPoints.length) {
-      const bounds = L.latLngBounds(boundaryDraftPoints)
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 })
-    }
-  }, [boundaryDraftPoints, isAddBoundaryOpen])
-
   const handleUpdateMunicipality = () => {
     if (!municipality) return
 
@@ -584,41 +445,53 @@ export function MunicipalityPage() {
     await loadMunicipalityFromDb(nextMunicipality.id, undefined, storedBoundaries)
   }
 
-  const openBoundaryModal = () => {
-    const currentBoundary = boundaries.find(isBoundaryVersionActivated) ?? boundaries[0]
+  const getNextBoundaryVersion = () => {
+    const usedVersions = new Set(boundaries.map((boundary) => boundary.version.toLowerCase()))
+    let nextIndex = boundaries.length + 1
+    let nextVersion = `v${nextIndex}`
 
-    if (currentBoundary) {
-      setEditingBoundaryId(currentBoundary.id)
-      setBoundaryForm({
-        version: currentBoundary.version,
-        displayName: currentBoundary.displayName,
-        format: currentBoundary.format,
-        boundaryData: (currentBoundary as BoundaryVersion & { boundaryData?: string }).boundaryData ?? defaultBoundaryData,
-      })
-      setBoundaryDraftPoints(extractPolygonLatLngs((currentBoundary as BoundaryVersion & { boundaryData?: string }).boundaryData ?? defaultBoundaryData))
-    } else {
-      setEditingBoundaryId(null)
-      setBoundaryForm({
-        version: "v1",
-        displayName: "Maputo GeoJSON Boundary",
-        format: "GEOJSON",
-        boundaryData: "",
-      })
-      setBoundaryDraftPoints([])
+    while (usedVersions.has(nextVersion.toLowerCase())) {
+      nextIndex += 1
+      nextVersion = `v${nextIndex}`
     }
 
+    return nextVersion
+  }
+
+  const getBoundaryData = (boundary?: BoundaryVersion) => {
+    if (!boundary) return ""
+
+    return (boundary as BoundaryVersion & { boundaryData?: string }).boundaryData ?? ""
+  }
+
+  const openNewBoundaryModal = () => {
+    const nextVersion = getNextBoundaryVersion()
+    const sourceBoundary = boundaries.find(isBoundaryVersionActivated) ?? boundaries[0]
+    const sourceBoundaryData = getBoundaryData(sourceBoundary)
+
+    setEditingBoundaryId(null)
+    setBoundaryForm({
+      version: nextVersion,
+      displayName: `${municipality?.name ?? "Municipality"} Boundary ${nextVersion.toUpperCase()}`,
+      format: sourceBoundary?.format ?? "GEOJSON",
+      boundaryData: sourceBoundaryData,
+    })
+    setBoundaryDraftPoints(sourceBoundaryData ? extractPolygonLatLngs(sourceBoundaryData) : [])
     setIsAddBoundaryOpen(true)
   }
 
-  const handleLoadGeoJsonOnMap = () => {
-    const points = extractPolygonLatLngs(boundaryForm.boundaryData)
-    if (points.length < 3) {
-      toast.error("GeoJSON must contain a Polygon with at least 3 points")
-      return
-    }
+  const openEditBoundaryModal = (boundary: BoundaryVersion) => {
+    const boundaryData = getBoundaryData(boundary) || defaultBoundaryData
 
-    setBoundaryDraftPoints(points)
-    toast.success("GeoJSON loaded on map")
+    setEditingBoundaryId(boundary.id)
+    setBoundaryForm({
+      version: boundary.version,
+      displayName: boundary.displayName,
+      format: boundary.format,
+      boundaryData,
+    })
+    setBoundaryDraftPoints(extractPolygonLatLngs(boundaryData))
+    setIsAddBoundaryOpen(true)
   }
 
   const handleApplyDrawnBoundary = () => {
@@ -675,7 +548,7 @@ export function MunicipalityPage() {
         format: boundaryForm.format,
         boundaryData: boundaryForm.boundaryData,
       })
-      let createdBoundary = {
+      let createdBoundary: LocallyTrackedBoundaryVersion = {
         ...response.data,
         active: false,
         activatedAt: null,
@@ -719,31 +592,6 @@ export function MunicipalityPage() {
       toast.error(error instanceof Error ? error.message : "Failed to create boundary")
     } finally {
       setIsCreatingBoundary(false)
-    }
-  }
-
-  const handleBoundaryFileUpload = async (file: File | undefined) => {
-    if (!file) return
-
-    try {
-      const boundaryData = await file.text()
-      JSON.parse(boundaryData)
-      const draftPoints = extractPolygonLatLngs(boundaryData)
-      setBoundaryForm({
-        ...boundaryForm,
-        displayName: boundaryForm.displayName || file.name.replace(/\.(geo)?json$/i, ""),
-        boundaryData: compactJson(boundaryData),
-      })
-      if (draftPoints.length) {
-        setBoundaryDraftPoints(draftPoints)
-      }
-      toast.success("GeoJSON boundary loaded")
-    } catch {
-      toast.error("Upload a valid GeoJSON file")
-    } finally {
-      if (boundaryFileInputRef.current) {
-        boundaryFileInputRef.current.value = ""
-      }
     }
   }
 
@@ -820,6 +668,7 @@ export function MunicipalityPage() {
     : municipalities
   const hasBoundary = boundaries.length > 0
   const hasActivatedBoundary = boundaries.some(isBoundaryVersionActivated)
+  const isCreatingInitialBoundary = !editingBoundaryId && !hasBoundary
   const getMunicipalityActiveStatus = (item: Municipality) => {
     if (item.id === municipality?.id) {
       return hasActivatedBoundary
@@ -846,12 +695,18 @@ export function MunicipalityPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-semibold text-foreground">
-              {editingBoundaryId ? "Edit Boundary" : "Add Boundary Version"}
+              {editingBoundaryId
+                ? "Edit Boundary"
+                : isCreatingInitialBoundary
+                  ? "Add New Boundary"
+                  : "Add Boundary Version"}
             </h1>
             <p className="text-base text-muted-foreground">
               {editingBoundaryId
                 ? `Update the displayed boundary details for ${municipality?.name ?? "this municipality"}`
-                : `Create a GeoJSON boundary version for ${municipality?.name ?? "this municipality"}`}
+                : isCreatingInitialBoundary
+                  ? `Create a GeoJSON boundary for ${municipality?.name ?? "this municipality"}`
+                  : `Create a new GeoJSON boundary version for ${municipality?.name ?? "this municipality"}`}
             </p>
           </div>
         </div>
@@ -861,7 +716,11 @@ export function MunicipalityPage() {
             <CardHeader>
               <CardTitle className="text-2xl">Boundary Details</CardTitle>
               <CardDescription className="text-base">
-                Set the boundary version and display name used across municipality configuration.
+                {editingBoundaryId
+                  ? "Update this saved boundary version without changing which version is active."
+                  : isCreatingInitialBoundary
+                    ? "Draw the first boundary for this municipality. Activate it when ready."
+                    : "Save a separate boundary version. Activate it when it should replace the current active boundary."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -907,13 +766,19 @@ export function MunicipalityPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="h-[480px] overflow-hidden rounded-md border border-border">
-                <div ref={boundaryMapContainerRef} className="h-full w-full" />
+                <EditableGoogleMap
+                  points={boundaryDraftPoints}
+                  onPointsChange={setBoundaryDraftPoints}
+                  shape="polygon"
+                  center={MAPUTO_CENTER}
+                  zoom={11}
+                  height="100%"
+                  markerColor="#5B8C5A"
+                  strokeColor="#DAA22A"
+                  fillColor="#5B8C5A"
+                />
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <Button type="button" variant="outline" onClick={handleLoadGeoJsonOnMap}>
-                  <MapPin className="mr-2 h-4 w-4" />
-                  Load GeoJSON
-                </Button>
+              <div className="grid gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -946,7 +811,7 @@ export function MunicipalityPage() {
             <CardHeader>
               <CardTitle className="text-2xl">GeoJSON Data</CardTitle>
               <CardDescription className="text-base">
-                Paste a GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection, or upload a .geojson file.
+                Paste a GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -960,26 +825,6 @@ export function MunicipalityPage() {
                 wrap="off"
                 className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
               />
-
-              <div className="flex items-center gap-3">
-                <input
-                  ref={boundaryFileInputRef}
-                  type="file"
-                  accept=".geojson,.json,application/geo+json,application/json"
-                  className="hidden"
-                  onChange={(event) => handleBoundaryFileUpload(event.target.files?.[0])}
-                />
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  type="button"
-                  onClick={() => boundaryFileInputRef.current?.click()}
-                  disabled={isCreatingBoundary}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload GeoJSON File
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
@@ -994,16 +839,34 @@ export function MunicipalityPage() {
             >
               Cancel
             </Button>
-            <Button onClick={() => handleAddBoundary(false)} disabled={isCreatingBoundary}>
-              {isCreatingBoundary ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                editingBoundaryId ? "Save Boundary" : "Create Boundary"
+            <div className="flex gap-2">
+              {!editingBoundaryId && (
+                <Button
+                  variant="outline"
+                  onClick={() => handleAddBoundary(false)}
+                  disabled={isCreatingBoundary}
+                >
+                  {isCreatingBoundary ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    isCreatingInitialBoundary ? "Save Boundary" : "Save as Inactive"
+                  )}
+                </Button>
               )}
-            </Button>
+              <Button onClick={() => handleAddBoundary(!editingBoundaryId)} disabled={isCreatingBoundary}>
+                {isCreatingBoundary ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  editingBoundaryId ? "Save Boundary" : "Create & Activate"
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -1181,18 +1044,38 @@ export function MunicipalityPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-2xl">Boundary Versions</CardTitle>
-              <CardDescription className="text-base">Create and activate boundary versions for this municipality</CardDescription>
+              <CardDescription className="text-base">
+                {hasActivatedBoundary
+                  ? "Create versions, then activate the version that should be used. Activation makes the previous version inactive."
+                  : hasBoundary
+                    ? "Edit and activate the saved boundary before creating another version."
+                    : "Create the first boundary for this municipality."}
+              </CardDescription>
             </div>
             <Button
-              onClick={openBoundaryModal}
+              onClick={() => {
+                if (!hasBoundary || hasActivatedBoundary) {
+                  openNewBoundaryModal()
+                  return
+                }
+
+                const draftBoundary = boundaries[0]
+                if (draftBoundary) {
+                  openEditBoundaryModal(draftBoundary)
+                }
+              }}
               disabled={!municipality}
             >
-              {hasBoundary ? (
-                <Edit className="h-4 w-4 mr-2" />
-              ) : (
+              {hasActivatedBoundary || !hasBoundary ? (
                 <Plus className="h-4 w-4 mr-2" />
+              ) : (
+                <Edit className="h-4 w-4 mr-2" />
               )}
-              {hasBoundary ? "Edit Boundary" : "Add Boundary"}
+              {hasBoundary
+                ? hasActivatedBoundary
+                  ? "Add Boundary Version"
+                  : "Edit Boundary"
+                : "Add New Boundary"}
             </Button>
           </div>
         </CardHeader>
@@ -1226,19 +1109,29 @@ export function MunicipalityPage() {
                   <TableCell className="text-base">{boundary.activatedAt || "-"}</TableCell>
                   <TableCell>{getStatusBadge(isBoundaryVersionActivated(boundary))}</TableCell>
                   <TableCell className="text-right">
-                    {!isBoundaryVersionActivated(boundary) && (
+                    <div className="flex justify-end gap-2">
                       <Button
                         size="sm"
-                        onClick={() => handleActivateBoundary(boundary.id)}
-                        disabled={activatingBoundaryId === boundary.id}
+                        variant="outline"
+                        onClick={() => openEditBoundaryModal(boundary)}
                       >
-                        {activatingBoundaryId === boundary.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          "Activate"
-                        )}
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
                       </Button>
-                    )}
+                      {!isBoundaryVersionActivated(boundary) && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleActivateBoundary(boundary.id)}
+                          disabled={activatingBoundaryId === boundary.id}
+                        >
+                          {activatingBoundaryId === boundary.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Activate"
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

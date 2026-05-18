@@ -149,6 +149,7 @@ export function AlertsPage() {
   const [alerts, setAlerts] = useState(mockAlerts)
   const [statusFilter, setStatusFilter] = useState("all")
   const [severityFilter, setSeverityFilter] = useState("all")
+  const [typeFilter, setTypeFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -265,13 +266,16 @@ export function AlertsPage() {
   const filteredAlerts = alerts.filter(alert => {
     const matchesStatus = statusFilter === "all" || alert.status === statusFilter
     const matchesSeverity = severityFilter === "all" || alert.severity === severityFilter
+    const matchesType = typeFilter === "all" || alert.type === typeFilter
     const matchesSearch = searchQuery === "" || 
       alert.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.detectedBy.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesStatus && matchesSeverity && matchesSearch
+    return matchesStatus && matchesSeverity && matchesType && matchesSearch
   })
+
+  const alertTypes = Array.from(new Set(alerts.map(alert => alert.type)))
 
   // Pagination
   const totalPages = Math.ceil(filteredAlerts.length / itemsPerPage)
@@ -391,8 +395,8 @@ export function AlertsPage() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <div className="mb-6 flex items-center gap-4">
-            <div className="flex-1">
+          <div className="mb-6 flex flex-wrap items-center gap-4">
+            <div className="min-w-[260px] flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -403,6 +407,17 @@ export function AlertsPage() {
                 />
               </div>
             </div>
+            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+              <SelectTrigger className="w-[180px] text-base h-11">
+                <SelectValue placeholder="Severity" />
+              </SelectTrigger>
+              <SelectContent className="text-base">
+                <SelectItem value="all" className="text-base">All Severity</SelectItem>
+                <SelectItem value="Critical" className="text-base">Critical</SelectItem>
+                <SelectItem value="Warning" className="text-base">Warning</SelectItem>
+                <SelectItem value="Informational" className="text-base">Informational</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px] text-base h-11">
                 <SelectValue placeholder="Status" />
@@ -415,15 +430,15 @@ export function AlertsPage() {
                 <SelectItem value="Ignored" className="text-base">Ignored</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-[180px] text-base h-11">
-                <SelectValue placeholder="Severity" />
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[220px] text-base h-11">
+                <SelectValue placeholder="Alert type" />
               </SelectTrigger>
               <SelectContent className="text-base">
-                <SelectItem value="all" className="text-base">All Severity</SelectItem>
-                <SelectItem value="Critical" className="text-base">Critical</SelectItem>
-                <SelectItem value="Warning" className="text-base">Warning</SelectItem>
-                <SelectItem value="Informational" className="text-base">Informational</SelectItem>
+                <SelectItem value="all" className="text-base">All Alert Types</SelectItem>
+                {alertTypes.map(type => (
+                  <SelectItem key={type} value={type} className="text-base">{type}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

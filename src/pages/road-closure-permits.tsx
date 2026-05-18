@@ -6,13 +6,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Search, Eye, CheckCircle, XCircle, Clock, Receipt, MapPin, AlertTriangle, Shield, Calendar } from "lucide-react"
+import { ArrowLeft, FileText, Search, Eye, CheckCircle, XCircle, Clock, Receipt, MapPin, AlertTriangle, Shield, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import { Map } from "@/components/ui/map"
 import { RoadClosurePermitsApi, getApiErrorMessage, type RoadClosurePermit } from "@/lib/api"
@@ -109,6 +108,53 @@ const toPermitRow = (permit: RoadClosurePermit): Permit => {
   }
 }
 
+const MOCK_BOOKED_ROUTES: Array<{
+  name: string
+  route: Array<[number, number]>
+  center: [number, number]
+  checkpoints: string[]
+}> = [
+  {
+    name: "Av. Julius Nyerere booked closure",
+    center: [-25.9616, 32.5858],
+    route: [
+      [-25.9586, 32.5822],
+      [-25.9602, 32.5841],
+      [-25.9615, 32.5859],
+      [-25.9631, 32.5874],
+      [-25.9648, 32.5893],
+    ],
+    checkpoints: ["Rua da Imprensa", "Polana junction", "Rua dos Desportistas"],
+  },
+  {
+    name: "Baixa service corridor",
+    center: [-25.9692, 32.5739],
+    route: [
+      [-25.9667, 32.5704],
+      [-25.9681, 32.5722],
+      [-25.9695, 32.5743],
+      [-25.9712, 32.5765],
+    ],
+    checkpoints: ["Praca dos Trabalhadores", "Av. 25 de Setembro", "Port access lane"],
+  },
+  {
+    name: "Marginal event loop",
+    center: [-25.9488, 32.6211],
+    route: [
+      [-25.9532, 32.6109],
+      [-25.9505, 32.6162],
+      [-25.9474, 32.6228],
+      [-25.9457, 32.6284],
+    ],
+    checkpoints: ["Costa do Sol entry", "Marginal Avenue", "Event finish zone"],
+  },
+]
+
+const getMockBookedRoute = (permitId: string) => {
+  const index = permitId.split("").reduce((total, char) => total + char.charCodeAt(0), 0) % MOCK_BOOKED_ROUTES.length
+  return MOCK_BOOKED_ROUTES[index]
+}
+
 export function RoadClosurePermitsContent() {
   const [permits, setPermits] = useState<Permit[]>(mockPermits)
   const [isLoading, setIsLoading] = useState(false)
@@ -181,6 +227,10 @@ export function RoadClosurePermitsContent() {
       const response = await RoadClosurePermitsApi.getRoadClosurePermit(permit.id)
       setSelectedPermit(toPermitRow(response.data))
     } catch (error) {
+      if (typeof error === "object" && error !== null && "status" in error && error.status === 404) {
+        return
+      }
+
       toast.error("Failed to load permit details", {
         description: getApiErrorMessage(error, "Permit detail request failed"),
       })
@@ -277,6 +327,236 @@ export function RoadClosurePermitsContent() {
 
   const purposeBadge = (purpose: string) => {
     return <Badge className="bg-[#4FAF7C] text-white text-sm px-3 py-1">{purpose}</Badge>
+  }
+
+  const approveConfirmation = selectedPermit && isApproveOpen ? (
+    <Dialog open={isApproveOpen} onOpenChange={setIsApproveOpen}>
+      <DialogContent className="text-base">
+        <DialogHeader>
+          <DialogTitle className="text-2xl">Approve Permit</DialogTitle>
+          <DialogDescription className="text-base">
+            Confirm approval for <strong className="text-foreground">{selectedPermit.id}</strong>. An invoice for <strong className="text-foreground">{selectedPermit.totalFee.toLocaleString()} MZN</strong> will be issued to {selectedPermit.applicant}.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" disabled={isDecidingPermit} onClick={() => setIsApproveOpen(false)} className="text-base h-11 px-6">Cancel</Button>
+          <Button disabled={isDecidingPermit} onClick={handleApprove} className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-base h-11 px-6">
+            {isDecidingPermit ? "Approving..." : "Confirm"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ) : null
+
+  if (isDetailsOpen && selectedPermit) {
+    const bookedRoute = getMockBookedRoute(selectedPermit.id)
+    const startPoint = bookedRoute.route[0]
+    const endPoint = bookedRoute.route[bookedRoute.route.length - 1]
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <Button variant="ghost" onClick={() => setIsDetailsOpen(false)} className="h-10 w-fit px-2 text-base">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to permits
+            </Button>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-4xl font-semibold text-foreground">{selectedPermit.id}</h1>
+                {statusBadge(selectedPermit.status)}
+              </div>
+              <p className="text-lg text-muted-foreground">{selectedPermit.purpose} — {selectedPermit.applicant}</p>
+            </div>
+          </div>
+          {selectedPermit.status === "Awaiting Admin Approval" && (
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setIsRejectOpen(true)} className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10">
+                <XCircle className="h-4 w-4 mr-2" />
+                Reject
+              </Button>
+              <Button onClick={() => setIsApproveOpen(true)} className="text-base h-11 px-6 bg-[#4FAF7C] text-white hover:bg-[#4FAF7C]/90">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Approve
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {isDetailLoading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-[440px] w-full" />
+            <div className="grid gap-4 md:grid-cols-3">
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
+              <Skeleton className="h-28" />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-6">
+              <Card>
+                <CardContent className="space-y-4 pt-6">
+                  <Map
+                    center={bookedRoute.center}
+                    zoom={15}
+                    route={bookedRoute.route}
+                    markers={[
+                      {
+                        position: startPoint,
+                        label: "Closure start",
+                        description: selectedPermit.location,
+                      },
+                      {
+                        position: endPoint,
+                        label: "Closure end",
+                        description: `${selectedPermit.hours} hour booking`,
+                      },
+                    ]}
+                    height="430px"
+                    className="border"
+                    defaultView="satellite"
+                  />
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {bookedRoute.checkpoints.map((checkpoint, index) => (
+                      <div key={checkpoint} className="rounded-md border bg-muted/20 p-4">
+                        <p className="text-xs font-medium uppercase text-muted-foreground">Checkpoint {index + 1}</p>
+                        <p className="mt-1 text-base font-semibold">{checkpoint}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              </div>
+
+              <div className="space-y-6">
+                <Card>
+                <CardHeader className="pb-3">
+                  <CardDescription className="text-xs uppercase">Applicant</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-lg font-bold mb-1">{selectedPermit.applicant}</p>
+                  </div>
+                  <Separator />
+                  <div className="space-y-2 text-sm">
+                    <p className="text-muted-foreground break-all">{selectedPermit.contactEmail || "No email on file"}</p>
+                    <p className="text-muted-foreground">{selectedPermit.contactPhone || "No phone on file"}</p>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">History score</span>
+                    <div className="text-right">
+                      <p className="text-lg font-bold">4.8 / 5</p>
+                      <p className="text-xs text-[#4FAF7C]">Trusted</p>
+                    </div>
+                  </div>
+                </CardContent>
+                </Card>
+
+                <Card>
+                <CardHeader className="pb-3">
+                  <CardDescription className="text-xs uppercase">Automated Checks</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {["Road class verified", "No conflicting permits in window", "Insurance policy active", "Safety plan approved"].map((check) => (
+                    <div key={check} className="flex items-start gap-3">
+                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
+                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
+                      </div>
+                      <p className="text-sm font-medium">{check}</p>
+                    </div>
+                  ))}
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-[#DAA22A]/30 p-1 mt-0.5">
+                      <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Overlaps weekend market</p>
+                      <p className="text-xs text-muted-foreground">(informational)</p>
+                    </div>
+                  </div>
+                </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">Permit Details</CardTitle>
+              <CardDescription className="text-base">Submitted {selectedPermit.submittedDate}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Road Class</Label>
+                  <p className="mt-1 text-lg font-semibold">{selectedPermit.roadType}</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Hourly Rate</Label>
+                  <p className="mt-1 text-lg font-semibold">{selectedPermit.hourlyRate.toLocaleString()} MZN</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Duration</Label>
+                  <p className="mt-1 text-lg font-semibold">{selectedPermit.hours}h</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase text-muted-foreground">Total Fee</Label>
+                  <p className="mt-1 text-lg font-semibold text-[#4FAF7C]">{selectedPermit.totalFee.toLocaleString()} MZN</p>
+                </div>
+              </div>
+              <Separator />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase text-muted-foreground">Event Date</Label>
+                  <div className="flex items-center gap-2 text-base font-medium">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    {selectedPermit.eventDate}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase text-muted-foreground">Requested Section</Label>
+                  <div className="flex items-start gap-2 text-base font-medium">
+                    <MapPin className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{selectedPermit.location}</span>
+                  </div>
+                </div>
+              </div>
+              {selectedPermit.notes && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase text-muted-foreground">Justification</Label>
+                    <p className="rounded-md bg-muted/40 p-4 text-base leading-relaxed">{selectedPermit.notes}</p>
+                  </div>
+                </>
+              )}
+            </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {approveConfirmation}
+
+        <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+          <DialogContent className="text-base">
+            <DialogHeader><DialogTitle className="text-2xl">Reject Permit</DialogTitle><DialogDescription className="text-base">Provide a reason for rejecting {selectedPermit.id}</DialogDescription></DialogHeader>
+            <div className="py-4 space-y-2">
+              <Label className="text-base">Rejection Reason *</Label>
+              <Textarea placeholder="Enter reason..." value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={4} className="text-base" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" disabled={isDecidingPermit} onClick={() => setIsRejectOpen(false)} className="text-base h-11 px-6">Cancel</Button>
+              <Button disabled={!rejectionReason.trim() || isDecidingPermit} onClick={handleReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">
+                {isDecidingPermit ? "Rejecting..." : "Reject Permit"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
   }
 
 
@@ -511,32 +791,6 @@ export function RoadClosurePermitsContent() {
                     <Separator />
                   </>
                 )}
-
-                {/* Attached Documents */}
-                <div className="space-y-3">
-                  <h3 className="text-base font-semibold uppercase text-muted-foreground">Attached Documents</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">application-form.pdf</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">route-plan.pdf</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">insurance.pdf</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Rejection Reason if applicable */}
                 {selectedPermit.rejectionReason && (
                   <>
@@ -564,7 +818,6 @@ export function RoadClosurePermitsContent() {
                   <CardContent className="space-y-4">
                     <div>
                       <p className="text-lg font-bold mb-1">{selectedPermit.applicant}</p>
-                      <p className="text-xs text-muted-foreground">Chest ID 100184733 • 3 prior permits</p>
                     </div>
                     <Separator />
                     <div className="space-y-2 text-sm">
@@ -649,20 +902,7 @@ export function RoadClosurePermitsContent() {
       </Modal>
 
       {/* ── Approve Dialog ── */}
-      <AlertDialog open={isApproveOpen} onOpenChange={setIsApproveOpen}>
-        <AlertDialogContent className="text-base">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-2xl">Approve Permit</AlertDialogTitle>
-            <AlertDialogDescription className="text-base">Approve <strong>{selectedPermit?.id}</strong> for <strong>{selectedPermit?.applicant}</strong>? The permit will become active and an invoice for <strong>{selectedPermit?.totalFee.toLocaleString()} MZN</strong> will be issued.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDecidingPermit} className="text-base h-11 px-6">Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={isDecidingPermit} onClick={handleApprove} className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-base h-11 px-6">
-              {isDecidingPermit ? "Approving..." : "Approve"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {approveConfirmation}
 
       {/* ── Reject Dialog ── */}
       <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>

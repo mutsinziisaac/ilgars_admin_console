@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Clock, CheckCircle2, XCircle, Eye, Upload, Download } from "lucide-react"
+import { ArrowLeft, FileText, Clock, CheckCircle2, XCircle, Eye, Upload, Download } from "lucide-react"
 import { toast } from "sonner"
 
 // Mock authorization data
@@ -246,6 +247,8 @@ export function AuthorizationsPage() {
   const [authorizations, setAuthorizations] = useState(mockAuthorizations)
   const [selectedAuth, setSelectedAuth] = useState<typeof mockAuthorizations[0] | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
+  const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState("PENDING")
   const itemsPerPage = 10
@@ -334,6 +337,7 @@ export function AuthorizationsPage() {
     toast.success("Authorization Approved", {
       description: `Authorization ${selectedAuth.id} has been approved.`,
     })
+    setIsApproveDialogOpen(false)
     setIsDetailsModalOpen(false)
   }
 
@@ -349,6 +353,7 @@ export function AuthorizationsPage() {
     toast.error("Authorization Rejected", {
       description: `Authorization ${selectedAuth.id} has been rejected.`,
     })
+    setIsRejectDialogOpen(false)
     setIsDetailsModalOpen(false)
   }
 
@@ -358,6 +363,236 @@ export function AuthorizationsPage() {
     approved: authorizations.filter((a) => a.status === "APPROVED").length,
     pending: authorizations.filter((a) => a.status === "PENDING").length,
     rejected: authorizations.filter((a) => a.status === "REJECTED").length,
+  }
+
+  if (isDetailsModalOpen && selectedAuth) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <Button
+              variant="ghost"
+              onClick={() => setIsDetailsModalOpen(false)}
+              className="h-10 w-fit px-2 text-base"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to authorizations
+            </Button>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-4xl font-semibold text-foreground">Authorization Details #{selectedAuth.id}</h1>
+                {getStatusBadge(selectedAuth.status)}
+              </div>
+              <p className="text-lg text-muted-foreground">Review and process authorization request</p>
+            </div>
+          </div>
+          {selectedAuth.status === "PENDING" && (
+            <div className="flex gap-3">
+              <Button
+                variant="destructive"
+                onClick={() => setIsRejectDialogOpen(true)}
+                className="text-base h-11 px-6"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Reject
+              </Button>
+              <Button onClick={() => setIsApproveDialogOpen(true)} className="text-base h-11 px-6 bg-green-600">
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Approve
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-3">
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg">Authorization Type</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Type</Label>
+                    <div className="mt-1">{getTypeBadge(selectedAuth.authorizationType)}</div>
+                  </div>
+                  {selectedAuth.authorizationType === "EXCEPTIONAL_UNRESTRICTED" && (
+                    <>
+                      <div>
+                        <Label className="text-sm text-muted-foreground">Escort Required</Label>
+                        <p className="text-base font-medium">{selectedAuth.escortRequired ? "Yes" : "No"}</p>
+                      </div>
+                      {selectedAuth.escortRequired && (
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Escort Status</Label>
+                          <p className="text-base font-medium">
+                            {selectedAuth.escortAssigned ? (
+                              <Badge variant="outline" className="!bg-green-100 !text-green-700">Assigned</Badge>
+                            ) : (
+                              <Badge variant="outline" className="!bg-yellow-100 !text-yellow-700">Pending</Badge>
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg">Vehicle Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Registration Plate</Label>
+                    <p className="text-base font-bold">{selectedAuth.vehiclePlate}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Class</Label>
+                      <p className="text-base font-medium">{selectedAuth.vehicleClass}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Axles</Label>
+                      <p className="text-base font-medium">{selectedAuth.axleCount}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">GVW (kg)</Label>
+                      <p className="text-base font-medium">{selectedAuth.grossWeight.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg">Applicant Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Company/Name</Label>
+                    <p className="text-base font-bold">{selectedAuth.applicantName}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Contact</Label>
+                    <p className="text-base font-medium">{selectedAuth.applicantContact}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Submitted Date</Label>
+                    <p className="text-base font-medium">{selectedAuth.submittedDate}</p>
+                  </div>
+                </CardContent>
+              </Card>
+          </div>
+
+          <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Travel Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-sm text-muted-foreground">Reason for Travel</Label>
+                  <p className="text-base font-medium">{selectedAuth.travelReason || "Not specified"}</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Travel Start Date</Label>
+                    <p className="text-base font-medium">{selectedAuth.travelStartDate || "Not specified"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Travel End Date</Label>
+                    <p className="text-base font-medium">{selectedAuth.travelEndDate || "Not specified"}</p>
+                  </div>
+                </div>
+              </CardContent>
+          </Card>
+
+          {selectedAuth.authorizationType === "EXCEPTIONAL_UNRESTRICTED" && selectedAuth.justification && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Justification</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-base">{selectedAuth.justification}</p>
+                </CardContent>
+              </Card>
+          )}
+
+          {selectedAuth.status === "APPROVED" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Approval Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Approved By</Label>
+                      <p className="text-base font-medium">{selectedAuth.approvedBy}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Approved Date</Label>
+                      <p className="text-base font-medium">{selectedAuth.approvedDate}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Valid From</Label>
+                      <p className="text-base font-medium">{selectedAuth.validFrom}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Valid To</Label>
+                      <p className="text-base font-medium">{selectedAuth.validTo}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+          )}
+
+          {selectedAuth.status === "REJECTED" && selectedAuth.rejectionReason && (
+              <Card className="border-red-200 bg-red-50">
+                <CardHeader>
+                  <CardTitle className="text-lg text-red-700">Rejection Reason</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-base text-red-600">{selectedAuth.rejectionReason}</p>
+                </CardContent>
+              </Card>
+          )}
+        </div>
+
+        <Dialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
+          <DialogContent className="text-base">
+            <DialogHeader>
+              <DialogTitle className="text-2xl">Approve Authorization</DialogTitle>
+              <DialogDescription className="text-base">
+                Confirm approval for authorization #{selectedAuth.id} for {selectedAuth.applicantName}. A 6-month validity window will be assigned.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsApproveDialogOpen(false)} className="text-base h-11 px-6">Cancel</Button>
+              <Button onClick={handleApprove} className="text-base h-11 px-6 bg-green-600">
+                Confirm
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+          <DialogContent className="text-base">
+            <DialogHeader>
+              <DialogTitle className="text-2xl">Reject Authorization</DialogTitle>
+              <DialogDescription className="text-base">
+                Reject authorization #{selectedAuth.id} for {selectedAuth.applicantName}? This will mark the request as rejected.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRejectDialogOpen(false)} className="text-base h-11 px-6">Cancel</Button>
+              <Button variant="destructive" onClick={handleReject} className="text-base h-11 px-6">
+                Confirm
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
   }
 
   return (
