@@ -49,6 +49,14 @@ const VehicleListEnvelopeSchema = z
           .object({
             content: z.array(VehicleSchema).optional(),
             items: z.array(VehicleSchema).optional(),
+            page: z.number().optional(),
+            pageSize: z.number().optional(),
+            size: z.number().optional(),
+            number: z.number().optional(),
+            total: z.number().optional(),
+            totalElements: z.number().optional(),
+            pageCount: z.number().optional(),
+            totalPages: z.number().optional(),
           })
           .passthrough(),
       ])
@@ -71,11 +79,11 @@ export const VehicleListResponseSchema = z
     }
 
     if (Array.isArray(response.data?.content)) {
-      return { data: response.data.content, meta: response.meta };
+      return { data: response.data.content, meta: response.meta ?? response.data };
     }
 
     if (Array.isArray(response.data?.items)) {
-      return { data: response.data.items, meta: response.meta };
+      return { data: response.data.items, meta: response.meta ?? response.data };
     }
 
     if (Array.isArray(response.content)) {

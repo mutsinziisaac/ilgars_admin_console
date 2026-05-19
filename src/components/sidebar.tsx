@@ -96,9 +96,6 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { label: t("nav.roadClosureRates"), page: "road-closure-rates" as const },
     { label: t("nav.finesConfiguration"), page: "fines-configuration" as const },
     { label: t("nav.geofencingZones"), page: "geofencing-zones" as const },
-    { label: t("nav.vehicleClassification"), page: "vehicle-classification" as const },
-    { label: t("nav.weightCategories"), page: "weight-categories" as const },
-    { label: t("nav.timeWindows"), page: "time-windows" as const },
   ]
 
   const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "heavy-truck-permits"

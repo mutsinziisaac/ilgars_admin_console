@@ -5,9 +5,61 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, PieChart, Pie, Cell } from "recharts"
 import { useState } from "react"
 import { TrendingUp, TrendingDown } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { useOfficerKpis } from "@/lib/api/enforcement/hooks"
+import type { OfficerKpisResponse } from "@/lib/api/enforcement/schemas"
+import { RoadClosurePermitsApi } from "@/lib/api/permits/api"
+import { useVehiclesList } from "@/lib/api/vehicles/hooks"
+
+const getOfficerKpisPayload = (response: OfficerKpisResponse | undefined): Record<string, unknown> | undefined => {
+  if (!response) return undefined
+  if ("data" in response && response.data && typeof response.data === "object") {
+    return response.data as Record<string, unknown>
+  }
+  return response
+}
+
+const readNumber = (
+  payload: Record<string, unknown> | undefined,
+  keys: string[],
+  fallback: number,
+) => {
+  if (!payload) return fallback
+
+  for (const key of keys) {
+    const value = payload[key]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string") {
+      const parsed = Number(value.replace(/,/g, ""))
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+
+  return fallback
+}
+
+const readTotal = (response: { data?: unknown[]; content?: unknown[]; meta?: Record<string, unknown> } | undefined) => {
+  const metaTotal = response?.meta?.total ?? response?.meta?.totalElements
+  if (typeof metaTotal === "number" && Number.isFinite(metaTotal)) return metaTotal
+  if (typeof metaTotal === "string") {
+    const parsed = Number(metaTotal)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return (response?.data ?? response?.content ?? []).length
+}
 
 export function DashboardPage() {
   const [timeRange, setTimeRange] = useState<"day" | "week" | "month">("week")
+  const officerKpisQuery = useOfficerKpis()
+  const activeVehiclesQuery = useVehiclesList({ page: 0, size: 100, status: "ACTIVE" })
+  const pendingPermitsQuery = useQuery({
+    queryKey: ["dashboard", "pending-road-closure-permits"],
+    queryFn: ({ signal }) =>
+      RoadClosurePermitsApi.listRoadClosurePermits({ page: 0, size: 100, status: "PENDING" }, signal),
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
 
   // Revenue data for different time ranges
   const revenueDataDay = [
@@ -81,6 +133,17 @@ export function DashboardPage() {
     delinquent: { label: "Delinquent", color: "#E5533D" },
   }
 
+  const officerKpis = getOfficerKpisPayload(officerKpisQuery.data)
+  const activeVehiclesTotal = activeVehiclesQuery.isError ? 2367 : readTotal(activeVehiclesQuery.data)
+  const pendingPermitsTotal = pendingPermitsQuery.isError ? 8 : readTotal(pendingPermitsQuery.data)
+  const enforcementActionsTotal = officerKpisQuery.isError
+    ? 47
+    : readNumber(
+        officerKpis,
+        ["enforcementActions", "actionsToday", "totalActions", "totalOffencesToday", "offencesToday", "violationsFound", "totalScans", "scansToday"],
+        47,
+      )
+
   return (
     <div className="space-y-6">
       {/* Metrics Cards */}
@@ -112,13 +175,15 @@ export function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">2,367</div>
+            <div className="text-4xl font-bold">{activeVehiclesQuery.isLoading ? "..." : activeVehiclesTotal.toLocaleString()}</div>
             <div className="mt-2 flex items-center gap-2">
               <Badge className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-sm px-2 py-1 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3" />
-                +31k
+                API
               </Badge>
-              <span className="text-sm text-muted-foreground">open city presence</span>
+              <span className="text-sm text-muted-foreground">
+                {activeVehiclesQuery.isError ? "local fallback" : "from vehicles API"}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -131,13 +196,15 @@ export function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">8</div>
+            <div className="text-4xl font-bold">{pendingPermitsQuery.isLoading ? "..." : pendingPermitsTotal.toLocaleString()}</div>
             <div className="mt-2 flex items-center gap-2">
               <Badge variant="outline" className="border-[#DAA22A]/30 bg-[#DAA22A]/10 text-[#1C1C1C] hover:bg-[#DAA22A]/20 text-sm px-2 py-1 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3" />
-                +2
+                API
               </Badge>
-              <span className="text-sm text-muted-foreground">awaiting review</span>
+              <span className="text-sm text-muted-foreground">
+                {pendingPermitsQuery.isError ? "local fallback" : "awaiting review"}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -150,13 +217,15 @@ export function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">47</div>
+            <div className="text-4xl font-bold">{officerKpisQuery.isLoading ? "..." : enforcementActionsTotal.toLocaleString()}</div>
             <div className="mt-2 flex items-center gap-2">
               <Badge className="bg-destructive/10 text-destructive hover:bg-destructive/20 text-sm px-2 py-1 flex items-center gap-1">
                 <TrendingDown className="h-3 w-3" />
-                -8.2%
+                KPI
               </Badge>
-              <span className="text-sm text-muted-foreground">lower than avg</span>
+              <span className="text-sm text-muted-foreground">
+                {officerKpisQuery.isError ? "local fallback" : "from enforcement KPI"}
+              </span>
             </div>
           </CardContent>
         </Card>

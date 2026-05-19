@@ -552,7 +552,6 @@ export function GeofencingZonesPage() {
                 <TableRow>
                   <TableHead className="text-base">Area Name</TableHead>
                   <TableHead className="text-base">Code</TableHead>
-                  <TableHead className="text-base">Description</TableHead>
                   <TableHead className="text-base">Format</TableHead>
                   <TableHead className="text-base">Boundary</TableHead>
                   <TableHead className="text-base">Status</TableHead>
@@ -564,7 +563,6 @@ export function GeofencingZonesPage() {
                   <TableRow key={area.id}>
                     <TableCell className="font-medium text-base">{area.name}</TableCell>
                     <TableCell className="text-base">{area.code || "-"}</TableCell>
-                    <TableCell className="text-base">{area.description || "-"}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{area.format || "GEOJSON"}</Badge>
                     </TableCell>

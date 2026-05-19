@@ -1,5 +1,10 @@
 import { coreRequest } from "../httpClient"
-import { HeatmapResponseSchema, type HeatmapResponse } from "./schemas"
+import {
+  HeatmapResponseSchema,
+  LiveMapResponseSchema,
+  type HeatmapResponse,
+  type LiveMapResponse,
+} from "./schemas"
 
 export interface TripHeatmapParams {
   municipalityId: string
@@ -20,5 +25,18 @@ export const AnalyticsApi = {
       params,
       signal,
       schema: HeatmapResponseSchema,
+    }),
+
+  /**
+   * GET /v1/admin/live-map
+   * Returns the latest known vehicle/device positions for the municipality.
+   */
+  getLiveMap: (params?: { municipalityId?: string }, signal?: AbortSignal) =>
+    coreRequest<LiveMapResponse>({
+      method: "GET",
+      url: "/v1/admin/live-map",
+      params,
+      signal,
+      schema: LiveMapResponseSchema,
     }),
 }

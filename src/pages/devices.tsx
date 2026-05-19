@@ -22,7 +22,8 @@ import { ApiError, getApiErrorMessage } from "@/lib/api/errors"
 import { buildDeviceAssignmentPayload } from "@/lib/api/devices/assignmentPayload"
 import { buildDefaultRegisterDevicePayload } from "@/lib/api/devices/registerPayload"
 import { getCurrentUsername } from "@/lib/auth/currentUser"
-import { Map, type MapMarker } from "@/components/ui/map"
+import { Map as AppMap, type MapMarker } from "@/components/ui/map"
+import { useLiveMap } from "@/lib/api/analytics/hooks"
 
 // Maputo center coordinates
 const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
@@ -178,6 +179,174 @@ const deviceStatusColor = (status: string) =>
 
 const cameraStatusColor = (status: string) => status === "Online" ? "#5B8C5A" : "#E5533D"
 
+type JsonRecord = Record<string, unknown>
+type LiveDevicePosition = {
+  latlng: [number, number]
+  location?: string
+  speed?: string
+  battery?: string
+  signal?: string
+  status?: string
+  lastUpdate?: string
+}
+
+const asRecord = (value: unknown): JsonRecord | null =>
+  value && typeof value === "object" ? value as JsonRecord : null
+
+const toNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+
+  return null
+}
+
+const findNumberByKeys = (source: unknown, keys: string[]): number | null => {
+  const record = asRecord(source)
+  if (!record) return null
+
+  for (const key of keys) {
+    const value = toNumber(record[key])
+    if (value !== null) return value
+  }
+
+  for (const nestedKey of [
+    "data",
+    "properties",
+    "metrics",
+    "summary",
+    "location",
+    "position",
+    "telemetry",
+    "lastTelemetry",
+    "latestTelemetry",
+    "gps",
+    "gpsFix",
+    "device",
+    "vehicle",
+  ]) {
+    const nestedValue = findNumberByKeys(record[nestedKey], keys)
+    if (nestedValue !== null) return nestedValue
+  }
+
+  return null
+}
+
+const findStringByKeys = (source: unknown, keys: string[]): string | null => {
+  const record = asRecord(source)
+  if (!record) return null
+
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (typeof value === "number" && Number.isFinite(value)) return String(value)
+    if (typeof value === "boolean") return value ? "Yes" : "No"
+  }
+
+  for (const nestedKey of [
+    "data",
+    "properties",
+    "metrics",
+    "summary",
+    "location",
+    "position",
+    "telemetry",
+    "lastTelemetry",
+    "latestTelemetry",
+    "gps",
+    "gpsFix",
+    "device",
+    "vehicle",
+  ]) {
+    const nestedValue = findStringByKeys(record[nestedKey], keys)
+    if (nestedValue) return nestedValue
+  }
+
+  return null
+}
+
+const formatPercent = (value: number | null) =>
+  value === null ? undefined : `${Math.round(value)}%`
+
+const formatSpeed = (value: number | null) =>
+  value === null ? undefined : `${Math.round(value)} km/h`
+
+const findLiveLatLng = (source: unknown): [number, number] | null => {
+  const lat = findNumberByKeys(source, ["lat", "latitude"])
+  const lng = findNumberByKeys(source, ["lng", "lon", "longitude"])
+
+  if (lat !== null && lng !== null) return [lat, lng]
+
+  const record = asRecord(source)
+  const coordinates = record?.coordinates
+  if (Array.isArray(coordinates) && coordinates.length >= 2) {
+    const first = toNumber(coordinates[0])
+    const second = toNumber(coordinates[1])
+    if (first !== null && second !== null) {
+      return Math.abs(first) > 30 && Math.abs(second) <= 30 ? [second, first] : [first, second]
+    }
+  }
+
+  return null
+}
+
+const liveMapKeysForPoint = (point: unknown) =>
+  [
+    findStringByKeys(point, ["vehicleId", "vehicleID", "vehicle_id"]),
+    findStringByKeys(point, ["plateNumber", "vehiclePlate", "plate", "registrationNumber"]),
+    findStringByKeys(point, ["deviceId", "deviceID", "deviceUid", "deviceUID", "trackerId", "imei"]),
+  ].filter((value, index, values): value is string =>
+    Boolean(value) && values.indexOf(value) === index
+  )
+
+const buildLivePositionIndex = (points: unknown[]) => {
+  const index = new globalThis.Map<string, LiveDevicePosition>()
+
+  for (const point of points) {
+    const latlng = findLiveLatLng(point)
+    if (!latlng) continue
+
+    const livePosition: LiveDevicePosition = {
+      latlng,
+      location: findStringByKeys(point, ["address", "locationName", "street", "roadName", "placeName", "description"]) ?? undefined,
+      speed: formatSpeed(findNumberByKeys(point, ["speed", "speedKmh", "speedKmH", "speedKph", "velocity"])),
+      battery: formatPercent(findNumberByKeys(point, ["battery", "batteryLevel", "batteryPercent", "batteryPercentage", "batteryPct"])),
+      signal: findStringByKeys(point, ["signal", "signalStrength", "gsmSignal", "networkSignal", "rssi"]) ?? undefined,
+      status: findStringByKeys(point, ["status", "vehicleStatus", "deviceStatus", "state"]) ?? undefined,
+      lastUpdate: findStringByKeys(point, ["lastUpdate", "updatedAt", "timestamp", "recordedAt", "receivedAt", "lastSeenAt"]) ?? undefined,
+    }
+
+    for (const key of liveMapKeysForPoint(point)) {
+      index.set(key, livePosition)
+    }
+  }
+
+  return index
+}
+
+const findLivePositionForDevice = (
+  device: AdminTrackingDevice,
+  livePositions: globalThis.Map<string, LiveDevicePosition>,
+) => {
+  const keys = [
+    device.vehicleId,
+    device.plateNumber,
+    device.backendDeviceId,
+    device.id,
+  ].filter((value, index, values): value is string =>
+    Boolean(value) && values.indexOf(value) === index
+  )
+
+  for (const key of keys) {
+    const livePosition = livePositions.get(key)
+    if (livePosition) return livePosition
+  }
+
+  return null
+}
+
 export function DevicesPage() {
   const [activeTab, setActiveTab] = useState("tracking")
   const [searchQuery, setSearchQuery] = useState("")
@@ -190,7 +359,16 @@ export function DevicesPage() {
     error: vehiclesError,
     refetch: refetchVehicles,
   } = useVehiclesList({ page: 0, size: TRACKER_LOOKUP_PAGE_SIZE })
+  const {
+    data: liveMapPoints = [],
+    isFetching: isLiveMapFetching,
+    error: liveMapError,
+  } = useLiveMap()
   const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
+  const livePositionIndex = useMemo(
+    () => buildLivePositionIndex(liveMapPoints),
+    [liveMapPoints],
+  )
   const activeDeviceQueries = useQueries({
     queries: vehicles.map((vehicle) => ({
       queryKey: vehicle.id
@@ -218,17 +396,36 @@ export function DevicesPage() {
   // Tracking device state
   const [locallyAddedDevices, setLocallyAddedDevices] = useState<AdminTrackingDevice[]>([])
   const trackingDevices = useMemo<AdminTrackingDevice[]>(
-    () => [
-      ...vehicles.map((vehicle, index) =>
-        mapVehicleToTrackingDevice(
-          vehicle,
-          activeDeviceQueries[index]?.data ?? null,
-          Boolean(activeDeviceQueries[index]?.isLoading || activeDeviceQueries[index]?.isFetching),
-        )
-      ),
-      ...locallyAddedDevices,
-    ],
-    [activeDeviceQueries, locallyAddedDevices, vehicles],
+    () => {
+      const baseDevices = [
+        ...vehicles.map((vehicle, index) =>
+          mapVehicleToTrackingDevice(
+            vehicle,
+            activeDeviceQueries[index]?.data ?? null,
+            Boolean(activeDeviceQueries[index]?.isLoading || activeDeviceQueries[index]?.isFetching),
+          )
+        ),
+        ...locallyAddedDevices,
+      ]
+
+      return baseDevices.map((device) => {
+        const livePosition = findLivePositionForDevice(device, livePositionIndex)
+        if (!livePosition) return device
+
+        return {
+          ...device,
+          latlng: livePosition.latlng,
+          coordinates: `${livePosition.latlng[0]}, ${livePosition.latlng[1]}`,
+          location: livePosition.location ?? device.location,
+          speed: livePosition.speed ?? device.speed,
+          battery: livePosition.battery ?? device.battery,
+          signal: livePosition.signal ?? device.signal,
+          status: livePosition.status ?? device.status,
+          lastUpdate: formatDeviceTimestamp(livePosition.lastUpdate) || device.lastUpdate,
+        }
+      })
+    },
+    [activeDeviceQueries, livePositionIndex, locallyAddedDevices, vehicles],
   )
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
   const [isAssignTrackerOpen, setIsAssignTrackerOpen] = useState(false)
@@ -417,6 +614,7 @@ export function DevicesPage() {
 
   const onlineCameras = cameras.filter(c => c.status === "Online").length
   const offlineCameras = cameras.filter(c => c.status === "Offline").length
+  const livePositionCount = livePositionIndex.size
   const mapMarkers: MapMarker[] = [
     ...trackingDevices.map((device) => {
       const color = deviceStatusColor(device.status)
@@ -484,14 +682,29 @@ export function DevicesPage() {
           </Button>
           <div>
             <h1 className="text-4xl font-semibold text-foreground">Device Location Map - Maputo</h1>
-            <p className="text-lg text-muted-foreground">View GPS tracking devices and cameras across Maputo.</p>
+            <p className="text-lg text-muted-foreground">
+              Live tracker positions refresh automatically from the admin live-map endpoint.
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {isLiveMapFetching && (
+              <Badge variant="outline" className="gap-2 px-3 py-1.5 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Updating live map
+              </Badge>
+            )}
+            {liveMapError && (
+              <Badge variant="destructive" className="px-3 py-1.5 text-sm">
+                Live map unavailable
+              </Badge>
+            )}
           </div>
         </div>
 
         <Card>
           <CardContent className="p-0">
             <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
-              <Map
+              <AppMap
                 center={MAPUTO_CENTER}
                 zoom={DEFAULT_ZOOM}
                 markers={mapMarkers}
@@ -504,6 +717,7 @@ export function DevicesPage() {
                 <h3 className="mb-3 text-sm font-semibold">Legend</h3>
                 <div className="space-y-2">
                   <div className="mb-1 text-xs font-semibold text-gray-600">GPS Devices</div>
+                  <div className="mb-2 text-xs text-gray-500">Live positions: {livePositionCount}</div>
                   <div className="flex items-center gap-2">
                     <div className="h-4 w-4 rounded-full bg-[#5B8C5A]" />
                     <span className="text-sm">Active ({activeDevices})</span>

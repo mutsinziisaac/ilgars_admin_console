@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Plus, Loader2, Link2, Unlink2 } from "lucide-react"
+import { ArrowLeft, MapPin, Search, Plus, Loader2, Link2, Unlink2 } from "lucide-react"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { DevicesApi } from "@/lib/api/devices/api"
@@ -20,6 +20,8 @@ import { ApiError, getApiErrorMessage } from "@/lib/api/errors"
 import { buildDeviceAssignmentPayload } from "@/lib/api/devices/assignmentPayload"
 import { buildDefaultRegisterDevicePayload } from "@/lib/api/devices/registerPayload"
 import { getCurrentUsername } from "@/lib/auth/currentUser"
+import { useLiveMap } from "@/lib/api/analytics/hooks"
+import { Map as AppMap, type MapMarker } from "@/components/ui/map"
 
 type TrackingDevice = {
   id: string
@@ -41,6 +43,8 @@ type TrackingDevice = {
 
 const TRACKER_LOOKUP_PAGE_SIZE = 25
 const TRACKER_LOOKUP_STALE_MS = 5 * 60 * 1000
+const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
+const DEFAULT_ZOOM = 14
 
 type JsonRecord = Record<string, unknown>
 
@@ -128,6 +132,90 @@ const formatPercent = (value: number | null) =>
 
 const formatSpeed = (value: number | null) =>
   value === null ? null : `${Math.round(value)} km/h`
+
+type LiveDevicePosition = {
+  latlng: [number, number]
+  location?: string
+  speed?: string
+  battery?: string
+  signal?: string
+  status?: string
+  lastUpdate?: string
+}
+
+const findLiveLatLng = (source: unknown): [number, number] | null => {
+  const lat = findNumberByKeys(source, ["lat", "latitude"])
+  const lng = findNumberByKeys(source, ["lng", "lon", "longitude"])
+
+  if (lat !== null && lng !== null) return [lat, lng]
+
+  const record = asRecord(source)
+  const coordinates = record?.coordinates
+  if (Array.isArray(coordinates) && coordinates.length >= 2) {
+    const first = toNumber(coordinates[0])
+    const second = toNumber(coordinates[1])
+    if (first !== null && second !== null) {
+      return Math.abs(first) > 30 && Math.abs(second) <= 30 ? [second, first] : [first, second]
+    }
+  }
+
+  return null
+}
+
+const liveMapKeysForPoint = (point: unknown) =>
+  [
+    findStringByKeys(point, ["vehicleId", "vehicleID", "vehicle_id"]),
+    findStringByKeys(point, ["plateNumber", "vehiclePlate", "plate", "registrationNumber"]),
+    findStringByKeys(point, ["deviceId", "deviceID", "deviceUid", "deviceUID", "trackerId", "imei"]),
+  ].filter((value, index, values): value is string =>
+    Boolean(value) && values.indexOf(value) === index
+  )
+
+const buildLivePositionIndex = (points: unknown[]) => {
+  const index = new globalThis.Map<string, LiveDevicePosition>()
+
+  for (const point of points) {
+    const latlng = findLiveLatLng(point)
+    if (!latlng) continue
+
+    const livePosition: LiveDevicePosition = {
+      latlng,
+      location: findStringByKeys(point, ["address", "locationName", "street", "roadName", "placeName", "description"]) ?? undefined,
+      speed: formatSpeed(findNumberByKeys(point, ["speed", "speedKmh", "speedKmH", "speedKph", "velocity"])) ?? undefined,
+      battery: formatPercent(findNumberByKeys(point, ["battery", "batteryLevel", "batteryPercent", "batteryPercentage", "batteryPct"])) ?? undefined,
+      signal: findStringByKeys(point, ["signal", "signalStrength", "gsmSignal", "networkSignal", "rssi"]) ?? undefined,
+      status: findStringByKeys(point, ["status", "vehicleStatus", "deviceStatus", "state"]) ?? undefined,
+      lastUpdate: findStringByKeys(point, ["lastUpdate", "updatedAt", "timestamp", "recordedAt", "receivedAt", "lastSeenAt"]) ?? undefined,
+    }
+
+    for (const key of liveMapKeysForPoint(point)) {
+      index.set(key, livePosition)
+    }
+  }
+
+  return index
+}
+
+const findLivePositionForDevice = (
+  device: TrackingDevice,
+  livePositions: globalThis.Map<string, LiveDevicePosition>,
+) => {
+  const keys = [
+    device.vehicleId,
+    device.plateNumber,
+    device.backendDeviceId,
+    device.id,
+  ].filter((value, index, values): value is string =>
+    Boolean(value) && values.indexOf(value) === index
+  )
+
+  for (const key of keys) {
+    const livePosition = livePositions.get(key)
+    if (livePosition) return livePosition
+  }
+
+  return null
+}
 
 const resolveDeviceField = (keys: string[], fallback: string, ...sources: Array<unknown>) => {
   for (const source of sources) {
@@ -244,6 +332,7 @@ const mapVehicleToTrackingDevice = (
 
 export function GPSTrackingPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [isMapOpen, setIsMapOpen] = useState(false)
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
   const [isAssignTrackerOpen, setIsAssignTrackerOpen] = useState(false)
   const [isAssigningTracker, setIsAssigningTracker] = useState(false)
@@ -255,7 +344,16 @@ export function GPSTrackingPage() {
     error: vehiclesError,
     refetch: refetchVehicles,
   } = useVehiclesList({ page: 0, size: TRACKER_LOOKUP_PAGE_SIZE })
+  const {
+    data: liveMapPoints = [],
+    isFetching: isLiveMapFetching,
+    error: liveMapError,
+  } = useLiveMap()
   const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
+  const livePositionIndex = useMemo(
+    () => buildLivePositionIndex(liveMapPoints),
+    [liveMapPoints],
+  )
   const activeDeviceQueries = useQueries({
     queries: vehicles.map((vehicle) => ({
       queryKey: vehicle.id
@@ -313,11 +411,24 @@ export function GPSTrackingPage() {
         .filter((device): device is TrackingDevice => Boolean(device))
 
       const localRowsWithoutVehicle = locallyAddedDevices.filter((device) => !device.vehicleId)
-      return [...vehicleRows, ...localRowsWithoutVehicle].sort(
+      return [...vehicleRows, ...localRowsWithoutVehicle].map((device) => {
+        const livePosition = findLivePositionForDevice(device, livePositionIndex)
+        if (!livePosition) return device
+
+        return {
+          ...device,
+          location: livePosition.location ?? device.location,
+          speed: livePosition.speed ?? device.speed,
+          battery: livePosition.battery ?? device.battery,
+          signal: livePosition.signal ?? device.signal,
+          status: livePosition.status ?? device.status,
+          lastUpdate: formatDeviceTimestamp(livePosition.lastUpdate) || device.lastUpdate,
+        }
+      }).sort(
         (first, second) => toSortTimestamp(second.lastUpdate) - toSortTimestamp(first.lastUpdate),
       )
     },
-    [activeDeviceQueries, locallyAddedDevices, locallyDetachedVehicleIds, vehicles],
+    [activeDeviceQueries, livePositionIndex, locallyAddedDevices, locallyDetachedVehicleIds, vehicles],
   )
   
   const [deviceForm, setDeviceForm] = useState({
@@ -561,6 +672,100 @@ export function GPSTrackingPage() {
   const activeDevices = trackingDevices.filter(isActiveTracker).length
   const checkedVehicles = vehicles.length
   const assignmentLookupsLoading = activeDeviceQueries.some((query) => query.isLoading || query.isFetching)
+  const livePositionCount = livePositionIndex.size
+  const mapMarkers: MapMarker[] = trackingDevices
+    .flatMap((device): MapMarker[] => {
+      const livePosition = findLivePositionForDevice(device, livePositionIndex)
+      if (!livePosition) return []
+
+      const color = isTrackerStatusActive(device.status) ? "#5B8C5A" : "#E5533D"
+      return [{
+        position: livePosition.latlng,
+        label: device.plateNumber,
+        color,
+        glyph: "T",
+        popupHtml: `
+          <div style="width:280px;font-family:Outfit,system-ui,sans-serif">
+            <div style="background:${color};color:white;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <strong style="font-size:14px;line-height:1.1">${device.plateNumber}</strong>
+              <span style="font-size:11px;opacity:.85">${device.lastUpdate}</span>
+            </div>
+            <div style="padding:12px">
+              <div style="font-size:14px;font-weight:700;margin-bottom:8px">${device.vehicleType}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:#555;margin-bottom:8px">
+                <div><span style="color:#999">Owner</span><br/>${device.owner}</div>
+                <div><span style="color:#999">Speed</span><br/>${device.speed}</div>
+                <div><span style="color:#999">Battery</span><br/>${device.battery}</div>
+                <div><span style="color:#999">Signal</span><br/>${device.signal}</div>
+              </div>
+              <div style="font-size:12px;color:#555;margin-bottom:8px">${device.location}</div>
+              <span style="display:inline-block;background:${color}22;color:${color};padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700">${device.status}</span>
+            </div>
+          </div>
+        `,
+      }]
+    })
+
+  if (isMapOpen) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={() => setIsMapOpen(false)} className="mt-1">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-4xl font-semibold text-foreground">GPS Live Map</h1>
+            <p className="text-lg text-muted-foreground">
+              Tracker markers refresh automatically from the admin live-map endpoint.
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {isLiveMapFetching && (
+              <Badge variant="outline" className="gap-2 px-3 py-1.5 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Updating live map
+              </Badge>
+            )}
+            {liveMapError && (
+              <Badge variant="destructive" className="px-3 py-1.5 text-sm">
+                Live map unavailable
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
+              <AppMap
+                center={MAPUTO_CENTER}
+                zoom={DEFAULT_ZOOM}
+                markers={mapMarkers}
+                height="100%"
+                className="h-full w-full"
+                defaultView="street"
+              />
+
+              <div className="absolute top-4 right-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+                <h3 className="mb-3 text-sm font-semibold">Legend</h3>
+                <div className="space-y-2">
+                  <div className="mb-2 text-xs text-gray-500">Live positions: {livePositionCount}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#5B8C5A]" />
+                    <span className="text-sm">Active ({activeDevices})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-[#E5533D]" />
+                    <span className="text-sm">Inactive ({trackingDevices.length - activeDevices})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -571,6 +776,10 @@ export function GPSTrackingPage() {
           <p className="text-lg text-muted-foreground">Backend GPS tracker assignments</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => setIsMapOpen(true)}>
+            <MapPin className="h-4 w-4 mr-2" />
+            View Map
+          </Button>
           <Button onClick={() => setIsAddDeviceOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Register Tracker

@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, MapPin, AlertTriangle, CheckCircle, XCircle, Truck, FileText, Eye, User, Calendar, Map, BellRing, Search } from "lucide-react"
+import { ArrowLeft, MapPin, AlertTriangle, CheckCircle, XCircle, Truck, FileText, Eye, User, Calendar, Map, BellRing } from "lucide-react"
 import { toast } from "sonner"
 import { EnforcementMap, UNENFORCED_VIOLATIONS, severityColor } from "@/components/enforcement-map"
+import { useOfficerKpis } from "@/lib/api/enforcement/hooks"
+import type { OfficerKpisResponse } from "@/lib/api/enforcement/schemas"
 
 // Mock enforcement log data with offence types
 const mockEnforcementLogs = [
@@ -170,9 +171,41 @@ const mockEnforcementLogs = [
   }
 ]
 
-type AlertDispatchState = "sent" | "responding"
+type FinalEnforcementAction = "Vehicle Impounded" | "Fine Issued" | "Warning Issued"
+type AlertDispatchState = "locating" | "in_progress" | FinalEnforcementAction
+
+const finalAlertStates: FinalEnforcementAction[] = ["Vehicle Impounded", "Fine Issued", "Warning Issued"]
+const isFinalAlertState = (state: string): state is FinalEnforcementAction => finalAlertStates.includes(state as FinalEnforcementAction)
+
+const getOfficerKpisPayload = (response: OfficerKpisResponse | undefined): Record<string, unknown> | undefined => {
+  if (!response) return undefined
+  if ("data" in response && response.data && typeof response.data === "object") {
+    return response.data as Record<string, unknown>
+  }
+  return response
+}
+
+const readKpiNumber = (
+  payload: Record<string, unknown> | undefined,
+  keys: string[],
+  fallback: number,
+) => {
+  if (!payload) return fallback
+
+  for (const key of keys) {
+    const value = payload[key]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+    if (typeof value === "string") {
+      const parsed = Number(value.replace(/,/g, ""))
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+
+  return fallback
+}
 
 export function EnforcementPage() {
+  const officerKpisQuery = useOfficerKpis()
   const [enforcementLogs, setEnforcementLogs] = useState(mockEnforcementLogs)
   const [selectedEnforcement, setSelectedEnforcement] = useState<typeof mockEnforcementLogs[0] | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
@@ -181,15 +214,11 @@ export function EnforcementPage() {
   const [hoveredViolation, setHoveredViolation] = useState<(typeof UNENFORCED_VIOLATIONS)[number] | null>(null)
   const [selectedViolationId, setSelectedViolationId] = useState<string | null>(null)
   const [alertDispatchStates, setAlertDispatchStates] = useState<Partial<Record<string, AlertDispatchState>>>({})
-  const [alertSearch, setAlertSearch] = useState("")
-  const [alertSeverityFilter, setAlertSeverityFilter] = useState("all")
-  const [alertTypeFilter, setAlertTypeFilter] = useState("all")
-  const [alertStatusFilter, setAlertStatusFilter] = useState("all")
   const [alertPage, setAlertPage] = useState(1)
   const [mapLayer, setMapLayer] = useState<"heatmap" | "violations" | "both">("both")
   const [actionFilter, setActionFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
+  const itemsPerPage = 5
 
   // Form state for logging enforcement
   const [formData, setFormData] = useState({
@@ -203,7 +232,8 @@ export function EnforcementPage() {
     offenceCategory: "",
     penaltyAmount: "",
     action: "",
-    notes: ""
+    notes: "",
+    sourceAlertId: ""
   })
 
   // Handle log enforcement action
@@ -235,6 +265,10 @@ export function EnforcementPage() {
     }
 
     setEnforcementLogs([newLog, ...enforcementLogs])
+    const finalAction = formData.action
+    if (formData.sourceAlertId && isFinalAlertState(finalAction)) {
+      setAlertDispatchStates((previous) => ({ ...previous, [formData.sourceAlertId]: finalAction }))
+    }
     setIsLogDialogOpen(false)
     setFormData({
       plateNumber: "",
@@ -247,7 +281,8 @@ export function EnforcementPage() {
       offenceCategory: "",
       penaltyAmount: "",
       action: "",
-      notes: ""
+      notes: "",
+      sourceAlertId: ""
     })
     toast.success("Enforcement action logged", {
       description: `${formData.offenceType} recorded for ${formData.plateNumber}`
@@ -255,18 +290,18 @@ export function EnforcementPage() {
   }
 
   const handleAlertEnforcement = (violation: (typeof UNENFORCED_VIOLATIONS)[number]) => {
-    setAlertDispatchStates((previous) => ({ ...previous, [violation.id]: "sent" }))
-    toast.success("Enforcement alert triggered", {
-      description: `Nearby enforcers were notified to follow up on ${violation.plateNumber}.`,
+    setAlertDispatchStates((previous) => ({ ...previous, [violation.id]: "locating" }))
+    toast.success("Locating enforcer", {
+      description: `Finding a nearby enforcer for ${violation.plateNumber}.`,
     })
 
     window.setTimeout(() => {
       setAlertDispatchStates((previous) => {
-        if (previous[violation.id] !== "sent") return previous
-        return { ...previous, [violation.id]: "responding" }
+        if (previous[violation.id] !== "locating") return previous
+        return { ...previous, [violation.id]: "in_progress" }
       })
-      toast.success("Officer responding", {
-        description: `An enforcement officer accepted ${violation.plateNumber} and is moving to the location.`,
+      toast.success("Enforcement in progress", {
+        description: `An enforcer accepted ${violation.plateNumber} and is handling the alert.`,
       })
     }, 1500)
   }
@@ -284,38 +319,44 @@ export function EnforcementPage() {
       penaltyAmount: violation.estimatedPenalty,
       action: "",
       notes: `Officer follow-up for ${violation.violationType} alert from ${violation.detectedBy}.`,
+      sourceAlertId: violation.id,
     })
     setIsLogDialogOpen(true)
   }
 
-  const alertTypes = useMemo(
-    () => Array.from(new Set(UNENFORCED_VIOLATIONS.map((violation) => violation.violationType))).sort(),
-    []
-  )
+  const getAlertStatusLabel = (state: AlertDispatchState | "new") => {
+    if (state === "locating") return "Locating Enforcer"
+    if (state === "in_progress") return "Enforcement In Progress"
+    if (state === "Vehicle Impounded") return "Impounded"
+    return state
+  }
+
+  const getAlertButtonLabel = (state: AlertDispatchState | "new") => {
+    if (state === "new") return "Alert Enforcement"
+    if (state === "locating") return "Locating Enforcer"
+    if (state === "in_progress") return "Log Officer Follow-up"
+    if (state === "Vehicle Impounded") return "Impounded"
+    return state
+  }
+
+  const getAlertStatusClassName = (state: AlertDispatchState) => {
+    if (state === "locating") return "border-[#DAA22A] text-[#DAA22A]"
+    if (state === "in_progress") return "border-[#5B8C5A] text-[#5B8C5A]"
+    if (state === "Vehicle Impounded") return "border-[#E5533D] text-[#E5533D]"
+    if (state === "Fine Issued") return "border-[#5B8C5A] text-[#5B8C5A]"
+    return "border-[#DAA22A] text-[#DAA22A]"
+  }
 
   const filteredEnforcementAlerts = useMemo(() => {
-    const normalizedSearch = alertSearch.trim().toLowerCase()
     const severityRank = { High: 0, Medium: 1, Low: 2 }
 
-    return UNENFORCED_VIOLATIONS
-      .filter((violation) => {
-        const status = alertDispatchStates[violation.id] ?? "new"
-        const matchesSearch = !normalizedSearch ||
-          violation.plateNumber.toLowerCase().includes(normalizedSearch) ||
-          violation.violationType.toLowerCase().includes(normalizedSearch) ||
-          violation.location.toLowerCase().includes(normalizedSearch) ||
-          violation.detectedBy.toLowerCase().includes(normalizedSearch)
-        const matchesSeverity = alertSeverityFilter === "all" || violation.severity === alertSeverityFilter
-        const matchesType = alertTypeFilter === "all" || violation.violationType === alertTypeFilter
-        const matchesStatus = alertStatusFilter === "all" || alertStatusFilter === status
-        return matchesSearch && matchesSeverity && matchesType && matchesStatus
-      })
+    return [...UNENFORCED_VIOLATIONS]
       .sort((a, b) => {
         const severityDelta = severityRank[a.severity] - severityRank[b.severity]
         if (severityDelta !== 0) return severityDelta
         return b.detectedAt.localeCompare(a.detectedAt)
       })
-  }, [alertSearch, alertSeverityFilter, alertTypeFilter, alertStatusFilter, alertDispatchStates])
+  }, [])
 
   const alertPageSize = 8
   const alertTotalPages = Math.max(1, Math.ceil(filteredEnforcementAlerts.length / alertPageSize))
@@ -345,6 +386,34 @@ export function EnforcementPage() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedLogs = filteredLogs.slice(startIndex, endIndex)
+  const officerKpis = getOfficerKpisPayload(officerKpisQuery.data)
+  const kpiSourceLabel = officerKpisQuery.isLoading
+    ? "Loading backend KPIs"
+    : officerKpisQuery.isError
+      ? "Using local fallback"
+      : officerKpis
+        ? "Backend KPIs"
+        : "Local fallback"
+  const totalOffencesToday = readKpiNumber(
+    officerKpis,
+    ["totalOffencesToday", "offencesToday", "totalOffences", "violationsFound", "totalViolations"],
+    enforcementLogs.length,
+  )
+  const vehiclesImpounded = readKpiNumber(
+    officerKpis,
+    ["vehiclesImpounded", "impoundedVehicles", "vehicleImpounded", "impounded"],
+    enforcementLogs.filter(l => l.action === "Vehicle Impounded").length,
+  )
+  const finesIssued = readKpiNumber(
+    officerKpis,
+    ["finesIssued", "fineIssued", "fines", "totalFinesIssued"],
+    enforcementLogs.filter(l => l.action === "Fine Issued").length,
+  )
+  const repeatOffenders = readKpiNumber(
+    officerKpis,
+    ["repeatOffenders", "repeatOffenderCount", "repeatViolations"],
+    enforcementLogs.filter(l => l.isRepeatOffender).length,
+  )
 
   // Get action badge
   const getActionBadge = (action: string) => {
@@ -411,64 +480,6 @@ export function EnforcementPage() {
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {filteredEnforcementAlerts.length} of {UNENFORCED_VIOLATIONS.length} visible, sorted by urgency
                   </p>
-                  <div className="mt-3 space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={alertSearch}
-                        onChange={(event) => {
-                          setAlertSearch(event.target.value)
-                          setAlertPage(1)
-                        }}
-                        placeholder="Plate, type, source..."
-                        className="h-9 pl-8 text-sm"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select value={alertSeverityFilter} onValueChange={(value) => {
-                        setAlertSeverityFilter(value)
-                        setAlertPage(1)
-                      }}>
-                        <SelectTrigger className="h-9 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All severity</SelectItem>
-                          <SelectItem value="High">High</SelectItem>
-                          <SelectItem value="Medium">Medium</SelectItem>
-                          <SelectItem value="Low">Low</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={alertStatusFilter} onValueChange={(value) => {
-                        setAlertStatusFilter(value)
-                        setAlertPage(1)
-                      }}>
-                        <SelectTrigger className="h-9 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All status</SelectItem>
-                          <SelectItem value="new">New</SelectItem>
-                          <SelectItem value="sent">Alert Sent</SelectItem>
-                          <SelectItem value="responding">Officer Responding</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Select value={alertTypeFilter} onValueChange={(value) => {
-                      setAlertTypeFilter(value)
-                      setAlertPage(1)
-                    }}>
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All alert types</SelectItem>
-                        {alertTypes.map((type) => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
                 <div className="flex-1 divide-y divide-border overflow-y-auto">
                   {visibleEnforcementAlerts.map((vio) => {
@@ -493,9 +504,9 @@ export function EnforcementPage() {
                               {dispatchState !== "new" && (
                                 <Badge
                                   variant="outline"
-                                  className={`px-1.5 py-0 text-xs ${dispatchState === "responding" ? "border-[#5B8C5A] text-[#5B8C5A]" : "border-[#DAA22A] text-[#DAA22A]"}`}
+                                  className={`px-1.5 py-0 text-xs ${getAlertStatusClassName(dispatchState)}`}
                                 >
-                                  {dispatchState === "responding" ? "Officer Responding" : "Alert Sent"}
+                                  {getAlertStatusLabel(dispatchState)}
                                 </Badge>
                               )}
                             </div>
@@ -507,20 +518,21 @@ export function EnforcementPage() {
                             </div>
                             <Button
                               size="sm"
-                              variant={dispatchState === "responding" ? "default" : dispatchState === "sent" ? "secondary" : "outline"}
+                              variant={dispatchState === "in_progress" ? "default" : dispatchState === "locating" ? "secondary" : "outline"}
                               className="mt-2 h-8 w-full justify-center text-xs"
                               onClick={(event) => {
                                 event.stopPropagation()
-                                if (dispatchState === "responding") {
+                                if (dispatchState === "in_progress") {
                                   handleOpenFollowUp(vio)
                                   return
                                 }
+                                if (dispatchState !== "new") return
                                 handleAlertEnforcement(vio)
                               }}
-                              disabled={dispatchState === "sent"}
+                              disabled={dispatchState === "locating" || isFinalAlertState(dispatchState)}
                             >
                               <BellRing className="mr-1.5 h-3.5 w-3.5" />
-                              {dispatchState === "responding" ? "Log Officer Follow-up" : dispatchState === "sent" ? "Waiting for Officer" : "Alert Enforcement"}
+                              {getAlertButtonLabel(dispatchState)}
                             </Button>
                           </div>
                           <div className="mt-1.5 h-2 w-2 flex-shrink-0 animate-pulse rounded-full" style={{ backgroundColor: color }} />
@@ -821,10 +833,10 @@ export function EnforcementPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Total Offences Today</CardDescription>
-            <CardTitle className="text-4xl">{enforcementLogs.length}</CardTitle>
+            <CardTitle className="text-4xl">{totalOffencesToday}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Enforcement actions</p>
+            <p className="text-base text-muted-foreground">{kpiSourceLabel}</p>
           </CardContent>
         </Card>
 
@@ -832,11 +844,11 @@ export function EnforcementPage() {
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Vehicles Impounded</CardDescription>
             <CardTitle className="text-4xl text-[#E5533D]">
-              {enforcementLogs.filter(l => l.action === "Vehicle Impounded").length}
+              {vehiclesImpounded}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">High severity</p>
+            <p className="text-base text-muted-foreground">{kpiSourceLabel}</p>
           </CardContent>
         </Card>
 
@@ -844,11 +856,11 @@ export function EnforcementPage() {
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Fines Issued</CardDescription>
             <CardTitle className="text-4xl text-[#5B8C5A]">
-              {enforcementLogs.filter(l => l.action === "Fine Issued").length}
+              {finesIssued}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Penalties applied</p>
+            <p className="text-base text-muted-foreground">{kpiSourceLabel}</p>
           </CardContent>
         </Card>
 
@@ -856,11 +868,11 @@ export function EnforcementPage() {
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Repeat Offenders</CardDescription>
             <CardTitle className="text-4xl text-[#DAA22A]">
-              {enforcementLogs.filter(l => l.isRepeatOffender).length}
+              {repeatOffenders}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-base text-muted-foreground">Escalation required</p>
+            <p className="text-base text-muted-foreground">{kpiSourceLabel}</p>
           </CardContent>
         </Card>
       </div>

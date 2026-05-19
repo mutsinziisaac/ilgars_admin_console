@@ -19,6 +19,7 @@ export { FinePoliciesApi } from "./fine-policies/api";
 export { ExemptAreasApi } from "./exempt-areas/api";
 export { DevicesApi } from "./devices/api";
 export { AnalyticsApi } from "./analytics/api";
+export { EnforcementApi } from "./enforcement/api";
 
 // Export schemas and types
 export type { Vehicle, VehicleListResponse, VehicleDetailResponse } from "./vehicles/schemas";
@@ -92,3 +93,7 @@ export type {
   HeatmapPoint,
   HeatmapResponse,
 } from "./analytics/schemas";
+export type {
+  OfficerKpisPayload,
+  OfficerKpisResponse,
+} from "./enforcement/schemas";
