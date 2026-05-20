@@ -3,16 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Radio, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Camera, Video, Eye, Search, MoreHorizontal, RefreshCw, PowerOff, Power, Plus, Trash2, AlertTriangle, Loader2, Link2 } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ArrowLeft, MapPin, Navigation, Battery, BatteryLow, Signal, SignalHigh, SignalLow, Search, Plus, Loader2, Link2 } from "lucide-react"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { DevicesApi } from "@/lib/api/devices/api"
-import { useRegisterDevice } from "@/lib/api/devices/hooks"
+import { useDevicesList, useRegisterDevice } from "@/lib/api/devices/hooks"
 import { devicesKeys } from "@/lib/api/devices/queryKeys"
 import type { ActiveDeviceResponse, Device } from "@/lib/api/devices/schemas"
 import { VehiclesApi } from "@/lib/api/vehicles/api"
@@ -24,81 +22,11 @@ import { buildDefaultRegisterDevicePayload } from "@/lib/api/devices/registerPay
 import { getCurrentUsername } from "@/lib/auth/currentUser"
 import { Map as AppMap, type MapMarker } from "@/components/ui/map"
 import { useLiveMap } from "@/lib/api/analytics/hooks"
+import { isUgandaCoordinate, UGANDA_CENTER, UGANDA_OVERVIEW_ZOOM } from "@/lib/map-region"
 
-// Maputo center coordinates
-const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
-const DEFAULT_ZOOM = 14
+const DEFAULT_ZOOM = UGANDA_OVERVIEW_ZOOM
 const TRACKER_LOOKUP_PAGE_SIZE = 25
 const TRACKER_LOOKUP_STALE_MS = 5 * 60 * 1000
-
-// Mock camera data with real Maputo coordinates
-const mockCameras = [
-  {
-    id: "CAM-001",
-    name: "North Gate - Julius Nyerere",
-    type: "ANPR",
-    location: "Av. Julius Nyerere",
-    coordinates: "-25.9612, 32.5823",
-    latlng: [-25.9612, 32.5823] as [number, number],
-    status: "Online",
-    resolution: "4K",
-    fps: "30",
-    detections: "1,234",
-    lastDetection: "2 mins ago"
-  },
-  {
-    id: "CAM-002",
-    name: "South Gate - 25 de Setembro",
-    type: "ANPR",
-    location: "Av. 25 de Setembro",
-    coordinates: "-25.9655, 32.5731",
-    latlng: [-25.9655, 32.5731] as [number, number],
-    status: "Online",
-    resolution: "4K",
-    fps: "30",
-    detections: "987",
-    lastDetection: "1 min ago"
-  },
-  {
-    id: "CAM-003",
-    name: "East Gate - Marginal",
-    type: "ANPR",
-    location: "Marginal Avenue",
-    coordinates: "-25.9701, 32.5945",
-    latlng: [-25.9701, 32.5945] as [number, number],
-    status: "Offline",
-    resolution: "4K",
-    fps: "0",
-    detections: "756",
-    lastDetection: "1 hour ago"
-  },
-  {
-    id: "CAM-004",
-    name: "West Gate - Eduardo Mondlane",
-    type: "Traffic",
-    location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5680",
-    latlng: [-25.9588, 32.5680] as [number, number],
-    status: "Online",
-    resolution: "1080p",
-    fps: "25",
-    detections: "2,145",
-    lastDetection: "30 secs ago"
-  },
-  {
-    id: "CAM-005",
-    name: "Central - Vladimir Lenine",
-    type: "ANPR",
-    location: "Av. Vladimir Lenine",
-    coordinates: "-25.9634, 32.5789",
-    latlng: [-25.9634, 32.5789] as [number, number],
-    status: "Online",
-    resolution: "4K",
-    fps: "30",
-    detections: "1,567",
-    lastDetection: "1 min ago"
-  },
-]
 
 type TrackingDevice = {
   id: string
@@ -114,12 +42,12 @@ type TrackingDevice = {
   signal: string
   lastUpdate: string
 }
-type Camera = typeof mockCameras[0]
 
 type AdminTrackingDevice = TrackingDevice & {
   vehicleId?: string
   backendDeviceId?: string
   assignmentId?: string
+  kind?: "assigned" | "registered"
 }
 
 const formatDeviceTimestamp = (value?: string | null) => {
@@ -165,19 +93,39 @@ const mapVehicleToTrackingDevice = (
       : hasActiveTracker
         ? "Active tracker assigned"
         : "No active tracker assigned",
-    coordinates: `${MAPUTO_CENTER[0]}, ${MAPUTO_CENTER[1]}`,
-    latlng: MAPUTO_CENTER,
+    coordinates: `${UGANDA_CENTER[0]}, ${UGANDA_CENTER[1]}`,
+    latlng: UGANDA_CENTER,
     speed: "N/A",
     battery: "N/A",
     signal: hasActiveTracker ? "Strong" : activeLookupLoading ? "Medium" : "Weak",
     lastUpdate: formatDeviceTimestamp(assignment?.assignedAt || tracker?.updatedAt || tracker?.createdAt || vehicle.updatedAt),
+    kind: hasActiveTracker ? "assigned" : undefined,
+  }
+}
+
+const mapRegisteredDeviceToTrackingDevice = (device: Device): AdminTrackingDevice => {
+  const id = device.deviceUid || device.id || device.imei || "REGISTERED-TRACKER"
+
+  return {
+    id,
+    backendDeviceId: device.id || device.deviceUid || undefined,
+    plateNumber: "Unassigned",
+    vehicleType: device.model || device.vendor || "Registered tracker",
+    owner: device.vendor || "Unassigned",
+    status: device.status || "REGISTERED",
+    location: "Registered tracker inventory",
+    coordinates: `${UGANDA_CENTER[0]}, ${UGANDA_CENTER[1]}`,
+    latlng: UGANDA_CENTER,
+    speed: "N/A",
+    battery: "N/A",
+    signal: "N/A",
+    lastUpdate: formatDeviceTimestamp(device.updatedAt || device.createdAt),
+    kind: "registered",
   }
 }
 
 const deviceStatusColor = (status: string) =>
   status === "Active" ? "#5B8C5A" : status === "Idle" ? "#DAA22A" : "#E5533D"
-
-const cameraStatusColor = (status: string) => status === "Online" ? "#5B8C5A" : "#E5533D"
 
 type JsonRecord = Record<string, unknown>
 type LiveDevicePosition = {
@@ -277,7 +225,10 @@ const findLiveLatLng = (source: unknown): [number, number] | null => {
   const lat = findNumberByKeys(source, ["lat", "latitude"])
   const lng = findNumberByKeys(source, ["lng", "lon", "longitude"])
 
-  if (lat !== null && lng !== null) return [lat, lng]
+  if (lat !== null && lng !== null) {
+    const latlng: [number, number] = [lat, lng]
+    return isUgandaCoordinate(latlng) ? latlng : null
+  }
 
   const record = asRecord(source)
   const coordinates = record?.coordinates
@@ -285,7 +236,9 @@ const findLiveLatLng = (source: unknown): [number, number] | null => {
     const first = toNumber(coordinates[0])
     const second = toNumber(coordinates[1])
     if (first !== null && second !== null) {
-      return Math.abs(first) > 30 && Math.abs(second) <= 30 ? [second, first] : [first, second]
+      const latlng: [number, number] =
+        Math.abs(first) > 30 && Math.abs(second) <= 30 ? [second, first] : [first, second]
+      return isUgandaCoordinate(latlng) ? latlng : null
     }
   }
 
@@ -348,8 +301,8 @@ const findLivePositionForDevice = (
 }
 
 export function DevicesPage() {
-  const [activeTab, setActiveTab] = useState("tracking")
   const [searchQuery, setSearchQuery] = useState("")
+  const [devicePage, setDevicePage] = useState(1)
   const [isMapOpen, setIsMapOpen] = useState(false)
   const registerDeviceMutation = useRegisterDevice()
   const queryClient = useQueryClient()
@@ -364,7 +317,12 @@ export function DevicesPage() {
     isFetching: isLiveMapFetching,
     error: liveMapError,
   } = useLiveMap()
+  const {
+    data: registeredDevicesResponse,
+    isLoading: isRegisteredDevicesLoading,
+  } = useDevicesList({ status: "REGISTERED", page: 0, size: 100 })
   const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
+  const registeredDevices = useMemo(() => registeredDevicesResponse?.data ?? [], [registeredDevicesResponse])
   const livePositionIndex = useMemo(
     () => buildLivePositionIndex(liveMapPoints),
     [liveMapPoints],
@@ -405,10 +363,23 @@ export function DevicesPage() {
             Boolean(activeDeviceQueries[index]?.isLoading || activeDeviceQueries[index]?.isFetching),
           )
         ),
-        ...locallyAddedDevices,
       ]
+      const assignedTrackerKeys = new Set(
+        baseDevices
+          .flatMap((device) => [device.id, device.backendDeviceId])
+          .filter((value): value is string => Boolean(value)),
+      )
+      const registeredRows = registeredDevices
+        .filter((device) => {
+          const keys = [device.id, device.deviceUid].filter((value): value is string => Boolean(value))
+          return keys.every((key) => !assignedTrackerKeys.has(key))
+        })
+        .map(mapRegisteredDeviceToTrackingDevice)
+      const localRows = locallyAddedDevices.filter((device) =>
+        [device.id, device.backendDeviceId].filter(Boolean).every((key) => !assignedTrackerKeys.has(String(key)))
+      )
 
-      return baseDevices.map((device) => {
+      return [...baseDevices, ...registeredRows, ...localRows].map((device) => {
         const livePosition = findLivePositionForDevice(device, livePositionIndex)
         if (!livePosition) return device
 
@@ -425,7 +396,7 @@ export function DevicesPage() {
         }
       })
     },
-    [activeDeviceQueries, livePositionIndex, locallyAddedDevices, vehicles],
+    [activeDeviceQueries, livePositionIndex, locallyAddedDevices, registeredDevices, vehicles],
   )
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
   const [isAssignTrackerOpen, setIsAssignTrackerOpen] = useState(false)
@@ -441,14 +412,6 @@ export function DevicesPage() {
     plateNumber: "",
     assignmentMode: "assign" as "assign" | "replace",
   })
-
-  // Camera state
-  const [cameras, setCameras] = useState(mockCameras)
-  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null)
-  const [isCameraDetailOpen, setIsCameraDetailOpen] = useState(false)
-  const [isRestartCameraOpen, setIsRestartCameraOpen] = useState(false)
-  const [isToggleCameraOpen, setIsToggleCameraOpen] = useState(false)
-  const [isDeleteCameraOpen, setIsDeleteCameraOpen] = useState(false)
 
   const handleAddDevice = () => {
     if (!newDevice.id.trim()) return
@@ -512,6 +475,7 @@ export function DevicesPage() {
       }
 
       await queryClient.invalidateQueries({ queryKey: devicesKeys.activeByVehicle(vehicleId) })
+      await queryClient.invalidateQueries({ queryKey: devicesKeys.list({ status: "REGISTERED", page: 0, size: 100 }) })
       await refetchVehicles()
       setLocallyAddedDevices(prev => [
         ...prev.filter((device) => device.id !== trackerId && device.vehicleId !== vehicleId),
@@ -524,8 +488,8 @@ export function DevicesPage() {
           owner: resolvedVehicle ? toVehicleOwner(resolvedVehicle) : "Unassigned owner",
           status: "Active",
           location: "Active tracker assigned",
-          coordinates: `${MAPUTO_CENTER[0]}, ${MAPUTO_CENTER[1]}`,
-          latlng: MAPUTO_CENTER,
+          coordinates: `${UGANDA_CENTER[0]}, ${UGANDA_CENTER[1]}`,
+          latlng: UGANDA_CENTER,
           speed: "N/A",
           battery: "N/A",
           signal: "Strong",
@@ -542,45 +506,22 @@ export function DevicesPage() {
     }
   }
 
-  // Camera actions
-  const handleRestartCamera = () => {
-    setIsRestartCameraOpen(false)
-    toast.success(`Camera ${selectedCamera?.id} restart command sent`)
-  }
-
-  const handleToggleCamera = () => {
-    if (!selectedCamera) return
-    const newStatus = selectedCamera.status === "Offline" ? "Online" : "Offline"
-    setCameras(prev =>
-      prev.map(c => c.id === selectedCamera.id ? { ...c, status: newStatus, fps: newStatus === "Offline" ? "0" : "30" } : c)
-    )
-    setIsToggleCameraOpen(false)
-    toast.success(`Camera ${selectedCamera.id} ${newStatus === "Offline" ? "deactivated" : "activated"}`)
-  }
-
-  const handleDeleteCamera = () => {
-    if (!selectedCamera) return
-    setCameras(prev => prev.filter(c => c.id !== selectedCamera.id))
-    setIsDeleteCameraOpen(false)
-    toast.success(`Camera ${selectedCamera.id} removed`)
-  }
-
   // Filter tracking devices
   const filteredDevices = trackingDevices.filter(device =>
     device.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     device.owner.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
-  // Filter cameras
-  const filteredCameras = cameras.filter(camera =>
-    camera.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    camera.location.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const devicesPerPage = 10
+  const totalDevicePages = Math.max(1, Math.ceil(filteredDevices.length / devicesPerPage))
+  const normalizedDevicePage = Math.min(devicePage, totalDevicePages)
+  const devicePageStartIndex = (normalizedDevicePage - 1) * devicesPerPage
+  const paginatedDevices = filteredDevices.slice(devicePageStartIndex, devicePageStartIndex + devicesPerPage)
 
   // Get status badge
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
       "Active": "bg-[#5B8C5A] text-white",
+      "REGISTERED": "bg-[#5B8C5A] text-white",
       "Idle": "bg-[#DAA22A] text-[#1C1C1C]",
       "Offline": "bg-[#E5533D] text-white",
       "Online": "bg-[#5B8C5A] text-white"
@@ -610,13 +551,12 @@ export function DevicesPage() {
   const idleDevices = trackingDevices.filter(d => d.status === "Idle").length
   const offlineDevices = trackingDevices.filter(d => d.status === "Offline").length
   const lowBatteryDevices = trackingDevices.filter(d => parseInt(d.battery) < 20).length
-  const assignmentLookupsLoading = activeDeviceQueries.some((query) => query.isLoading || query.isFetching)
+  const assignmentLookupsLoading =
+    activeDeviceQueries.some((query) => query.isLoading || query.isFetching) ||
+    isRegisteredDevicesLoading
 
-  const onlineCameras = cameras.filter(c => c.status === "Online").length
-  const offlineCameras = cameras.filter(c => c.status === "Offline").length
   const livePositionCount = livePositionIndex.size
-  const mapMarkers: MapMarker[] = [
-    ...trackingDevices.map((device) => {
+  const mapMarkers: MapMarker[] = trackingDevices.map((device) => {
       const color = deviceStatusColor(device.status)
       return {
         position: device.latlng,
@@ -643,35 +583,7 @@ export function DevicesPage() {
           </div>
         `,
       } satisfies MapMarker
-    }),
-    ...cameras.map((camera) => {
-      const color = cameraStatusColor(camera.status)
-      return {
-        position: camera.latlng,
-        label: camera.name,
-        color,
-        glyph: "C",
-        popupHtml: `
-          <div style="width:280px;font-family:Outfit,system-ui,sans-serif">
-            <div style="background:${color};color:white;padding:10px 12px">
-              <strong style="font-size:14px;line-height:1.1">${camera.name}</strong>
-            </div>
-            <div style="padding:12px">
-              <div style="font-size:14px;font-weight:700;margin-bottom:8px">${camera.type} Camera</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:#555;margin-bottom:8px">
-                <div><span style="color:#999">Resolution</span><br/>${camera.resolution}</div>
-                <div><span style="color:#999">FPS</span><br/>${camera.fps}</div>
-                <div><span style="color:#999">Detections</span><br/>${camera.detections}</div>
-                <div><span style="color:#999">Last</span><br/>${camera.lastDetection}</div>
-              </div>
-              <div style="font-size:12px;color:#555;margin-bottom:8px">${camera.location}</div>
-              <span style="display:inline-block;background:${color}22;color:${color};padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700">${camera.status}</span>
-            </div>
-          </div>
-        `,
-      } satisfies MapMarker
-    }),
-  ]
+    })
 
   if (isMapOpen) {
     return (
@@ -681,7 +593,7 @@ export function DevicesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-4xl font-semibold text-foreground">Device Location Map - Maputo</h1>
+            <h1 className="text-4xl font-semibold text-foreground">Device Location Map - Uganda</h1>
             <p className="text-lg text-muted-foreground">
               Live tracker positions refresh automatically from the admin live-map endpoint.
             </p>
@@ -705,7 +617,7 @@ export function DevicesPage() {
           <CardContent className="p-0">
             <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
               <AppMap
-                center={MAPUTO_CENTER}
+                center={UGANDA_CENTER}
                 zoom={DEFAULT_ZOOM}
                 markers={mapMarkers}
                 height="100%"
@@ -730,16 +642,6 @@ export function DevicesPage() {
                     <div className="h-4 w-4 rounded-full bg-[#E5533D]" />
                     <span className="text-sm">Offline ({offlineDevices})</span>
                   </div>
-                  <div className="my-2 border-t border-gray-200" />
-                  <div className="mb-1 text-xs font-semibold text-gray-600">Cameras</div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-[#5B8C5A]" />
-                    <span className="text-sm">Online ({onlineCameras})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-[#E5533D]" />
-                    <span className="text-sm">Offline ({offlineCameras})</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -754,24 +656,10 @@ export function DevicesPage() {
       {/* Page Header */}
       <div>
         <h1 className="text-4xl font-semibold text-foreground">Devices</h1>
-        <p className="text-lg text-muted-foreground">GPS tracking devices and camera management</p>
+        <p className="text-lg text-muted-foreground">GPS tracking devices and assignment management</p>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-[400px] grid-cols-2 h-14">
-          <TabsTrigger value="tracking" className="text-base relative">
-            <Radio className="h-5 w-5 mr-2" />
-            GPS Tracking
-          </TabsTrigger>
-          <TabsTrigger value="cameras" className="text-base relative">
-            <Camera className="h-5 w-5 mr-2" />
-            Cameras
-          </TabsTrigger>
-        </TabsList>
-
-        {/* GPS Tracking Tab */}
-        <TabsContent value="tracking" className="mt-6 space-y-6">
+      <div className="mt-6 space-y-6">
           {/* Stats Cards */}
           <div className="grid gap-6 md:grid-cols-4">
             <Card>
@@ -853,7 +741,10 @@ export function DevicesPage() {
                   <Input
                     placeholder="Search by plate number or owner..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      setDevicePage(1)
+                    }}
                     className="pl-10 text-base h-11"
                   />
                 </div>
@@ -907,7 +798,7 @@ export function DevicesPage() {
                       </TableCell>
                     </TableRow>
                   )}
-                  {filteredDevices.map((device) => (
+                  {paginatedDevices.map((device) => (
                     <TableRow key={device.id}>
                       <TableCell className="font-medium text-base">
                         {device.backendDeviceId || !device.id.startsWith("NO-TRACKER-") ? device.id : "Unassigned"}
@@ -943,164 +834,40 @@ export function DevicesPage() {
                   ))}
                 </TableBody>
               </Table>
+
+              {!isVehiclesLoading && !vehiclesError && filteredDevices.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {devicePageStartIndex + 1} to {devicePageStartIndex + paginatedDevices.length} of {filteredDevices.length} devices
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDevicePage(prev => Math.max(1, prev - 1))}
+                      disabled={normalizedDevicePage === 1}
+                      className="h-9 px-4"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {normalizedDevicePage} of {totalDevicePages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDevicePage(prev => Math.min(totalDevicePages, prev + 1))}
+                      disabled={normalizedDevicePage === totalDevicePages}
+                      className="h-9 px-4"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Cameras Tab */}
-        <TabsContent value="cameras" className="mt-6 space-y-6">
-          {/* Stats Cards */}
-          <div className="grid gap-6 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="text-base">Total Cameras</CardDescription>
-                <CardTitle className="text-4xl">{cameras.length}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-base text-muted-foreground">Installed cameras</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="text-base">Online</CardDescription>
-                <CardTitle className="text-4xl text-[#5B8C5A]">{onlineCameras}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-base text-muted-foreground">Active cameras</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="text-base">Offline</CardDescription>
-                <CardTitle className="text-4xl text-[#E5533D]">{offlineCameras}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-base text-muted-foreground">Need attention</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="text-base">Today's Detections</CardDescription>
-                <CardTitle className="text-4xl">6,689</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-base text-muted-foreground">Plate readings</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Cameras Table */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl">Camera Management</CardTitle>
-                  <CardDescription className="text-base">ANPR and traffic monitoring cameras</CardDescription>
-                </div>
-                <Button className="text-base h-11 px-6">
-                  <Video className="h-5 w-5 mr-2" />
-                  Live Feed
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Search */}
-              <div className="mb-6">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by camera name or location..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 text-base h-11"
-                  />
-                </div>
-              </div>
-
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-base">Camera ID</TableHead>
-                    <TableHead className="text-base">Name</TableHead>
-                    <TableHead className="text-base">Type</TableHead>
-                    <TableHead className="text-base">Location</TableHead>
-                    <TableHead className="text-base">Resolution</TableHead>
-                    <TableHead className="text-base">FPS</TableHead>
-                    <TableHead className="text-base">Detections</TableHead>
-                    <TableHead className="text-base">Status</TableHead>
-                    <TableHead className="text-right text-base">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCameras.map((camera) => (
-                    <TableRow key={camera.id}>
-                      <TableCell className="font-medium text-base">{camera.id}</TableCell>
-                      <TableCell className="text-base font-medium">{camera.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-sm">
-                          {camera.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-base max-w-[200px]">
-                        <div className="flex items-start gap-2">
-                          <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                          <span>{camera.location}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-base">{camera.resolution}</TableCell>
-                      <TableCell className="text-base">{camera.fps}</TableCell>
-                      <TableCell className="text-base font-medium">{camera.detections}</TableCell>
-                      <TableCell>{getStatusBadge(camera.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10">
-                              <MoreHorizontal className="h-5 w-5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="text-base">
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer"
-                              onClick={() => { setSelectedCamera(camera); setIsCameraDetailOpen(true) }}
-                            >
-                              <Eye className="h-4 w-4 mr-2" /> View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer"
-                              onClick={() => { setSelectedCamera(camera); setIsRestartCameraOpen(true) }}
-                            >
-                              <RefreshCw className="h-4 w-4 mr-2" /> Restart Camera
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer"
-                              onClick={() => { setSelectedCamera(camera); setIsToggleCameraOpen(true) }}
-                            >
-                              {camera.status === "Offline"
-                                ? <><Power className="h-4 w-4 mr-2" /> Activate</>
-                                : <><PowerOff className="h-4 w-4 mr-2" /> Deactivate</>
-                              }
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-base cursor-pointer text-destructive focus:text-destructive"
-                              onClick={() => { setSelectedCamera(camera); setIsDeleteCameraOpen(true) }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" /> Remove Camera
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* ── GPS Device: Add New ── */}
       <Modal open={isAddDeviceOpen} onOpenChange={setIsAddDeviceOpen} className="w-full max-w-md">
@@ -1196,97 +963,6 @@ export function DevicesPage() {
         </ModalFooter>
       </Modal>
 
-      {/* ── Camera: View Details ── */}
-      <Modal open={isCameraDetailOpen} onOpenChange={setIsCameraDetailOpen} className="w-full max-w-lg">
-        <ModalHeader onClose={() => setIsCameraDetailOpen(false)}>
-          <ModalTitle>Camera Details</ModalTitle>
-          <ModalDescription>{selectedCamera?.id} — {selectedCamera?.name}</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          {selectedCamera && (
-            <div className="space-y-3 text-base">
-              {[
-                ["Camera ID", selectedCamera.id],
-                ["Name", selectedCamera.name],
-                ["Type", selectedCamera.type],
-                ["Location", selectedCamera.location],
-                ["Coordinates", selectedCamera.coordinates],
-                ["Resolution", selectedCamera.resolution],
-                ["FPS", selectedCamera.fps],
-                ["Total Detections", selectedCamera.detections],
-                ["Last Detection", selectedCamera.lastDetection],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-border pb-2">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="font-medium">{value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsCameraDetailOpen(false)}>Close</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── Camera: Restart Confirm ── */}
-      <Modal open={isRestartCameraOpen} onOpenChange={setIsRestartCameraOpen} className="w-full max-w-md">
-        <ModalHeader onClose={() => setIsRestartCameraOpen(false)}>
-          <ModalTitle>Restart Camera</ModalTitle>
-          <ModalDescription>Send a restart command to this camera.</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <p className="text-base">Restart <strong>{selectedCamera?.id}</strong> ({selectedCamera?.name})? The feed will be briefly interrupted.</p>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsRestartCameraOpen(false)}>Cancel</Button>
-          <Button onClick={handleRestartCamera}><RefreshCw className="h-4 w-4 mr-2" />Restart</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── Camera: Toggle Activate/Deactivate ── */}
-      <Modal open={isToggleCameraOpen} onOpenChange={setIsToggleCameraOpen} className="w-full max-w-md">
-        <ModalHeader onClose={() => setIsToggleCameraOpen(false)}>
-          <ModalTitle>{selectedCamera?.status === "Offline" ? "Activate Camera" : "Deactivate Camera"}</ModalTitle>
-          <ModalDescription>{selectedCamera?.id} — {selectedCamera?.name}</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <p className="text-base">
-            {selectedCamera?.status === "Offline"
-              ? `Activate camera ${selectedCamera?.id}? It will resume recording.`
-              : `Deactivate camera ${selectedCamera?.id}? It will stop recording.`}
-          </p>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsToggleCameraOpen(false)}>Cancel</Button>
-          <Button
-            variant={selectedCamera?.status === "Offline" ? "default" : "destructive"}
-            onClick={handleToggleCamera}
-          >
-            {selectedCamera?.status === "Offline"
-              ? <><Power className="h-4 w-4 mr-2" />Activate</>
-              : <><PowerOff className="h-4 w-4 mr-2" />Deactivate</>}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── Camera: Delete Confirm ── */}
-      <Modal open={isDeleteCameraOpen} onOpenChange={setIsDeleteCameraOpen} className="w-full max-w-md">
-        <ModalHeader onClose={() => setIsDeleteCameraOpen(false)}>
-          <ModalTitle>Remove Camera</ModalTitle>
-          <ModalDescription>This action cannot be undone.</ModalDescription>
-        </ModalHeader>
-        <ModalBody>
-          <div className="flex items-start gap-3 p-4 bg-destructive/10 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-            <p className="text-base">Permanently remove camera <strong>{selectedCamera?.id}</strong> ({selectedCamera?.name}) from the system?</p>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => setIsDeleteCameraOpen(false)}>Cancel</Button>
-          <Button variant="destructive" onClick={handleDeleteCamera}><Trash2 className="h-4 w-4 mr-2" />Remove</Button>
-        </ModalFooter>
-      </Modal>
     </div>
   )
 }

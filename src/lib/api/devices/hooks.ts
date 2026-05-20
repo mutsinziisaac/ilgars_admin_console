@@ -2,6 +2,16 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { DevicesApi } from "./api"
 import { devicesKeys } from "./queryKeys"
 import type { AssignDeviceRequest, RegisterDeviceRequest } from "./schemas"
+import type { ListDevicesParams } from "./api"
+
+export const useDevicesList = (params?: ListDevicesParams) =>
+  useQuery({
+    queryKey: devicesKeys.list(params),
+    queryFn: ({ signal }) => DevicesApi.listDevices(params, signal),
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
 
 export const useRegisterDevice = () =>
   useMutation({

@@ -20,18 +20,15 @@ import {
   getMunicipalityDisplayName,
   getStoredMunicipalityId,
 } from "@/lib/municipality-registry"
+import { UGANDA_CENTER } from "@/lib/map-region"
 
 const defaultGeoJson = JSON.stringify(
   {
-    type: "Polygon",
+    type: "LineString",
     coordinates: [
-      [
-        [32.575, -25.965],
-        [32.585, -25.965],
-        [32.585, -25.955],
-        [32.575, -25.955],
-        [32.575, -25.965],
-      ],
+      [32.5811, 0.3136],
+      [32.6163, 0.3316],
+      [32.6508, 0.3476],
     ],
   },
 )
@@ -51,6 +48,29 @@ const toLatLngFromGeoJsonCoordinate = (coordinate: unknown): [number, number] | 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
 
   return [lat, lng]
+}
+
+const getLineCoordinates = (value: unknown): unknown[] | null => {
+  if (!value || typeof value !== "object") return null
+
+  const record = value as Record<string, unknown>
+  if (record.type === "Feature") return getLineCoordinates(record.geometry)
+
+  if (record.type === "FeatureCollection" && Array.isArray(record.features)) {
+    const lineFeature = record.features
+      .map((feature) => getLineCoordinates(feature))
+      .find((coordinates): coordinates is unknown[] => Boolean(coordinates))
+    return lineFeature ?? null
+  }
+
+  if (record.type === "LineString" && Array.isArray(record.coordinates)) return record.coordinates
+
+  if (record.type === "MultiLineString" && Array.isArray(record.coordinates)) {
+    const [firstLine] = record.coordinates
+    return Array.isArray(firstLine) ? firstLine : null
+  }
+
+  return null
 }
 
 const getPolygonCoordinates = (value: unknown): unknown[] | null => {
@@ -81,44 +101,85 @@ const getPolygonCoordinates = (value: unknown): unknown[] | null => {
   return null
 }
 
-const extractPolygonLatLngs = (boundaryData: string): [number, number][] => {
+const centerlineFromCorridor = (ring: [number, number][]) => {
+  if (ring.length < 4) return []
+
+  const openRing = ring.slice()
+  const first = openRing[0]
+  const last = openRing[openRing.length - 1]
+  if (first[0] === last[0] && first[1] === last[1]) openRing.pop()
+
+  const midpoint = Math.floor(openRing.length / 2)
+  const leftSide = openRing.slice(0, midpoint)
+  const rightSide = openRing.slice(midpoint).reverse()
+  const pairCount = Math.min(leftSide.length, rightSide.length)
+
+  return leftSide.slice(0, pairCount).map(([leftLat, leftLng], index) => {
+    const [rightLat, rightLng] = rightSide[index]
+    return [
+      Number(((leftLat + rightLat) / 2).toFixed(6)),
+      Number(((leftLng + rightLng) / 2).toFixed(6)),
+    ] as [number, number]
+  })
+}
+
+const extractRouteLatLngs = (boundaryData: string): [number, number][] => {
   try {
     const parsed = JSON.parse(boundaryData)
-    const coordinates = getPolygonCoordinates(parsed)
-    if (!coordinates) return []
+    const lineCoordinates = getLineCoordinates(parsed)
+    if (lineCoordinates) {
+      return lineCoordinates
+        .map(toLatLngFromGeoJsonCoordinate)
+        .filter((point): point is [number, number] => Boolean(point))
+    }
 
-    const latLngs = coordinates
+    const polygonCoordinates = getPolygonCoordinates(parsed)
+    if (!polygonCoordinates) return []
+
+    const ring = polygonCoordinates
       .map(toLatLngFromGeoJsonCoordinate)
       .filter((point): point is [number, number] => Boolean(point))
 
-    if (latLngs.length > 1) {
-      const first = latLngs[0]
-      const last = latLngs[latLngs.length - 1]
-      if (first[0] === last[0] && first[1] === last[1]) return latLngs.slice(0, -1)
-    }
-
-    return latLngs
+    return centerlineFromCorridor(ring)
   } catch {
     return []
   }
 }
 
-const createBoundaryGeoJson = (points: [number, number][]) => {
-  const coordinates = points.map(([lat, lng]) => [Number(lng.toFixed(6)), Number(lat.toFixed(6))])
-  if (coordinates.length) {
-    const first = coordinates[0]
-    const last = coordinates[coordinates.length - 1]
-    if (first[0] !== last[0] || first[1] !== last[1]) coordinates.push(first)
-  }
+const createRouteGeoJson = (points: [number, number][]) => {
+  const corridorWidth = 0.0012
+  const leftSide: [number, number][] = []
+  const rightSide: [number, number][] = []
+
+  points.forEach(([lat, lng], index) => {
+    const previous = points[Math.max(0, index - 1)]
+    const next = points[Math.min(points.length - 1, index + 1)]
+    const deltaLat = next[0] - previous[0]
+    const deltaLng = next[1] - previous[1]
+    const length = Math.hypot(deltaLat, deltaLng) || 1
+    const normalLat = -deltaLng / length
+    const normalLng = deltaLat / length
+
+    leftSide.push([
+      Number((lat + normalLat * corridorWidth).toFixed(6)),
+      Number((lng + normalLng * corridorWidth).toFixed(6)),
+    ])
+    rightSide.push([
+      Number((lat - normalLat * corridorWidth).toFixed(6)),
+      Number((lng - normalLng * corridorWidth).toFixed(6)),
+    ])
+  })
+
+  const ring = [...leftSide, ...rightSide.reverse()]
+  if (ring.length) ring.push(ring[0])
 
   return JSON.stringify({
     type: "Polygon",
-    coordinates: [coordinates],
+    coordinates: [ring.map(([lat, lng]) => [lng, lat])],
   })
 }
 
-const createDefaultAreaCode = () => `PORT-EXEMPT-${Date.now()}`
-const MAPUTO_CENTER: [number, number] = [-25.9655, 32.5832]
+const createDefaultAreaCode = () => `UG-EXEMPT-${Date.now()}`
 
 const getBoundaryDataSize = (area: ExemptArea) => {
   if (!area.boundaryData) return "-"
@@ -137,12 +198,10 @@ export function GeofencingZonesPage() {
     name: "",
     description: "",
     format: "GEOJSON",
-    boundaryData: defaultGeoJson,
+    boundaryData: "",
     active: true,
   })
-  const [areaDraftPoints, setAreaDraftPoints] = useState<[number, number][]>(() =>
-    extractPolygonLatLngs(defaultGeoJson),
-  )
+  const [areaDraftPoints, setAreaDraftPoints] = useState<[number, number][]>([])
 
   const { data, isLoading, error, refetch } = useExemptAreasList({
     municipalityId: selectedMunicipalityId,
@@ -154,14 +213,14 @@ export function GeofencingZonesPage() {
 
   const resetForm = (municipalityId = getStoredMunicipalityId()) => {
     setSelectedMunicipalityId(municipalityId)
-    setAreaDraftPoints(extractPolygonLatLngs(defaultGeoJson))
+    setAreaDraftPoints([])
     setAreaForm({
       municipalityId,
       code: createDefaultAreaCode(),
       name: "",
       description: "",
       format: "GEOJSON",
-      boundaryData: defaultGeoJson,
+      boundaryData: "",
       active: true,
     })
   }
@@ -169,9 +228,13 @@ export function GeofencingZonesPage() {
   const validateBoundaryData = () => {
     try {
       JSON.parse(areaForm.boundaryData)
+      if (extractRouteLatLngs(areaForm.boundaryData).length < 2) {
+        toast.error("GeoJSON route must contain at least two points")
+        return false
+      }
       return true
     } catch {
-      toast.error("GeoJSON boundary must be valid JSON")
+      toast.error("GeoJSON route must be valid JSON")
       return false
     }
   }
@@ -193,7 +256,7 @@ export function GeofencingZonesPage() {
       boundaryData,
       active: area.active,
     })
-    setAreaDraftPoints(extractPolygonLatLngs(boundaryData))
+    setAreaDraftPoints(extractRouteLatLngs(boundaryData))
     setIsEditOpen(true)
   }
 
@@ -203,20 +266,56 @@ export function GeofencingZonesPage() {
   }
 
   const handleApplyDrawnBoundary = () => {
-    if (areaDraftPoints.length < 3) {
-      toast.error("Add at least three points before applying the polygon")
+    if (areaDraftPoints.length < 2) {
+      toast.error("Add at least two points before applying the route")
       return
     }
 
     setAreaForm((current) => ({
       ...current,
-      boundaryData: createBoundaryGeoJson(areaDraftPoints),
+      boundaryData: createRouteGeoJson(areaDraftPoints),
     }))
-    toast.success("Map polygon applied to boundary data")
+    toast.success("Map route applied to GeoJSON data")
   }
+
+  const handleAreaDraftPointsChange = (points: [number, number][]) => {
+    setAreaDraftPoints(points)
+    setAreaForm((current) => ({ ...current, boundaryData: "" }))
+  }
+
+  const handleBoundaryDataChange = (boundaryData: string) => {
+    setAreaForm((current) => ({ ...current, boundaryData }))
+
+    const points = extractRouteLatLngs(boundaryData)
+    if (points.length >= 2) {
+      setAreaDraftPoints(points)
+    }
+  }
+
+  const handleBoundaryDataBlur = () => {
+    setAreaForm((current) => {
+      const boundaryData = compactJson(current.boundaryData)
+      const points = extractRouteLatLngs(boundaryData)
+
+      if (points.length >= 2) {
+        setAreaDraftPoints(points)
+      }
+
+      return { ...current, boundaryData }
+    })
+  }
+
+  const isSavingArea = createMutation.isPending || updateMutation.isPending
+  const canSaveArea =
+    !isSavingArea &&
+    Boolean(areaForm.name.trim()) &&
+    Boolean(areaForm.code.trim()) &&
+    extractRouteLatLngs(areaForm.boundaryData).length >= 2
 
   const handleCreateArea = () => {
     if (!validateBoundaryData()) return
+    const routePoints = extractRouteLatLngs(areaForm.boundaryData)
+    const boundaryData = createRouteGeoJson(routePoints)
 
     createMutation.mutate(
       {
@@ -225,17 +324,17 @@ export function GeofencingZonesPage() {
         name: areaForm.name.trim(),
         description: areaForm.description.trim() || undefined,
         format: areaForm.format,
-        boundaryData: areaForm.boundaryData,
+        boundaryData,
         active: areaForm.active,
       },
       {
         onSuccess: () => {
-          toast.success("Exempted area created successfully")
+          toast.success("Exempted route created successfully")
           setIsCreateOpen(false)
           resetForm(areaForm.municipalityId)
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to create exempted area")
+          toast.error(error instanceof Error ? error.message : "Failed to create exempted route")
         },
       },
     )
@@ -244,6 +343,8 @@ export function GeofencingZonesPage() {
   const handleUpdateArea = () => {
     if (!selectedArea) return
     if (!validateBoundaryData()) return
+    const routePoints = extractRouteLatLngs(areaForm.boundaryData)
+    const boundaryData = createRouteGeoJson(routePoints)
 
     updateMutation.mutate(
       {
@@ -254,18 +355,18 @@ export function GeofencingZonesPage() {
           name: areaForm.name.trim(),
           description: areaForm.description.trim() || undefined,
           format: areaForm.format,
-          boundaryData: areaForm.boundaryData,
+          boundaryData,
           active: areaForm.active,
         },
       },
       {
         onSuccess: () => {
-          toast.success("Exempted area updated successfully")
+          toast.success("Exempted route updated successfully")
           setIsEditOpen(false)
           setSelectedArea(null)
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to update exempted area")
+          toast.error(error instanceof Error ? error.message : "Failed to update exempted route")
         },
       },
     )
@@ -294,7 +395,7 @@ export function GeofencingZonesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4">
         <div className="space-y-2">
           <Label htmlFor={`${isEdit ? "edit-" : ""}code`} className="text-base">Area Code *</Label>
           <Input
@@ -307,18 +408,18 @@ export function GeofencingZonesPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor={`${isEdit ? "edit-" : ""}name`} className="text-base">Area Name *</Label>
+          <Label htmlFor={`${isEdit ? "edit-" : ""}name`} className="text-base">Route Name *</Label>
           <Input
             id={`${isEdit ? "edit-" : ""}name`}
             value={areaForm.name}
             onChange={(event) => setAreaForm({ ...areaForm, name: event.target.value })}
-            placeholder="e.g., Port Exempted Area"
+            placeholder="e.g., Kampala Exempted Route"
             className="text-base h-11"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4">
         <div className="space-y-2">
           <Label className="text-base">Format</Label>
           <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
@@ -332,73 +433,50 @@ export function GeofencingZonesPage() {
             id={`${isEdit ? "edit-" : ""}description`}
             value={areaForm.description}
             onChange={(event) => setAreaForm({ ...areaForm, description: event.target.value })}
-            placeholder="Short operational note for this area"
+            placeholder="Short operational note for this route"
             className="text-base h-11"
           />
         </div>
       </div>
 
-      <div className="space-y-4 rounded-md border border-border p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <Label className="text-base font-semibold">Map Boundary</Label>
-            <p className="text-sm text-muted-foreground">
-              Click around the exempted area, drag points to adjust, then apply the polygon.
-            </p>
-          </div>
-          <Badge variant="outline" className="w-fit">
-            {areaDraftPoints.length} points
-          </Badge>
-        </div>
-        <div className="h-[420px] overflow-hidden rounded-md border border-border">
-          <EditableGoogleMap
-            points={areaDraftPoints}
-            onPointsChange={setAreaDraftPoints}
-            shape="polygon"
-            center={MAPUTO_CENTER}
-            zoom={11}
-            height="100%"
-            markerColor="#5B8C5A"
-            strokeColor="#DAA22A"
-            fillColor="#5B8C5A"
-          />
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setAreaDraftPoints((points) => points.slice(0, -1))}
-            disabled={!areaDraftPoints.length}
-          >
-            Undo Point
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setAreaDraftPoints([])}
-            disabled={!areaDraftPoints.length}
-          >
-            <XCircle className="mr-2 h-4 w-4" />
-            Clear Map
-          </Button>
-          <Button type="button" onClick={handleApplyDrawnBoundary} disabled={areaDraftPoints.length < 3}>
-            Apply Polygon
-          </Button>
-        </div>
-      </div>
-
       <div className="space-y-2">
-        <Label htmlFor={`${isEdit ? "edit-" : ""}boundaryData`} className="text-base">Boundary Data *</Label>
+        <Label htmlFor={`${isEdit ? "edit-" : ""}boundaryData`} className="text-base">GeoJSON Route Data *</Label>
+        <p className="text-sm text-muted-foreground">
+          Paste a GeoJSON route, or apply the map route to generate the backend-ready corridor.
+        </p>
         <Textarea
           id={`${isEdit ? "edit-" : ""}boundaryData`}
           value={areaForm.boundaryData}
-          onChange={(event) => setAreaForm({ ...areaForm, boundaryData: event.target.value })}
-          onBlur={() => setAreaForm((current) => ({ ...current, boundaryData: compactJson(current.boundaryData) }))}
-          placeholder='{"type":"Polygon","coordinates":[[[...]]]}'
+          onChange={(event) => handleBoundaryDataChange(event.target.value)}
+          onBlur={handleBoundaryDataBlur}
+          placeholder='{"type":"LineString","coordinates":[[...]]}'
           rows={1}
           wrap="off"
           className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
         />
+      </div>
+
+      <div className="flex justify-between gap-4 pt-2">
+        <Button
+          variant="outline"
+          onClick={isEdit ? closeEditArea : () => setIsCreateOpen(false)}
+          disabled={isSavingArea}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={isEdit ? handleUpdateArea : handleCreateArea}
+          disabled={!canSaveArea}
+        >
+          {isSavingArea ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              {isEdit ? "Saving..." : "Creating..."}
+            </>
+          ) : (
+            isEdit ? "Save Changes" : "Create Exempted Route"
+          )}
+        </Button>
       </div>
     </div>
   )
@@ -417,37 +495,77 @@ export function GeofencingZonesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-4xl font-semibold text-foreground">Create Exempted Area</h1>
+            <h1 className="text-4xl font-semibold text-foreground">Create Exempted Route</h1>
             <p className="text-lg text-muted-foreground">
-              Define an exempted area with GeoJSON boundary data for {getMunicipalityDisplayName(areaForm.municipalityId)}.
+              Define an exempted route with GeoJSON route data for {getMunicipalityDisplayName(areaForm.municipalityId)}.
             </p>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Area Details</CardTitle>
-            <CardDescription className="text-base">
-              Capture the municipal area definition and exemption boundary data.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>{renderAreaForm()}</CardContent>
-        </Card>
+        <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.1fr)]">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="text-2xl">Route Details</CardTitle>
+              <CardDescription className="text-base">
+                Capture the municipal route definition and exemption route data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>{renderAreaForm()}</CardContent>
+          </Card>
 
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreateArea} disabled={createMutation.isPending || !areaForm.name.trim() || !areaForm.code.trim()}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Exempted Area"
-            )}
-          </Button>
+          <Card className="h-full">
+            <CardHeader>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl">Route Map</CardTitle>
+                  <CardDescription className="text-base">
+                    Click along the exempted route, drag points to adjust, then apply the route.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="w-fit">
+                  {areaDraftPoints.length} points
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex h-[560px] flex-col gap-4">
+              <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border">
+                <EditableGoogleMap
+                  points={areaDraftPoints}
+                  onPointsChange={handleAreaDraftPointsChange}
+                  shape="line"
+                  center={areaDraftPoints[0] ?? UGANDA_CENTER}
+                  zoom={11}
+                  height="100%"
+                  markerColor="#5B8C5A"
+                  strokeColor="#DAA22A"
+                  fillColor="#5B8C5A"
+                  fitToBounds={areaDraftPoints.length > 0}
+                />
+              </div>
+              <div className="grid shrink-0 gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleAreaDraftPointsChange(areaDraftPoints.slice(0, -1))}
+                  disabled={!areaDraftPoints.length}
+                >
+                  Undo Point
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleAreaDraftPointsChange([])}
+                  disabled={!areaDraftPoints.length}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Clear Map
+                </Button>
+                <Button type="button" onClick={handleApplyDrawnBoundary} disabled={areaDraftPoints.length < 2}>
+                  Apply Route
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     )
@@ -467,37 +585,77 @@ export function GeofencingZonesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-4xl font-semibold text-foreground">Edit Exempted Area</h1>
+            <h1 className="text-4xl font-semibold text-foreground">Edit Exempted Route</h1>
             <p className="text-lg text-muted-foreground">
-              Update the exempted area definition and GeoJSON boundary for {getMunicipalityDisplayName(areaForm.municipalityId)}.
+              Update the exempted route definition and GeoJSON route data for {getMunicipalityDisplayName(areaForm.municipalityId)}.
             </p>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Area Details</CardTitle>
-            <CardDescription className="text-base">
-              Review the municipal area settings and exemption boundary data.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>{renderAreaForm(true)}</CardContent>
-        </Card>
+        <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.1fr)]">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="text-2xl">Route Details</CardTitle>
+              <CardDescription className="text-base">
+                Review the municipal route settings and exemption route data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>{renderAreaForm(true)}</CardContent>
+          </Card>
 
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={closeEditArea} disabled={updateMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleUpdateArea} disabled={updateMutation.isPending || !areaForm.name.trim() || !areaForm.code.trim()}>
-            {updateMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
+          <Card className="h-full">
+            <CardHeader>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl">Route Map</CardTitle>
+                  <CardDescription className="text-base">
+                    Click along the exempted route, drag points to adjust, then apply the route.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="w-fit">
+                  {areaDraftPoints.length} points
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex h-[560px] flex-col gap-4">
+              <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border">
+                <EditableGoogleMap
+                  points={areaDraftPoints}
+                  onPointsChange={handleAreaDraftPointsChange}
+                  shape="line"
+                  center={areaDraftPoints[0] ?? UGANDA_CENTER}
+                  zoom={11}
+                  height="100%"
+                  markerColor="#5B8C5A"
+                  strokeColor="#DAA22A"
+                  fillColor="#5B8C5A"
+                  fitToBounds={areaDraftPoints.length > 0}
+                />
+              </div>
+              <div className="grid shrink-0 gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleAreaDraftPointsChange(areaDraftPoints.slice(0, -1))}
+                  disabled={!areaDraftPoints.length}
+                >
+                  Undo Point
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleAreaDraftPointsChange([])}
+                  disabled={!areaDraftPoints.length}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Clear Map
+                </Button>
+                <Button type="button" onClick={handleApplyDrawnBoundary} disabled={areaDraftPoints.length < 2}>
+                  Apply Route
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     )
@@ -507,8 +665,8 @@ export function GeofencingZonesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-semibold text-foreground">Exempted Areas</h1>
-          <p className="text-lg text-muted-foreground">Manage exempted areas for {getMunicipalityDisplayName(selectedMunicipalityId)}</p>
+          <h1 className="text-4xl font-semibold text-foreground">Exempted Routes</h1>
+          <p className="text-lg text-muted-foreground">Manage exempted routes for {getMunicipalityDisplayName(selectedMunicipalityId)}</p>
         </div>
         <Button onClick={openCreateArea} disabled={createMutation.isPending}>
           {createMutation.isPending ? (
@@ -516,13 +674,13 @@ export function GeofencingZonesPage() {
           ) : (
             <Plus className="h-4 w-4 mr-2" />
           )}
-          Create Exempted Area
+          Create Exempted Route
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Exempted Areas</CardTitle>
+          <CardTitle className="text-2xl">Exempted Routes</CardTitle>
           <CardDescription className="text-base">
             Configure GeoJSON boundaries for municipal exemptions
           </CardDescription>
@@ -531,29 +689,29 @@ export function GeofencingZonesPage() {
           {error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="mb-4 h-12 w-12 text-destructive" />
-              <h3 className="mb-2 text-lg font-semibold">Failed to load exempted areas</h3>
+            <h3 className="mb-2 text-lg font-semibold">Failed to load exempted routes</h3>
               <p className="mb-4 text-muted-foreground">{(error as Error)?.message || "An error occurred"}</p>
               <Button variant="outline" onClick={() => refetch()}>Try Again</Button>
             </div>
           ) : isLoading ? (
             <div className="flex items-center gap-3 rounded-md border border-dashed p-5 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading exempted areas...</span>
+              <span>Loading exempted routes...</span>
             </div>
           ) : areas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="mb-4 h-12 w-12 text-muted-foreground" />
-              <h3 className="mb-2 text-lg font-semibold">No exempted areas found</h3>
-              <p className="text-muted-foreground">Create an exempted area for {getMunicipalityDisplayName(selectedMunicipalityId)}.</p>
+              <h3 className="mb-2 text-lg font-semibold">No exempted routes found</h3>
+              <p className="text-muted-foreground">Create an exempted route for {getMunicipalityDisplayName(selectedMunicipalityId)}.</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-base">Area Name</TableHead>
+                  <TableHead className="text-base">Route Name</TableHead>
                   <TableHead className="text-base">Code</TableHead>
                   <TableHead className="text-base">Format</TableHead>
-                  <TableHead className="text-base">Boundary</TableHead>
+                  <TableHead className="text-base">Route Data</TableHead>
                   <TableHead className="text-base">Status</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
                 </TableRow>

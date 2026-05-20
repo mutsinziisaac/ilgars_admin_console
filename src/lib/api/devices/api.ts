@@ -1,16 +1,37 @@
 import { devicesRequest } from "../httpClient"
 import {
   ActiveDeviceResponseSchema,
+  DeviceListResponseSchema,
   DeviceAssignmentSchema,
   DeviceResponseSchema,
   type ActiveDeviceResponse,
   type AssignDeviceRequest,
   type Device,
+  type DeviceListResponse,
   type DeviceAssignment,
   type RegisterDeviceRequest,
 } from "./schemas"
 
+export interface ListDevicesParams {
+  status?: string
+  page?: number
+  size?: number
+}
+
 export const DevicesApi = {
+  /**
+   * List trackers
+   * GET /v1/devices
+   */
+  listDevices: (params?: ListDevicesParams, signal?: AbortSignal) =>
+    devicesRequest<DeviceListResponse>({
+      method: "GET",
+      url: "/v1/devices",
+      params,
+      signal,
+      schema: DeviceListResponseSchema,
+    }),
+
   /**
    * Register tracker
    * POST /v1/devices

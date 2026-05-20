@@ -1,9 +1,8 @@
 import { Map as GoogleMap, type MapCircle, type MapMarker } from "@/components/ui/map"
+import { UGANDA_CENTER, UGANDA_OVERVIEW_ZOOM } from "@/lib/map-region"
 
-// ── Real Maputo coordinates ──────────────────────────────────────────────────
-// Centre of Maputo city
-const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
-const DEFAULT_ZOOM = 14
+const DEFAULT_ZOOM = UGANDA_OVERVIEW_ZOOM
+const TRUCK_MARKER_IMAGE = "/truck-cargo-icon.png"
 
 // Enforcement actions — real Maputo street coordinates
 const ENFORCEMENT_POINTS = [
@@ -14,8 +13,8 @@ const ENFORCEMENT_POINTS = [
     action: "Vehicle Impounded",
     officer: "Officer Silva",
     timestamp: "14:23",
-    location: "Av. Julius Nyerere & Mao Tse Tung",
-    latlng: [-25.9612, 32.5823] as [number, number],
+    location: "Kampala Road & Bombo Road",
+    latlng: [0.3182, 32.5779] as [number, number],
   },
   {
     id: "ENF-002",
@@ -24,8 +23,8 @@ const ENFORCEMENT_POINTS = [
     action: "Fine Issued",
     officer: "Officer Macamo",
     timestamp: "13:45",
-    location: "Av. 25 de Setembro",
-    latlng: [-25.9655, 32.5731] as [number, number],
+    location: "Entebbe Road",
+    latlng: [0.2607, 32.5504] as [number, number],
   },
   {
     id: "ENF-003",
@@ -34,8 +33,8 @@ const ENFORCEMENT_POINTS = [
     action: "Vehicle Impounded",
     officer: "Officer Nhantumbo",
     timestamp: "12:10",
-    location: "Marginal Avenue",
-    latlng: [-25.9701, 32.5945] as [number, number],
+    location: "Jinja Road",
+    latlng: [0.3316, 32.6163] as [number, number],
   },
   {
     id: "ENF-004",
@@ -44,8 +43,8 @@ const ENFORCEMENT_POINTS = [
     action: "Warning Issued",
     officer: "Officer Costa",
     timestamp: "11:30",
-    location: "Av. Eduardo Mondlane",
-    latlng: [-25.9588, 32.5680] as [number, number],
+    location: "Hoima Road",
+    latlng: [0.3479, 32.5426] as [number, number],
   },
   {
     id: "ENF-005",
@@ -54,8 +53,8 @@ const ENFORCEMENT_POINTS = [
     action: "Warning Issued",
     officer: "Officer Bila",
     timestamp: "10:15",
-    location: "Av. Acordos de Lusaka",
-    latlng: [-25.9723, 32.5834] as [number, number],
+    location: "Northern Bypass",
+    latlng: [0.3842, 32.6048] as [number, number],
   },
   {
     id: "ENF-006",
@@ -64,8 +63,8 @@ const ENFORCEMENT_POINTS = [
     action: "Fine Issued",
     officer: "Officer Tembe",
     timestamp: "09:30",
-    location: "Av. Vladimir Lenine",
-    latlng: [-25.9634, 32.5789] as [number, number],
+    location: "Nakasero",
+    latlng: [0.3184, 32.5869] as [number, number],
   },
 ]
 
@@ -94,11 +93,11 @@ const BASE_UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
     owner: "Beira Freight Co.",
     violationType: "Overweight Vehicle",
     severity: "High",
-    location: "Av. Julius Nyerere & Av. Mao Tse Tung",
+    location: "Kampala Road & Bombo Road",
     detectedAt: "09:14",
     detectedBy: "CAM-001 (ANPR)",
     estimatedPenalty: "25,000 MZN",
-    latlng: [-25.9580, 32.5860],
+    latlng: [0.3182, 32.5779],
   },
   {
     id: "VIO-002",
@@ -107,11 +106,11 @@ const BASE_UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
     owner: "Maputo Cargo Ltd",
     violationType: "Expired Permit",
     severity: "High",
-    location: "Av. 25 de Setembro",
+    location: "Entebbe Road",
     detectedAt: "09:45",
     detectedBy: "CAM-002 (ANPR)",
     estimatedPenalty: "45,000 MZN",
-    latlng: [-25.9670, 32.5710],
+    latlng: [0.2607, 32.5504],
   },
   {
     id: "VIO-003",
@@ -120,11 +119,11 @@ const BASE_UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
     owner: "City Transit",
     violationType: "No Circulation License",
     severity: "Medium",
-    location: "Av. Eduardo Mondlane",
+    location: "Hoima Road",
     detectedAt: "10:02",
     detectedBy: "CAM-004 (Traffic)",
     estimatedPenalty: "20,000 MZN",
-    latlng: [-25.9600, 32.5660],
+    latlng: [0.3479, 32.5426],
   },
   {
     id: "VIO-004",
@@ -133,11 +132,11 @@ const BASE_UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
     owner: "Heavy Haul Services",
     violationType: "Device Tampered",
     severity: "High",
-    location: "Marginal Avenue",
+    location: "Jinja Road",
     detectedAt: "10:30",
     detectedBy: "GPS-003",
     estimatedPenalty: "35,000 MZN",
-    latlng: [-25.9720, 32.5960],
+    latlng: [0.3316, 32.6163],
   },
   {
     id: "VIO-005",
@@ -146,11 +145,11 @@ const BASE_UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
     owner: "Freight Masters",
     violationType: "Unauthorized Route",
     severity: "Medium",
-    location: "Av. Vladimir Lenine",
+    location: "Nakasero",
     detectedAt: "10:55",
     detectedBy: "GPS-002",
     estimatedPenalty: "10,000 MZN",
-    latlng: [-25.9640, 32.5800],
+    latlng: [0.3184, 32.5869],
   },
 ]
 
@@ -163,12 +162,12 @@ const generatedAlertTypes = [
 ]
 
 const generatedLocations = [
-  { location: "Av. Julius Nyerere", latlng: [-25.9606, 32.5842] as [number, number] },
-  { location: "Av. 25 de Setembro", latlng: [-25.9659, 32.5725] as [number, number] },
-  { location: "Av. Eduardo Mondlane", latlng: [-25.9598, 32.5665] as [number, number] },
-  { location: "Marginal Avenue", latlng: [-25.9708, 32.5938] as [number, number] },
-  { location: "Av. Vladimir Lenine", latlng: [-25.9637, 32.5794] as [number, number] },
-  { location: "Av. Acordos de Lusaka", latlng: [-25.9719, 32.5830] as [number, number] },
+  { location: "Kampala Road", latlng: [0.3136, 32.5811] as [number, number] },
+  { location: "Entebbe Road", latlng: [0.2607, 32.5504] as [number, number] },
+  { location: "Hoima Road", latlng: [0.3479, 32.5426] as [number, number] },
+  { location: "Jinja Road", latlng: [0.3316, 32.6163] as [number, number] },
+  { location: "Nakasero", latlng: [0.3184, 32.5869] as [number, number] },
+  { location: "Northern Bypass", latlng: [0.3842, 32.6048] as [number, number] },
 ]
 
 export const UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
@@ -194,14 +193,13 @@ export const UNENFORCED_VIOLATIONS: EnforcementAlert[] = [
   }),
 ]
 
-// Heatmap hotspot zones (real Maputo intersections)
 const HEATMAP_ZONES = [
-  { latlng: [-25.9612, 32.5823] as [number, number], radius: 300, intensity: 0.7 },
-  { latlng: [-25.9655, 32.5731] as [number, number], radius: 250, intensity: 0.6 },
-  { latlng: [-25.9701, 32.5945] as [number, number], radius: 200, intensity: 0.5 },
-  { latlng: [-25.9588, 32.5680] as [number, number], radius: 180, intensity: 0.45 },
-  { latlng: [-25.9634, 32.5789] as [number, number], radius: 160, intensity: 0.4 },
-  { latlng: [-25.9723, 32.5834] as [number, number], radius: 140, intensity: 0.35 },
+  { latlng: [0.3136, 32.5811] as [number, number], radius: 300, intensity: 0.7 },
+  { latlng: [0.2607, 32.5504] as [number, number], radius: 250, intensity: 0.6 },
+  { latlng: [0.3316, 32.6163] as [number, number], radius: 200, intensity: 0.5 },
+  { latlng: [0.3479, 32.5426] as [number, number], radius: 180, intensity: 0.45 },
+  { latlng: [0.3184, 32.5869] as [number, number], radius: 160, intensity: 0.4 },
+  { latlng: [0.3842, 32.6048] as [number, number], radius: 140, intensity: 0.35 },
 ]
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
@@ -221,6 +219,26 @@ interface EnforcementMapProps {
   selectedId?: string | null
   violations?: EnforcementAlert[]
   onSelect?: (id: string) => void
+}
+
+const scatterKey = ([lat, lng]: [number, number]) =>
+  `${Math.round(lat * 100)}:${Math.round(lng * 100)}`
+
+const scatterPosition = (
+  [lat, lng]: [number, number],
+  indexAtLocation: number,
+  baseRadius = 0.0038,
+): [number, number] => {
+  if (indexAtLocation === 0) return [lat, lng]
+
+  const goldenAngle = 2.399963229728653
+  const angle = indexAtLocation * goldenAngle
+  const radius = baseRadius + Math.sqrt(indexAtLocation) * 0.0018
+
+  return [
+    lat + Math.sin(angle) * radius,
+    lng + Math.cos(angle) * radius,
+  ]
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -250,13 +268,22 @@ export function EnforcementMap({
         },
       ])
     : []
+  const scatterCounts = new Map<string, number>()
+  const nextScatteredPosition = (position: [number, number], baseRadius?: number) => {
+    const key = scatterKey(position)
+    const countAtLocation = scatterCounts.get(key) ?? 0
+    scatterCounts.set(key, countAtLocation + 1)
+    return scatterPosition(position, countAtLocation, baseRadius)
+  }
+
   const enforcementMarkers: MapMarker[] = showHeat
     ? ENFORCEMENT_POINTS.map((pt) => {
         const color = actionColor(pt.action)
         return {
-          position: pt.latlng,
+          position: nextScatteredPosition(pt.latlng, 0.0048),
           label: pt.plateNumber,
           color,
+          imageUrl: TRUCK_MARKER_IMAGE,
           popupHtml: `
             <div style="width:260px;font-family:Outfit,system-ui,sans-serif">
               <div style="background:${color};color:white;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -274,18 +301,9 @@ export function EnforcementMap({
         }
       })
     : []
-  const locationCounts = new Map<string, number>()
   const violationMarkers: MapMarker[] = showViolations
     ? violations.map((vio) => {
-        const key = `${Math.round(vio.latlng[0] * 250)}:${Math.round(vio.latlng[1] * 250)}`
-        const countAtLocation = locationCounts.get(key) ?? 0
-        locationCounts.set(key, countAtLocation + 1)
-        const angle = countAtLocation * 0.95
-        const radius = countAtLocation === 0 ? 0 : 0.00018 + Math.floor(countAtLocation / 6) * 0.00008
-        const markerPosition: [number, number] = [
-          vio.latlng[0] + Math.sin(angle) * radius,
-          vio.latlng[1] + Math.cos(angle) * radius,
-        ]
+        const markerPosition = nextScatteredPosition(vio.latlng)
         const color = severityColor(vio.severity)
         const active = vio.id === hoveredId || vio.id === selectedId
 
@@ -293,6 +311,7 @@ export function EnforcementMap({
           position: markerPosition,
           label: vio.plateNumber,
           color,
+          imageUrl: TRUCK_MARKER_IMAGE,
           active,
           onMouseEnter: () => onHover(vio.id),
           onMouseLeave: () => onHover(null),
@@ -340,7 +359,7 @@ export function EnforcementMap({
 
   return (
     <GoogleMap
-      center={MAPUTO_CENTER}
+      center={UGANDA_CENTER}
       zoom={DEFAULT_ZOOM}
       markers={[...enforcementMarkers, ...violationMarkers]}
       circles={heatCircles}

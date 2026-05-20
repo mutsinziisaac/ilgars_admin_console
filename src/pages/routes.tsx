@@ -8,36 +8,30 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Route, Plus, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Route, Plus, CheckCircle, XCircle, Loader2, AlertCircle, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { EditableGoogleMap } from "@/components/ui/map"
-import { useCreateMunicipalRoute, useMunicipalRoutesList } from "@/lib/api/municipal-routes/hooks"
+import {
+  useCreateMunicipalRoute,
+  useMunicipalRoutesList,
+  useUpdateMunicipalRoute,
+} from "@/lib/api/municipal-routes/hooks"
 import type { MunicipalRoute } from "@/lib/api/municipal-routes/schemas"
 import { MUNICIPAL_ROUTES_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
 import {
   getMunicipalityDisplayName,
   getStoredMunicipalityId as getRegistryMunicipalityId,
 } from "@/lib/municipality-registry"
+import { UGANDA_CENTER } from "@/lib/map-region"
 
 const defaultRouteGeoJson =
-  "{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[32.443,-25.965],[32.529,-25.951],[32.573,-25.961]]},\"properties\":{\"name\":\"EN4 Avenida de Mocambique to Port of Maputo\"}}"
-
-const allowedUseOptions = [
-  { label: "Special Permit", value: "SPECIAL_PERMIT" },
-  { label: "Road Closure", value: "ROAD_CLOSURE" },
-]
+  "{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[32.5811,0.3136],[32.6163,0.3316],[32.6508,0.3476]]},\"properties\":{\"name\":\"Kampala Road to Jinja Road corridor\"}}"
 
 const roadTypeOptions = [
   { label: "Protocol Roads", value: "PRIMARY_ROAD" },
   { label: "Secondary Roads", value: "SECONDARY_ROAD" },
   { label: "Tertiary Roads", value: "TERTIARY_ROAD" },
 ]
-
-const filterOptions = [
-  { label: "All", value: "all" },
-  { label: "Special Permit", value: "SPECIAL_PERMIT" },
-  { label: "Road Closure", value: "ROAD_CLOSURE" },
-] as const
 
 const getStoredMunicipalityId = () => {
   return getRegistryMunicipalityId()
@@ -72,8 +66,7 @@ const mergeRoutes = (incoming: MunicipalRoute[], fallback: MunicipalRoute[] = []
   return Array.from(byId.values())
 }
 
-const createDefaultRouteCode = () => `EN4-PORT-${Date.now()}`
-const MAPUTO_CENTER: [number, number] = [-25.9655, 32.5832]
+const createDefaultRouteCode = () => `UG-ROUTE-${Date.now()}`
 
 const compactJson = (value: string) => {
   try {
@@ -135,9 +128,48 @@ const createRouteGeoJson = (name: string, points: [number, number][]) =>
     properties: { name },
   })
 
+const createSmoothRoutePoints = (points: [number, number][], segmentsPerCurve = 12) => {
+  if (points.length < 3) return points
+
+  const smoothed: [number, number][] = []
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const [p0Lat, p0Lng] = points[Math.max(index - 1, 0)]
+    const [p1Lat, p1Lng] = points[index]
+    const [p2Lat, p2Lng] = points[index + 1]
+    const [p3Lat, p3Lng] = points[Math.min(index + 2, points.length - 1)]
+
+    for (let step = 0; step < segmentsPerCurve; step += 1) {
+      const t = step / segmentsPerCurve
+      const t2 = t * t
+      const t3 = t2 * t
+      const lat = 0.5 * (
+        2 * p1Lat +
+        (-p0Lat + p2Lat) * t +
+        (2 * p0Lat - 5 * p1Lat + 4 * p2Lat - p3Lat) * t2 +
+        (-p0Lat + 3 * p1Lat - 3 * p2Lat + p3Lat) * t3
+      )
+      const lng = 0.5 * (
+        2 * p1Lng +
+        (-p0Lng + p2Lng) * t +
+        (2 * p0Lng - 5 * p1Lng + 4 * p2Lng - p3Lng) * t2 +
+        (-p0Lng + 3 * p1Lng - 3 * p2Lng + p3Lng) * t3
+      )
+
+      smoothed.push([lat, lng])
+    }
+  }
+
+  smoothed.push(points[points.length - 1])
+  return smoothed
+}
+
+const toDisplayCase = (value: string) =>
+  value.replace(/\b\w/g, (letter) => letter.toUpperCase())
+
 export function RoutesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [activeAllowedUse, setActiveAllowedUse] = useState<(typeof filterOptions)[number]["value"]>("all")
+  const [editingRoute, setEditingRoute] = useState<MunicipalRoute | null>(null)
   const [activeMunicipalityId, setActiveMunicipalityId] = useState(getStoredMunicipalityId())
   const [cachedRoutes, setCachedRoutes] = useState<MunicipalRoute[]>(() =>
     getStoredRoutes(getStoredMunicipalityId()),
@@ -146,31 +178,33 @@ export function RoutesPage() {
   const [routeForm, setRouteForm] = useState({
     municipalityId: activeMunicipalityId,
     code: createDefaultRouteCode(),
-    name: "EN4 Avenida de Mocambique to Port of Maputo",
+    name: "Kampala Road to Jinja Road corridor",
     roadType: "PRIMARY_ROAD",
     distanceKm: "14.5",
     allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
-    geoJson: defaultRouteGeoJson,
+    geoJson: "",
   })
-  const [routeDraftPoints, setRouteDraftPoints] = useState<[number, number][]>(() =>
-    extractLineLatLngs(defaultRouteGeoJson),
-  )
+  const [routeDraftPoints, setRouteDraftPoints] = useState<[number, number][]>([])
 
   const routeListParams = {
     municipalityId: activeMunicipalityId,
     active: true,
-    ...(activeAllowedUse === "all" ? {} : { allowedUse: activeAllowedUse }),
   }
 
   const { data: routesResponse, isLoading, error, refetch } = useMunicipalRoutesList(routeListParams)
   const createMutation = useCreateMunicipalRoute()
+  const updateMutation = useUpdateMunicipalRoute()
   const apiRoutes = routesResponse?.data || routesResponse?.content || []
-  const routes = useMemo(() => {
-    const mergedRoutes = mergeRoutes(apiRoutes, cachedRoutes)
-    return activeAllowedUse === "all"
-      ? mergedRoutes
-      : mergedRoutes.filter((route) => route.allowedUses.includes(activeAllowedUse))
-  }, [activeAllowedUse, apiRoutes, cachedRoutes])
+  const routes = useMemo(() => mergeRoutes(apiRoutes, cachedRoutes), [apiRoutes, cachedRoutes])
+  const isSavingRoute = createMutation.isPending || updateMutation.isPending
+  const routeMunicipalityName = toDisplayCase(getMunicipalityDisplayName(routeForm.municipalityId))
+  const hasValidRouteGeoJson = extractLineLatLngs(routeForm.geoJson).length >= 2
+  const canSaveRoute =
+    !isSavingRoute &&
+    Boolean(routeForm.code.trim()) &&
+    Boolean(routeForm.name.trim()) &&
+    Boolean(routeForm.roadType.trim()) &&
+    hasValidRouteGeoJson
 
   useEffect(() => {
     const latestMunicipalityId = getStoredMunicipalityId()
@@ -197,21 +231,40 @@ export function RoutesPage() {
     setRouteForm({
       municipalityId,
       code: createDefaultRouteCode(),
-      name: "EN4 Avenida de Mocambique to Port of Maputo",
+      name: "Kampala Road to Jinja Road corridor",
       roadType: "PRIMARY_ROAD",
       distanceKm: "14.5",
       allowedUses: ["SPECIAL_PERMIT", "ROAD_CLOSURE"],
-      geoJson: defaultRouteGeoJson,
+      geoJson: "",
     })
-    setRouteDraftPoints(extractLineLatLngs(defaultRouteGeoJson))
+    setRouteDraftPoints([])
   }
 
   const openCreateRoute = () => {
+    setEditingRoute(null)
     resetForm()
     setIsCreateOpen(true)
   }
 
-  const handleCreateRoute = () => {
+  const openEditRoute = (route: MunicipalRoute) => {
+    const geoJson = route.geoJson || defaultRouteGeoJson
+
+    setEditingRoute(route)
+    setActiveMunicipalityId(route.municipalityId)
+    setRouteForm({
+      municipalityId: route.municipalityId,
+      code: route.code,
+      name: route.name,
+      roadType: route.roadType,
+      distanceKm: route.distanceKm == null ? "" : String(route.distanceKm),
+      allowedUses: route.allowedUses,
+      geoJson,
+    })
+    setRouteDraftPoints(extractLineLatLngs(geoJson))
+    setIsCreateOpen(true)
+  }
+
+  const handleSaveRoute = () => {
     const municipalityId = routeForm.municipalityId.trim()
 
     if (!municipalityId) {
@@ -233,17 +286,47 @@ export function RoutesPage() {
 
     const distanceKm = Number(routeForm.distanceKm)
 
+    const payload = {
+      municipalityId,
+      code: routeForm.code.trim(),
+      name: routeForm.name.trim(),
+      roadType: routeForm.roadType.trim(),
+      geoJson: routeForm.geoJson,
+      distanceKm: Number.isFinite(distanceKm) ? distanceKm : undefined,
+      allowedUses: routeForm.allowedUses,
+      active: editingRoute?.active ?? true,
+    }
+
+    if (editingRoute) {
+      updateMutation.mutate(
+        {
+          routeId: editingRoute.id,
+          payload,
+        },
+        {
+          onSuccess: (data) => {
+            setActiveMunicipalityId(municipalityId)
+            const nextRoutes = mergeRoutes(
+              [data.data],
+              getStoredRoutes(municipalityId).filter((route) => route.id !== editingRoute.id),
+            )
+            setCachedRoutes(nextRoutes)
+            storeRoutes(municipalityId, nextRoutes)
+            setIsCreateOpen(false)
+            setEditingRoute(null)
+            resetForm()
+            toast.success("Route updated successfully")
+          },
+          onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Failed to update route")
+          },
+        },
+      )
+      return
+    }
+
     createMutation.mutate(
-      {
-        municipalityId,
-        code: routeForm.code.trim(),
-        name: routeForm.name.trim(),
-        roadType: routeForm.roadType.trim(),
-        geoJson: routeForm.geoJson,
-        distanceKm: Number.isFinite(distanceKm) ? distanceKm : undefined,
-        allowedUses: routeForm.allowedUses,
-        active: true,
-      },
+      payload,
       {
         onSuccess: (data) => {
           setActiveMunicipalityId(municipalityId)
@@ -251,6 +334,7 @@ export function RoutesPage() {
           setCachedRoutes(nextRoutes)
           storeRoutes(municipalityId, nextRoutes)
           setIsCreateOpen(false)
+          setEditingRoute(null)
           resetForm()
           toast.success("Route created successfully")
         },
@@ -269,9 +353,36 @@ export function RoutesPage() {
 
     setRouteForm((current) => ({
       ...current,
-      geoJson: createRouteGeoJson(current.name, routeDraftPoints),
+      geoJson: createRouteGeoJson(current.name, createSmoothRoutePoints(routeDraftPoints)),
     }))
     toast.success("Map route applied to GeoJSON data")
+  }
+
+  const handleRouteDraftPointsChange = (points: [number, number][]) => {
+    setRouteDraftPoints(points)
+    setRouteForm((current) => ({ ...current, geoJson: "" }))
+  }
+
+  const handleRouteGeoJsonChange = (geoJson: string) => {
+    setRouteForm((current) => ({ ...current, geoJson }))
+
+    const points = extractLineLatLngs(geoJson)
+    if (points.length >= 2) {
+      setRouteDraftPoints(points)
+    }
+  }
+
+  const handleRouteGeoJsonBlur = () => {
+    setRouteForm((current) => {
+      const geoJson = compactJson(current.geoJson)
+      const points = extractLineLatLngs(geoJson)
+
+      if (points.length >= 2) {
+        setRouteDraftPoints(points)
+      }
+
+      return { ...current, geoJson }
+    })
   }
 
   const getStatusBadge = (active: boolean) => {
@@ -288,9 +399,6 @@ export function RoutesPage() {
     )
   }
 
-  const renderAllowedUse = (allowedUse: string) =>
-    allowedUseOptions.find((option) => option.value === allowedUse)?.label || allowedUse
-
   if (isCreateOpen) {
     return (
       <div className="space-y-6">
@@ -298,43 +406,50 @@ export function RoutesPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsCreateOpen(false)}
-            disabled={createMutation.isPending}
+            onClick={() => {
+              setIsCreateOpen(false)
+              setEditingRoute(null)
+            }}
+            disabled={isSavingRoute}
             aria-label="Back to municipal routes"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-3xl font-semibold text-foreground">Create Route</h1>
+            <h1 className="text-3xl font-semibold text-foreground">
+              {editingRoute ? "Edit Route" : "Create Route"}
+            </h1>
             <p className="text-base text-muted-foreground">
-              Create a municipal route with GeoJSON LineString data.
+              {editingRoute
+                ? "Update the route details and GeoJSON LineString data."
+                : "Create a municipal route with GeoJSON LineString data."}
             </p>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Route Details</CardTitle>
-            <CardDescription className="text-base">
-              Set the route identity, road type, and distance for {getMunicipalityDisplayName(routeForm.municipalityId)}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-base">Municipality</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
-                {getMunicipalityDisplayName(routeForm.municipalityId)}
+        <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.1fr)]">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="text-2xl">Route Details</CardTitle>
+              <CardDescription className="text-base">
+                Set the route identity, road type, and GeoJSON data for {routeMunicipalityName}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-base">Municipality</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-3 text-base font-medium">
+                  {routeMunicipalityName}
+                </div>
               </div>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="code" className="text-base">Route Code *</Label>
                 <Input
                   id="code"
                   value={routeForm.code}
                   onChange={(event) => setRouteForm({ ...routeForm, code: event.target.value })}
-                  placeholder="e.g., EN4-PORT-UAT"
+                  placeholder="e.g., UG-ROUTE-UAT"
                   className="text-base h-11"
                 />
               </div>
@@ -357,123 +472,115 @@ export function RoutesPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-base">Route Name *</Label>
                 <Input
                   id="name"
                   value={routeForm.name}
                   onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })}
-                  placeholder="e.g., EN4 Avenida de Mocambique to Port of Maputo"
+                  placeholder="e.g., Kampala Road to Jinja Road corridor"
                   className="text-base h-11"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="distanceKm" className="text-base">Distance (km)</Label>
-                <Input
-                  id="distanceKm"
-                  type="number"
-                  value={routeForm.distanceKm}
-                  onChange={(event) => setRouteForm({ ...routeForm, distanceKm: event.target.value })}
-                  placeholder="e.g., 14.5"
-                  className="text-base h-11"
+                <Label htmlFor="geoJson" className="text-base">GeoJSON Route Data</Label>
+                <p className="text-sm text-muted-foreground">
+                  Paste a GeoJSON Feature or LineString for the route.
+                </p>
+                <Textarea
+                  id="geoJson"
+                  value={routeForm.geoJson}
+                  onChange={(event) => handleRouteGeoJsonChange(event.target.value)}
+                  onBlur={handleRouteGeoJsonBlur}
+                  placeholder={defaultRouteGeoJson}
+                  rows={1}
+                  wrap="off"
+                  className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
                 />
               </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <CardTitle className="text-2xl">Route Map</CardTitle>
-                <CardDescription className="text-base">
-                  Click along the route, drag points to adjust, then apply the line to GeoJSON data.
-                </CardDescription>
+              <div className="flex justify-between gap-4 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsCreateOpen(false)
+                    setEditingRoute(null)
+                  }}
+                  disabled={isSavingRoute}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveRoute} disabled={!canSaveRoute}>
+                  {isSavingRoute ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {editingRoute ? "Saving..." : "Creating..."}
+                    </>
+                  ) : (
+                    editingRoute ? "Save Changes" : "Create Route"
+                  )}
+                </Button>
               </div>
-              <Badge variant="outline" className="w-fit">
-                {routeDraftPoints.length} points
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="h-[420px] overflow-hidden rounded-md border border-border">
-              <EditableGoogleMap
-                points={routeDraftPoints}
-                onPointsChange={setRouteDraftPoints}
-                shape="line"
-                center={MAPUTO_CENTER}
-                zoom={11}
-                height="100%"
-                markerColor="#DAA22A"
-                strokeColor="#DAA22A"
-              />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRouteDraftPoints((points) => points.slice(0, -1))}
-                disabled={!routeDraftPoints.length}
-              >
-                Undo Point
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRouteDraftPoints([])}
-                disabled={!routeDraftPoints.length}
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Clear Map
-              </Button>
-              <Button type="button" onClick={handleApplyDrawnRoute} disabled={routeDraftPoints.length < 2}>
-                Apply Route
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">GeoJSON Route Data</CardTitle>
-            <CardDescription className="text-base">
-              Paste a GeoJSON Feature or LineString for the route.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea
-              id="geoJson"
-              value={routeForm.geoJson}
-              onChange={(event) => setRouteForm({ ...routeForm, geoJson: event.target.value })}
-              onBlur={() => setRouteForm((current) => ({ ...current, geoJson: compactJson(current.geoJson) }))}
-              placeholder={defaultRouteGeoJson}
-              rows={1}
-              wrap="off"
-              className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
-            />
-          </CardContent>
-        </Card>
-
-        <div className="flex justify-between gap-4">
-          <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={createMutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreateRoute} disabled={createMutation.isPending}>
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create Route"
-            )}
-          </Button>
+          <Card className="h-full">
+            <CardHeader>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl">Route Map</CardTitle>
+                  <CardDescription className="text-base">
+                    Click road bends and drag points to adjust; the route draws as a smooth path.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="w-fit">
+                  {routeDraftPoints.length} points
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex h-[560px] flex-col gap-4">
+              <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border">
+                <EditableGoogleMap
+                  points={routeDraftPoints}
+                  onPointsChange={handleRouteDraftPointsChange}
+                  shape="line"
+                  lineMode="smooth"
+                  center={routeDraftPoints[0] ?? UGANDA_CENTER}
+                  zoom={11}
+                  height="100%"
+                  markerColor="#DAA22A"
+                  strokeColor="#DAA22A"
+                  fitToBounds={routeDraftPoints.length > 0}
+                />
+              </div>
+              <div className="grid shrink-0 gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleRouteDraftPointsChange(routeDraftPoints.slice(0, -1))}
+                  disabled={!routeDraftPoints.length}
+                >
+                  Undo Point
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleRouteDraftPointsChange([])}
+                  disabled={!routeDraftPoints.length}
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Clear Map
+                </Button>
+                <Button type="button" onClick={handleApplyDrawnRoute} disabled={routeDraftPoints.length < 2}>
+                  Apply Route
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
       </div>
     )
   }
@@ -497,23 +604,7 @@ export function RoutesPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <CardTitle className="text-2xl">Routes</CardTitle>
-            </div>
-            <div className="flex rounded-md border p-1">
-              {filterOptions.map((filter) => (
-                <Button
-                  key={filter.value}
-                  variant={activeAllowedUse === filter.value ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setActiveAllowedUse(filter.value)}
-                >
-                  {filter.label}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <CardTitle className="text-2xl">Routes</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading && routes.length === 0 ? (
@@ -545,9 +636,9 @@ export function RoutesPage() {
                   <TableHead className="text-base">Route Name</TableHead>
                   <TableHead className="text-base">Road Type</TableHead>
                   <TableHead className="text-base">Distance</TableHead>
-                  <TableHead className="text-base">Allowed Uses</TableHead>
                   <TableHead className="text-base">Status</TableHead>
                   <TableHead className="text-base">Created</TableHead>
+                  <TableHead className="text-right text-base">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -557,17 +648,18 @@ export function RoutesPage() {
                     <TableCell className="text-base">{route.name}</TableCell>
                     <TableCell className="text-base">{route.roadType}</TableCell>
                     <TableCell className="text-base">{route.distanceKm ?? "-"} km</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {route.allowedUses.map((use) => (
-                          <Badge key={use} variant="outline" className="text-xs">
-                            {renderAllowedUse(use)}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
                     <TableCell>{getStatusBadge(route.active)}</TableCell>
                     <TableCell className="text-base">{route.createdAt?.split("T")[0] || "-"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => openEditRoute(route)}
+                        aria-label={`Edit ${route.name}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

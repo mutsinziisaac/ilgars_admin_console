@@ -6,20 +6,16 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, MapPin, Video, Eye, Search, Map as MapIcon } from "lucide-react"
 import { Map as GoogleMap, type MapMarker } from "@/components/ui/map"
+import { UGANDA_CENTER, UGANDA_OVERVIEW_ZOOM } from "@/lib/map-region"
 
-// Maputo center coordinates
-const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
-const DEFAULT_ZOOM = 14
-
-// Mock camera data with real Maputo coordinates
 const mockCameras = [
   {
     id: "CAM-001",
-    name: "North Gate - Julius Nyerere",
+    name: "North Gate - Kampala Road",
     type: "ANPR",
-    location: "Av. Julius Nyerere",
-    coordinates: "-25.9612, 32.5823",
-    latlng: [-25.9612, 32.5823] as [number, number],
+    location: "Kampala Road",
+    coordinates: "0.3136, 32.5811",
+    latlng: [0.3136, 32.5811] as [number, number],
     status: "Online",
     resolution: "4K",
     fps: "30",
@@ -28,11 +24,11 @@ const mockCameras = [
   },
   {
     id: "CAM-002",
-    name: "South Gate - 25 de Setembro",
+    name: "South Gate - Entebbe Road",
     type: "ANPR",
-    location: "Av. 25 de Setembro",
-    coordinates: "-25.9655, 32.5731",
-    latlng: [-25.9655, 32.5731] as [number, number],
+    location: "Entebbe Road",
+    coordinates: "0.2607, 32.5504",
+    latlng: [0.2607, 32.5504] as [number, number],
     status: "Online",
     resolution: "4K",
     fps: "30",
@@ -41,11 +37,11 @@ const mockCameras = [
   },
   {
     id: "CAM-003",
-    name: "East Gate - Marginal",
+    name: "East Gate - Jinja Road",
     type: "ANPR",
-    location: "Marginal Avenue",
-    coordinates: "-25.9701, 32.5945",
-    latlng: [-25.9701, 32.5945] as [number, number],
+    location: "Jinja Road",
+    coordinates: "0.3316, 32.6163",
+    latlng: [0.3316, 32.6163] as [number, number],
     status: "Offline",
     resolution: "4K",
     fps: "0",
@@ -54,11 +50,11 @@ const mockCameras = [
   },
   {
     id: "CAM-004",
-    name: "West Gate - Eduardo Mondlane",
+    name: "West Gate - Hoima Road",
     type: "Traffic",
-    location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5680",
-    latlng: [-25.9588, 32.5680] as [number, number],
+    location: "Hoima Road",
+    coordinates: "0.3479, 32.5426",
+    latlng: [0.3479, 32.5426] as [number, number],
     status: "Online",
     resolution: "1080p",
     fps: "25",
@@ -67,11 +63,11 @@ const mockCameras = [
   },
   {
     id: "CAM-005",
-    name: "Central - Vladimir Lenine",
+    name: "Central - Nakasero",
     type: "ANPR",
-    location: "Av. Vladimir Lenine",
-    coordinates: "-25.9634, 32.5789",
-    latlng: [-25.9634, 32.5789] as [number, number],
+    location: "Nakasero",
+    coordinates: "0.3184, 32.5869",
+    latlng: [0.3184, 32.5869] as [number, number],
     status: "Online",
     resolution: "4K",
     fps: "30",
@@ -145,7 +141,7 @@ export function CamerasPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-4xl font-semibold text-foreground">Camera Locations - Maputo</h1>
+            <h1 className="text-4xl font-semibold text-foreground">Camera Locations - Uganda</h1>
             <p className="text-lg text-muted-foreground">View installed ANPR and traffic monitoring cameras on the map.</p>
           </div>
         </div>
@@ -154,8 +150,8 @@ export function CamerasPage() {
           <CardContent className="p-0">
             <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
               <GoogleMap
-                center={MAPUTO_CENTER}
-                zoom={DEFAULT_ZOOM}
+                center={UGANDA_CENTER}
+                zoom={UGANDA_OVERVIEW_ZOOM}
                 markers={mapMarkers}
                 height="100%"
                 className="h-full w-full"

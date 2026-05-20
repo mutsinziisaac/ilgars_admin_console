@@ -13,6 +13,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: true,
     proxy: {
       // Proxy API requests to avoid CORS issues in development
       '/api/core': {

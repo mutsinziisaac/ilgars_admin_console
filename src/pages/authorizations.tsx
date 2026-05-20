@@ -243,12 +243,63 @@ const mockAuthorizations = [
   },
 ]
 
+type EscortUnit = {
+  id: string
+  callSign: string
+  officer: string
+  vehicle: string
+  zone: string
+  status: "AVAILABLE" | "ON_DUTY"
+}
+
+type Authorization = (typeof mockAuthorizations)[number] & {
+  escortRequired?: boolean
+  escortAssigned?: boolean
+  assignedEscorts?: EscortUnit[]
+}
+
+const escortUnits: EscortUnit[] = [
+  {
+    id: "ESC-01",
+    callSign: "Escort Alpha",
+    officer: "Sgt. Daniel Okello",
+    vehicle: "UG-ECS-014",
+    zone: "Kampala Central",
+    status: "AVAILABLE",
+  },
+  {
+    id: "ESC-02",
+    callSign: "Escort Bravo",
+    officer: "Cpl. Sarah Namukasa",
+    vehicle: "UG-ECS-022",
+    zone: "Northern Bypass",
+    status: "AVAILABLE",
+  },
+  {
+    id: "ESC-03",
+    callSign: "Escort Charlie",
+    officer: "Insp. Peter Lwanga",
+    vehicle: "UG-ECS-031",
+    zone: "Jinja Road",
+    status: "AVAILABLE",
+  },
+  {
+    id: "ESC-04",
+    callSign: "Escort Delta",
+    officer: "Cpl. Mercy Akello",
+    vehicle: "UG-ECS-044",
+    zone: "Entebbe Road",
+    status: "ON_DUTY",
+  },
+]
+
 export function AuthorizationsPage() {
-  const [authorizations, setAuthorizations] = useState(mockAuthorizations)
-  const [selectedAuth, setSelectedAuth] = useState<typeof mockAuthorizations[0] | null>(null)
+  const [authorizations, setAuthorizations] = useState<Authorization[]>(mockAuthorizations)
+  const [selectedAuth, setSelectedAuth] = useState<Authorization | null>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
+  const [selectedEscortIds, setSelectedEscortIds] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState("PENDING")
   const itemsPerPage = 10
@@ -309,35 +360,60 @@ export function AuthorizationsPage() {
   }
 
   // Open details modal
-  const openDetailsModal = (auth: typeof mockAuthorizations[0]) => {
+  const openDetailsModal = (auth: Authorization) => {
     setSelectedAuth(auth)
     setIsDetailsModalOpen(true)
+  }
+
+  const openApproveDialog = () => {
+    if (!selectedAuth) return
+    setSelectedEscortIds(selectedAuth.assignedEscorts?.map((escort) => escort.id) ?? [])
+    setIsApproveDialogOpen(true)
+  }
+
+  const toggleEscort = (escortId: string) => {
+    setSelectedEscortIds((current) =>
+      current.includes(escortId)
+        ? current.filter((id) => id !== escortId)
+        : [...current, escortId]
+    )
   }
 
   // Handle approval actions
   const handleApprove = () => {
     if (!selectedAuth) return
+    if (selectedEscortIds.length === 0) {
+      toast.error("Assign at least one escort before approval")
+      return
+    }
+
+    const assignedEscorts = escortUnits.filter((escort) => selectedEscortIds.includes(escort.id))
     const validFrom = new Date().toISOString().split("T")[0]
     const validTo = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] // 6 months
     const approvedDate = new Date().toISOString().split("T")[0]
-    setAuthorizations(
-      authorizations.map((a) =>
-        a.id === selectedAuth.id
-          ? {
-              ...a,
-              status: "APPROVED",
-              validFrom,
-              validTo,
-              approvedBy: "Current User",
-              approvedDate,
-            }
-          : a
+    const approvedAuthorization: Authorization = {
+      ...selectedAuth,
+      status: "APPROVED",
+      validFrom,
+      validTo,
+      approvedBy: "Current User",
+      approvedDate,
+      escortRequired: true,
+      escortAssigned: true,
+      assignedEscorts,
+    }
+
+    setAuthorizations((currentAuthorizations) =>
+      currentAuthorizations.map((authorization) =>
+        authorization.id === selectedAuth.id ? approvedAuthorization : authorization
       )
     )
+    setSelectedAuth(approvedAuthorization)
     toast.success("Authorization Approved", {
-      description: `Authorization ${selectedAuth.id} has been approved.`,
+      description: `Authorization ${selectedAuth.id} approved with ${assignedEscorts.length} escort${assignedEscorts.length === 1 ? "" : "s"}.`,
     })
     setIsApproveDialogOpen(false)
+    setSelectedEscortIds([])
     setIsDetailsModalOpen(false)
   }
 
@@ -396,7 +472,7 @@ export function AuthorizationsPage() {
                 <XCircle className="h-4 w-4 mr-2" />
                 Reject
               </Button>
-              <Button onClick={() => setIsApproveDialogOpen(true)} className="text-base h-11 px-6 bg-green-600">
+              <Button onClick={openApproveDialog} className="text-base h-11 px-6 bg-green-600">
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Approve
               </Button>
@@ -433,6 +509,19 @@ export function AuthorizationsPage() {
                           </p>
                         </div>
                       )}
+                      {selectedAuth.assignedEscorts?.length ? (
+                        <div>
+                          <Label className="text-sm text-muted-foreground">Assigned Escorts</Label>
+                          <div className="mt-2 space-y-2">
+                            {selectedAuth.assignedEscorts.map((escort) => (
+                              <div key={escort.id} className="rounded-md border bg-muted/30 px-3 py-2">
+                                <p className="text-sm font-semibold">{escort.callSign}</p>
+                                <p className="text-xs text-muted-foreground">{escort.officer} • {escort.vehicle}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </CardContent>
@@ -563,12 +652,63 @@ export function AuthorizationsPage() {
             <DialogHeader>
               <DialogTitle className="text-2xl">Approve Authorization</DialogTitle>
               <DialogDescription className="text-base">
-                Confirm approval for authorization #{selectedAuth.id} for {selectedAuth.applicantName}. A 6-month validity window will be assigned.
+                Assign escort units to {selectedAuth.vehiclePlate} before approving authorization #{selectedAuth.id}. A 6-month validity window will be assigned.
               </DialogDescription>
             </DialogHeader>
+            <div className="space-y-3">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Approval is locked until at least one escort unit is assigned to the vehicle.
+              </div>
+              <div className="grid gap-3">
+                {escortUnits.map((escort) => {
+                  const isSelected = selectedEscortIds.includes(escort.id)
+                  const isUnavailable = escort.status !== "AVAILABLE" && !isSelected
+
+                  return (
+                    <button
+                      key={escort.id}
+                      type="button"
+                      onClick={() => {
+                        if (!isUnavailable) toggleEscort(escort.id)
+                      }}
+                      disabled={isUnavailable}
+                      className={`rounded-md border p-4 text-left transition ${
+                        isSelected
+                          ? "border-green-600 bg-green-50"
+                          : "border-border bg-background hover:bg-muted/50"
+                      } ${isUnavailable ? "cursor-not-allowed opacity-60" : ""}`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-base font-semibold">{escort.callSign}</p>
+                          <p className="text-sm text-muted-foreground">{escort.officer}</p>
+                          <p className="text-sm text-muted-foreground">{escort.vehicle} • {escort.zone}</p>
+                        </div>
+                        <Badge className={isSelected ? "bg-green-600 text-white" : escort.status === "AVAILABLE" ? "bg-[#D6F0E0] text-[#1C1C1C]" : "bg-muted text-muted-foreground"}>
+                          {isSelected ? "Selected" : escort.status === "AVAILABLE" ? "Available" : "On Duty"}
+                        </Badge>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsApproveDialogOpen(false)} className="text-base h-11 px-6">Cancel</Button>
-              <Button onClick={handleApprove} className="text-base h-11 px-6 bg-green-600">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsApproveDialogOpen(false)
+                  setSelectedEscortIds([])
+                }}
+                className="text-base h-11 px-6"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleApprove}
+                disabled={selectedEscortIds.length === 0}
+                className="text-base h-11 px-6 bg-green-600"
+              >
                 Confirm
               </Button>
             </DialogFooter>

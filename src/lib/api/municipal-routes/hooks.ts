@@ -4,6 +4,7 @@ import {
   type ListMunicipalRoutesParams,
 } from "./api"
 import type { CreateMunicipalRouteRequest } from "./schemas"
+import type { UpdateMunicipalRouteRequest } from "./schemas"
 import { municipalRoutesKeys } from "./queryKeys"
 
 export const useMunicipalRoutesList = (params?: ListMunicipalRoutesParams) =>
@@ -20,6 +21,23 @@ export const useCreateMunicipalRoute = () => {
   return useMutation({
     mutationFn: (payload: CreateMunicipalRouteRequest) =>
       MunicipalRoutesApi.createMunicipalRoute(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: municipalRoutesKeys.all() })
+    },
+  })
+}
+
+export const useUpdateMunicipalRoute = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      routeId,
+      payload,
+    }: {
+      routeId: string
+      payload: UpdateMunicipalRouteRequest
+    }) => MunicipalRoutesApi.updateMunicipalRoute(routeId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: municipalRoutesKeys.all() })
     },

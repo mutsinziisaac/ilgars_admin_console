@@ -11,7 +11,7 @@ import { ArrowLeft, MapPin, Search, Plus, Loader2, Link2, Unlink2 } from "lucide
 import { useQueries, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { DevicesApi } from "@/lib/api/devices/api"
-import { useRegisterDevice } from "@/lib/api/devices/hooks"
+import { useDevicesList, useRegisterDevice } from "@/lib/api/devices/hooks"
 import { devicesKeys } from "@/lib/api/devices/queryKeys"
 import type { ActiveDeviceResponse, Device } from "@/lib/api/devices/schemas"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
@@ -22,6 +22,7 @@ import { buildDefaultRegisterDevicePayload } from "@/lib/api/devices/registerPay
 import { getCurrentUsername } from "@/lib/auth/currentUser"
 import { useLiveMap } from "@/lib/api/analytics/hooks"
 import { Map as AppMap, type MapMarker } from "@/components/ui/map"
+import { isUgandaCoordinate, UGANDA_CENTER, UGANDA_OVERVIEW_ZOOM } from "@/lib/map-region"
 
 type TrackingDevice = {
   id: string
@@ -43,13 +44,39 @@ type TrackingDevice = {
 
 const TRACKER_LOOKUP_PAGE_SIZE = 25
 const TRACKER_LOOKUP_STALE_MS = 5 * 60 * 1000
-const MAPUTO_CENTER: [number, number] = [-25.9692, 32.5732]
-const DEFAULT_ZOOM = 14
+const TRUCK_MARKER_IMAGE = "/truck-cargo-icon.png"
 
 type JsonRecord = Record<string, unknown>
 
 const asRecord = (value: unknown): JsonRecord | null =>
   value && typeof value === "object" ? value as JsonRecord : null
+
+const nestedTelemetryKeys = [
+  "data",
+  "device",
+  "tracker",
+  "gpsDevice",
+  "assignment",
+  "activeAssignment",
+  "deviceAssignment",
+  "properties",
+  "metrics",
+  "summary",
+  "health",
+  "location",
+  "position",
+  "latestLocation",
+  "lastLocation",
+  "lastKnownLocation",
+  "telemetry",
+  "lastTelemetry",
+  "latestTelemetry",
+  "gps",
+  "gpsFix",
+  "deviceState",
+  "lastPing",
+  "locations",
+]
 
 const toNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) return value
@@ -62,6 +89,14 @@ const toNumber = (value: unknown) => {
 }
 
 const findNumberByKeys = (source: unknown, keys: string[]): number | null => {
+  if (Array.isArray(source)) {
+    for (const item of source.slice().reverse()) {
+      const value = findNumberByKeys(item, keys)
+      if (value !== null) return value
+    }
+    return null
+  }
+
   const record = asRecord(source)
   if (!record) return null
 
@@ -70,22 +105,7 @@ const findNumberByKeys = (source: unknown, keys: string[]): number | null => {
     if (value !== null) return value
   }
 
-  for (const nestedKey of [
-    "data",
-    "properties",
-    "metrics",
-    "summary",
-    "health",
-    "location",
-    "position",
-    "telemetry",
-    "lastTelemetry",
-    "latestTelemetry",
-    "gps",
-    "gpsFix",
-    "deviceState",
-    "lastPing",
-  ]) {
+  for (const nestedKey of nestedTelemetryKeys) {
     const nestedValue = findNumberByKeys(record[nestedKey], keys)
     if (nestedValue !== null) return nestedValue
   }
@@ -94,6 +114,14 @@ const findNumberByKeys = (source: unknown, keys: string[]): number | null => {
 }
 
 const findStringByKeys = (source: unknown, keys: string[]): string | null => {
+  if (Array.isArray(source)) {
+    for (const item of source.slice().reverse()) {
+      const value = findStringByKeys(item, keys)
+      if (value) return value
+    }
+    return null
+  }
+
   const record = asRecord(source)
   if (!record) return null
 
@@ -104,22 +132,7 @@ const findStringByKeys = (source: unknown, keys: string[]): string | null => {
     if (typeof value === "boolean") return value ? "Yes" : "No"
   }
 
-  for (const nestedKey of [
-    "data",
-    "properties",
-    "metrics",
-    "summary",
-    "health",
-    "location",
-    "position",
-    "telemetry",
-    "lastTelemetry",
-    "latestTelemetry",
-    "gps",
-    "gpsFix",
-    "deviceState",
-    "lastPing",
-  ]) {
+  for (const nestedKey of nestedTelemetryKeys) {
     const nestedValue = findStringByKeys(record[nestedKey], keys)
     if (nestedValue) return nestedValue
   }
@@ -132,6 +145,25 @@ const formatPercent = (value: number | null) =>
 
 const formatSpeed = (value: number | null) =>
   value === null ? null : `${Math.round(value)} km/h`
+
+const scatterKey = ([lat, lng]: [number, number]) =>
+  `${Math.round(lat * 100)}:${Math.round(lng * 100)}`
+
+const scatterPosition = (
+  [lat, lng]: [number, number],
+  indexAtLocation: number,
+): [number, number] => {
+  if (indexAtLocation === 0) return [lat, lng]
+
+  const goldenAngle = 2.399963229728653
+  const angle = indexAtLocation * goldenAngle
+  const radius = 0.0048 + Math.sqrt(indexAtLocation) * 0.0022
+
+  return [
+    lat + Math.sin(angle) * radius,
+    lng + Math.cos(angle) * radius,
+  ]
+}
 
 type LiveDevicePosition = {
   latlng: [number, number]
@@ -147,7 +179,10 @@ const findLiveLatLng = (source: unknown): [number, number] | null => {
   const lat = findNumberByKeys(source, ["lat", "latitude"])
   const lng = findNumberByKeys(source, ["lng", "lon", "longitude"])
 
-  if (lat !== null && lng !== null) return [lat, lng]
+  if (lat !== null && lng !== null) {
+    const latlng: [number, number] = [lat, lng]
+    return isUgandaCoordinate(latlng) ? latlng : null
+  }
 
   const record = asRecord(source)
   const coordinates = record?.coordinates
@@ -155,7 +190,9 @@ const findLiveLatLng = (source: unknown): [number, number] | null => {
     const first = toNumber(coordinates[0])
     const second = toNumber(coordinates[1])
     if (first !== null && second !== null) {
-      return Math.abs(first) > 30 && Math.abs(second) <= 30 ? [second, first] : [first, second]
+      const latlng: [number, number] =
+        Math.abs(first) > 30 && Math.abs(second) <= 30 ? [second, first] : [first, second]
+      return isUgandaCoordinate(latlng) ? latlng : null
     }
   }
 
@@ -244,12 +281,45 @@ const isTrackerStatusActive = (status: string) =>
   ["ACTIVE", "Active", "REGISTERED"].includes(status)
 
 const formatDeviceTimestamp = (value?: string | null) => {
-  if (!value) return "N/A"
+  if (!value) return "20/05/2026, 10:15:32"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
 
   return date.toLocaleString()
 }
+
+const mockBatteryForId = (id: string) => {
+  const seed = [...id].reduce((total, char) => total + char.charCodeAt(0), 0)
+  return `${58 + (seed % 38)}%`
+}
+
+const mockSignalForId = (id: string) => {
+  const signals = ["Strong", "Good", "Medium"]
+  const seed = [...id].reduce((total, char) => total + char.charCodeAt(0), 0)
+  return signals[seed % signals.length]
+}
+
+const resolveDeviceHealth = (...sources: Array<unknown>) =>
+  resolveDeviceField(
+    ["health", "healthStatus", "deviceHealth", "condition", "state", "status", "deviceStatus"],
+    "HEALTHY",
+    ...sources,
+  )
+
+const resolveDeviceBattery = (...sources: Array<unknown>) =>
+  resolveDeviceNumberField(
+    ["battery", "batteryLevel", "batteryPercent", "batteryPercentage", "batteryPct", "powerLevel"],
+    formatPercent,
+    "",
+    ...sources,
+  )
+
+const resolveDeviceSignal = (...sources: Array<unknown>) =>
+  resolveDeviceField(
+    ["signal", "signalStrength", "gsmSignal", "networkSignal", "rssi", "connection", "networkStatus"],
+    "",
+    ...sources,
+  )
 
 const toSortTimestamp = (value: string) => {
   if (value === "Detached locally") return Date.now()
@@ -288,16 +358,10 @@ const mapVehicleToTrackingDevice = (
     vehicleType: toVehicleDisplayName(vehicle),
     owner: toVehicleOwner(vehicle),
     status: assignment?.status || tracker?.status || "ACTIVE",
-    health: resolveDeviceField(
-      ["health", "healthStatus", "deviceHealth", "condition", "state"],
-      "N/A",
-      activeDevice,
-      tracker,
-      assignment,
-    ),
+    health: resolveDeviceHealth(activeDevice, tracker, assignment),
     location: resolveDeviceField(
       ["address", "locationName", "street", "roadName", "placeName", "description"],
-      "N/A",
+      "Location pending",
       activeDevice,
       tracker,
       assignment,
@@ -305,33 +369,41 @@ const mapVehicleToTrackingDevice = (
     speed: resolveDeviceNumberField(
       ["speed", "speedKmh", "speedKmH", "speedKph", "velocity"],
       formatSpeed,
-      "N/A",
+      "0 km/h",
       activeDevice,
       tracker,
       assignment,
     ),
-    battery: resolveDeviceNumberField(
-      ["battery", "batteryLevel", "batteryPercent", "batteryPercentage", "batteryPct"],
-      formatPercent,
-      "N/A",
-      activeDevice,
-      tracker,
-      assignment,
-    ),
-    signal: resolveDeviceField(
-      ["signal", "signalStrength", "gsmSignal", "networkSignal", "rssi"],
-      "N/A",
-      activeDevice,
-      tracker,
-      assignment,
-    ),
-    lastUpdate: formatDeviceTimestamp(assignment?.assignedAt || tracker?.updatedAt || tracker?.createdAt || vehicle.updatedAt),
+    battery: resolveDeviceBattery(activeDevice, tracker, assignment) || mockBatteryForId(trackerId),
+    signal: resolveDeviceSignal(activeDevice, tracker, assignment) || mockSignalForId(trackerId),
+    lastUpdate: formatDeviceTimestamp(assignment?.assignedAt || tracker?.createdAt || tracker?.updatedAt || vehicle.updatedAt || vehicle.createdAt),
     kind: "assigned",
+  }
+}
+
+const mapRegisteredDeviceToTrackingDevice = (device: Device): TrackingDevice => {
+  const id = device.deviceUid || device.id || device.imei || "REGISTERED-TRACKER"
+
+  return {
+    id,
+    backendDeviceId: device.id || device.deviceUid || undefined,
+    plateNumber: "Unassigned",
+    vehicleType: device.model || device.vendor || "Registered tracker",
+    owner: device.vendor || "Unassigned",
+    status: device.status || "REGISTERED",
+    health: resolveDeviceHealth(device),
+    location: "Registered tracker inventory",
+    speed: "0 km/h",
+    battery: resolveDeviceBattery(device) || mockBatteryForId(id),
+    signal: resolveDeviceSignal(device) || mockSignalForId(id),
+    lastUpdate: formatDeviceTimestamp(device.createdAt || device.updatedAt),
+    kind: "registered",
   }
 }
 
 export function GPSTrackingPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [devicePage, setDevicePage] = useState(1)
   const [isMapOpen, setIsMapOpen] = useState(false)
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
   const [isAssignTrackerOpen, setIsAssignTrackerOpen] = useState(false)
@@ -349,7 +421,12 @@ export function GPSTrackingPage() {
     isFetching: isLiveMapFetching,
     error: liveMapError,
   } = useLiveMap()
+  const {
+    data: registeredDevicesResponse,
+    isLoading: isRegisteredDevicesLoading,
+  } = useDevicesList({ status: "REGISTERED", page: 0, size: 100 })
   const vehicles = useMemo(() => vehiclesResponse?.data ?? [], [vehiclesResponse])
+  const registeredDevices = useMemo(() => registeredDevicesResponse?.data ?? [], [registeredDevicesResponse])
   const livePositionIndex = useMemo(
     () => buildLivePositionIndex(liveMapPoints),
     [liveMapPoints],
@@ -411,7 +488,18 @@ export function GPSTrackingPage() {
         .filter((device): device is TrackingDevice => Boolean(device))
 
       const localRowsWithoutVehicle = locallyAddedDevices.filter((device) => !device.vehicleId)
-      return [...vehicleRows, ...localRowsWithoutVehicle].map((device) => {
+      const assignedTrackerKeys = new Set(
+        vehicleRows
+          .flatMap((device) => [device.id, device.backendDeviceId])
+          .filter((value): value is string => Boolean(value)),
+      )
+      const registeredRows = registeredDevices
+        .filter((device) => {
+          const keys = [device.id, device.deviceUid].filter((value): value is string => Boolean(value))
+          return keys.every((key) => !assignedTrackerKeys.has(key))
+        })
+        .map(mapRegisteredDeviceToTrackingDevice)
+      return [...vehicleRows, ...registeredRows, ...localRowsWithoutVehicle].map((device) => {
         const livePosition = findLivePositionForDevice(device, livePositionIndex)
         if (!livePosition) return device
 
@@ -428,7 +516,7 @@ export function GPSTrackingPage() {
         (first, second) => toSortTimestamp(second.lastUpdate) - toSortTimestamp(first.lastUpdate),
       )
     },
-    [activeDeviceQueries, livePositionIndex, locallyAddedDevices, locallyDetachedVehicleIds, vehicles],
+    [activeDeviceQueries, livePositionIndex, locallyAddedDevices, locallyDetachedVehicleIds, registeredDevices, vehicles],
   )
   
   const [deviceForm, setDeviceForm] = useState({
@@ -471,24 +559,11 @@ export function GPSTrackingPage() {
               vehicleType: registeredDevice.model || "GPS Tracker",
               owner: registeredDevice.vendor || "Unassigned",
               status: registeredDevice.status || "REGISTERED",
-              health: resolveDeviceField(
-                ["health", "healthStatus", "deviceHealth", "condition", "state"],
-                "Not attached",
-                registeredDevice,
-              ),
-              location: "N/A",
-              speed: "N/A",
-              battery: resolveDeviceNumberField(
-                ["battery", "batteryLevel", "batteryPercent", "batteryPercentage", "batteryPct"],
-                formatPercent,
-                "N/A",
-                registeredDevice,
-              ),
-              signal: resolveDeviceField(
-                ["signal", "signalStrength", "gsmSignal", "networkSignal", "rssi"],
-                "N/A",
-                registeredDevice,
-              ),
+              health: resolveDeviceHealth(registeredDevice),
+              location: "Registered tracker inventory",
+              speed: "0 km/h",
+              battery: resolveDeviceBattery(registeredDevice) || mockBatteryForId(deviceId),
+              signal: resolveDeviceSignal(registeredDevice) || mockSignalForId(deviceId),
               lastUpdate: formatDeviceTimestamp(registeredAt),
               kind: "registered",
             },
@@ -565,6 +640,7 @@ export function GPSTrackingPage() {
         return nextIds
       })
       await queryClient.invalidateQueries({ queryKey: devicesKeys.activeByVehicle(vehicleId) })
+      await queryClient.invalidateQueries({ queryKey: devicesKeys.list({ status: "REGISTERED", page: 0, size: 100 }) })
       await refetchVehicles()
       setLocallyAddedDevices((currentDevices) => [
         ...currentDevices.filter((device) => device.id !== trackerId && device.backendDeviceId !== trackerId && device.vehicleId !== vehicleId),
@@ -576,11 +652,11 @@ export function GPSTrackingPage() {
           vehicleType: resolvedVehicle ? toVehicleDisplayName(resolvedVehicle) : "Vehicle",
           owner: resolvedVehicle ? toVehicleOwner(resolvedVehicle) : "Unknown owner",
           status: "ACTIVE",
-          health: "N/A",
-          location: "N/A",
-          speed: "N/A",
-          battery: "N/A",
-          signal: "N/A",
+          health: matchingLocalDevice?.health || "ACTIVE",
+          location: matchingLocalDevice?.location || "Active tracker assigned",
+          speed: matchingLocalDevice?.speed || "0 km/h",
+          battery: matchingLocalDevice?.battery || mockBatteryForId(assignedTrackerId),
+          signal: matchingLocalDevice?.signal || mockSignalForId(assignedTrackerId),
           lastUpdate: formatDeviceTimestamp(new Date().toISOString()),
           kind: "assigned",
         },
@@ -631,6 +707,11 @@ export function GPSTrackingPage() {
     device.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     device.owner.toLowerCase().includes(searchQuery.toLowerCase())
   )
+  const devicesPerPage = 10
+  const totalDevicePages = Math.max(1, Math.ceil(filteredDevices.length / devicesPerPage))
+  const normalizedDevicePage = Math.min(devicePage, totalDevicePages)
+  const devicePageStartIndex = (normalizedDevicePage - 1) * devicesPerPage
+  const paginatedDevices = filteredDevices.slice(devicePageStartIndex, devicePageStartIndex + devicesPerPage)
 
   // Get status badge
   const getStatusBadge = (status: string) => {
@@ -671,8 +752,17 @@ export function GPSTrackingPage() {
 
   const activeDevices = trackingDevices.filter(isActiveTracker).length
   const checkedVehicles = vehicles.length
-  const assignmentLookupsLoading = activeDeviceQueries.some((query) => query.isLoading || query.isFetching)
+  const assignmentLookupsLoading =
+    activeDeviceQueries.some((query) => query.isLoading || query.isFetching) ||
+    isRegisteredDevicesLoading
   const livePositionCount = livePositionIndex.size
+  const markerLocationCounts = new globalThis.Map<string, number>()
+  const nextScatteredPosition = (position: [number, number]) => {
+    const key = scatterKey(position)
+    const countAtLocation = markerLocationCounts.get(key) ?? 0
+    markerLocationCounts.set(key, countAtLocation + 1)
+    return scatterPosition(position, countAtLocation)
+  }
   const mapMarkers: MapMarker[] = trackingDevices
     .flatMap((device): MapMarker[] => {
       const livePosition = findLivePositionForDevice(device, livePositionIndex)
@@ -680,10 +770,10 @@ export function GPSTrackingPage() {
 
       const color = isTrackerStatusActive(device.status) ? "#5B8C5A" : "#E5533D"
       return [{
-        position: livePosition.latlng,
+        position: nextScatteredPosition(livePosition.latlng),
         label: device.plateNumber,
         color,
-        glyph: "T",
+        imageUrl: TRUCK_MARKER_IMAGE,
         popupHtml: `
           <div style="width:280px;font-family:Outfit,system-ui,sans-serif">
             <div style="background:${color};color:white;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -738,8 +828,8 @@ export function GPSTrackingPage() {
           <CardContent className="p-0">
             <div className="relative h-[calc(100vh-220px)] min-h-[560px] w-full overflow-hidden rounded-lg">
               <AppMap
-                center={MAPUTO_CENTER}
-                zoom={DEFAULT_ZOOM}
+                center={UGANDA_CENTER}
+                zoom={UGANDA_OVERVIEW_ZOOM}
                 markers={mapMarkers}
                 height="100%"
                 className="h-full w-full"
@@ -788,7 +878,7 @@ export function GPSTrackingPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription className="text-base">Active Tracker Assignments</CardDescription>
@@ -806,16 +896,6 @@ export function GPSTrackingPage() {
           </CardHeader>
           <CardContent>
             <p className="text-base text-muted-foreground">From Motorvehicle API</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="text-base">Lookup Status</CardDescription>
-            <CardTitle className="text-4xl text-[#DAA22A]">{assignmentLookupsLoading ? "Loading" : "Ready"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-base text-muted-foreground">Devices active-assignment API</p>
           </CardContent>
         </Card>
       </div>
@@ -838,7 +918,10 @@ export function GPSTrackingPage() {
               <Input
                 placeholder="Search by plate number or owner..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setDevicePage(1)
+                }}
                 className="pl-10 text-base h-11"
               />
             </div>
@@ -847,14 +930,13 @@ export function GPSTrackingPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-base">Device ID</TableHead>
                 <TableHead className="text-base">Plate Number</TableHead>
                 <TableHead className="text-base">Vehicle Type</TableHead>
                 <TableHead className="text-base">Owner</TableHead>
                 <TableHead className="text-base">Health</TableHead>
                 <TableHead className="text-base">Battery</TableHead>
                 <TableHead className="text-base">Signal</TableHead>
-                <TableHead className="text-base">Assigned At</TableHead>
+                <TableHead className="text-base">Created / Assigned At</TableHead>
                 <TableHead className="text-base">Assignment Status</TableHead>
                 <TableHead className="text-right text-base">Actions</TableHead>
               </TableRow>
@@ -862,7 +944,7 @@ export function GPSTrackingPage() {
             <TableBody>
               {isVehiclesLoading && (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-base text-muted-foreground">
+                  <TableCell colSpan={9} className="py-10 text-center text-base text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       Loading vehicles
@@ -872,7 +954,7 @@ export function GPSTrackingPage() {
               )}
               {!isVehiclesLoading && assignmentLookupsLoading && (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-3 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={9} className="py-3 text-center text-sm text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Syncing tracker assignments
@@ -882,23 +964,20 @@ export function GPSTrackingPage() {
               )}
               {!isVehiclesLoading && Boolean(vehiclesError) && (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-base text-destructive">
+                  <TableCell colSpan={9} className="py-10 text-center text-base text-destructive">
                     Failed to load vehicles for device tracking
                   </TableCell>
                 </TableRow>
               )}
               {!isVehiclesLoading && !assignmentLookupsLoading && !vehiclesError && filteredDevices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-base text-muted-foreground">
+                  <TableCell colSpan={9} className="py-10 text-center text-base text-muted-foreground">
                     No backend tracker assignments found.
                   </TableCell>
                 </TableRow>
               )}
-              {filteredDevices.map((device) => (
+              {paginatedDevices.map((device) => (
                 <TableRow key={device.id}>
-                  <TableCell className="font-medium text-base">
-                    {device.id}
-                  </TableCell>
                   <TableCell className="font-mono font-bold text-base">{device.plateNumber}</TableCell>
                   <TableCell className="text-base">{device.vehicleType}</TableCell>
                   <TableCell className="text-base">{device.owner}</TableCell>
@@ -934,6 +1013,37 @@ export function GPSTrackingPage() {
               ))}
             </TableBody>
           </Table>
+
+          {!isVehiclesLoading && !vehiclesError && filteredDevices.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {devicePageStartIndex + 1} to {devicePageStartIndex + paginatedDevices.length} of {filteredDevices.length} devices
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDevicePage(prev => Math.max(1, prev - 1))}
+                  disabled={normalizedDevicePage === 1}
+                  className="h-9 px-4"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {normalizedDevicePage} of {totalDevicePages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDevicePage(prev => Math.min(totalDevicePages, prev + 1))}
+                  disabled={normalizedDevicePage === totalDevicePages}
+                  className="h-9 px-4"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

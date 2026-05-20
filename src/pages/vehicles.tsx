@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,7 +19,7 @@ export function VehiclesPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 7
+  const itemsPerPage = 10
 
   // Fetch vehicles from API using the new hooks
   const { data, isLoading, error, refetch } = useVehiclesList({

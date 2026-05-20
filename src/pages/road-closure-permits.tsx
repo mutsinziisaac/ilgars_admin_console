@@ -17,6 +17,7 @@ import { Map } from "@/components/ui/map"
 import { RoadClosurePermitsApi, getApiErrorMessage, type RoadClosurePermit } from "@/lib/api"
 import { userManager } from "@/lib/userManager"
 import { getStoredMunicipalityId } from "@/lib/municipality-registry"
+import { UGANDA_CENTER } from "@/lib/map-region"
 
 const TARIFFS: Record<string, Record<string, number>> = {
   "Construction Works": { "Protocol Roads": 10000, "Secondary Roads": 5000,  "Tertiary Roads": 3500  },
@@ -115,38 +116,38 @@ const MOCK_BOOKED_ROUTES: Array<{
   checkpoints: string[]
 }> = [
   {
-    name: "Av. Julius Nyerere booked closure",
-    center: [-25.9616, 32.5858],
+    name: "Kampala Road booked closure",
+    center: [0.3182, 32.5779],
     route: [
-      [-25.9586, 32.5822],
-      [-25.9602, 32.5841],
-      [-25.9615, 32.5859],
-      [-25.9631, 32.5874],
-      [-25.9648, 32.5893],
+      [0.3136, 32.5811],
+      [0.3160, 32.5800],
+      [0.3182, 32.5779],
+      [0.3204, 32.5764],
+      [0.3228, 32.5750],
     ],
-    checkpoints: ["Rua da Imprensa", "Polana junction", "Rua dos Desportistas"],
+    checkpoints: ["Kampala Road", "Bombo Road junction", "Nakasero"],
   },
   {
-    name: "Baixa service corridor",
-    center: [-25.9692, 32.5739],
+    name: "Entebbe Road service corridor",
+    center: [0.2607, 32.5504],
     route: [
-      [-25.9667, 32.5704],
-      [-25.9681, 32.5722],
-      [-25.9695, 32.5743],
-      [-25.9712, 32.5765],
+      [0.2500, 32.5452],
+      [0.2552, 32.5480],
+      [0.2607, 32.5504],
+      [0.2665, 32.5533],
     ],
-    checkpoints: ["Praca dos Trabalhadores", "Av. 25 de Setembro", "Port access lane"],
+    checkpoints: ["Kajansi approach", "Entebbe Road", "Clock Tower approach"],
   },
   {
-    name: "Marginal event loop",
-    center: [-25.9488, 32.6211],
+    name: "Jinja Road event loop",
+    center: [0.3316, 32.6163],
     route: [
-      [-25.9532, 32.6109],
-      [-25.9505, 32.6162],
-      [-25.9474, 32.6228],
-      [-25.9457, 32.6284],
+      [0.3258, 32.6034],
+      [0.3292, 32.6101],
+      [0.3316, 32.6163],
+      [0.3348, 32.6230],
     ],
-    checkpoints: ["Costa do Sol entry", "Marginal Avenue", "Event finish zone"],
+    checkpoints: ["Nakawa", "Jinja Road", "Event finish zone"],
   },
 ]
 
@@ -732,11 +733,11 @@ export function RoadClosurePermitsContent() {
                   
                   {/* Interactive Map */}
                   <Map
-                    center={[-25.9655, 32.5832]}
+                    center={UGANDA_CENTER}
                     zoom={16}
                     markers={[
                       {
-                        position: [-25.9655, 32.5832],
+                        position: UGANDA_CENTER,
                         label: selectedPermit.location,
                         description: `${selectedPermit.purpose} - ${selectedPermit.roadType}`,
                       },

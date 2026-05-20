@@ -23,8 +23,8 @@ const mockEnforcementLogs = [
     driverName: "JoÃ£o Silva",
     driverLicense: "DL-2345678",
     vehicleType: "Cargo Truck",
-    location: "Av. Julius Nyerere & Mao Tse Tung",
-    coordinates: "-25.9655, 32.5892",
+    location: "Kampala Road & Bombo Road",
+    coordinates: "0.3182, 32.5779",
     offenceType: "Outstanding Payments",
     offenceCategory: "Payment Compliance",
     severity: "High",
@@ -42,8 +42,8 @@ const mockEnforcementLogs = [
     driverName: "Maria Santos",
     driverLicense: "DL-3456789",
     vehicleType: "Heavy Truck",
-    location: "Av. 25 de Setembro",
-    coordinates: "-25.9612, 32.5731",
+    location: "Entebbe Road",
+    coordinates: "0.2607, 32.5504",
     offenceType: "Overweight Vehicle",
     offenceCategory: "Weight Compliance",
     severity: "Medium",
@@ -61,8 +61,8 @@ const mockEnforcementLogs = [
     driverName: "Pedro Nhantumbo",
     driverLicense: "DL-4567890",
     vehicleType: "Tractor",
-    location: "Marginal Avenue",
-    coordinates: "-25.9701, 32.5945",
+    location: "Jinja Road",
+    coordinates: "0.3316, 32.6163",
     offenceType: "Expired Permit",
     offenceCategory: "Permit Compliance",
     severity: "High",
@@ -80,8 +80,8 @@ const mockEnforcementLogs = [
     driverName: "Ana Costa",
     driverLicense: "DL-5678901",
     vehicleType: "Bus",
-    location: "Av. Eduardo Mondlane",
-    coordinates: "-25.9588, 32.5823",
+    location: "Hoima Road",
+    coordinates: "0.3479, 32.5426",
     offenceType: "No Circulation License",
     offenceCategory: "License Compliance",
     severity: "Medium",
@@ -99,8 +99,8 @@ const mockEnforcementLogs = [
     driverName: "Carlos Macuacua",
     driverLicense: "DL-6789012",
     vehicleType: "Heavy Truck",
-    location: "Av. Acordos de Lusaka",
-    coordinates: "-25.9723, 32.5834",
+    location: "Northern Bypass",
+    coordinates: "0.3842, 32.6048",
     offenceType: "Unauthorized Route",
     offenceCategory: "Route Compliance",
     severity: "Low",
@@ -118,8 +118,8 @@ const mockEnforcementLogs = [
     driverName: "Isabel Mondlane",
     driverLicense: "DL-7890123",
     vehicleType: "Cargo Truck",
-    location: "Av. Vladimir Lenine",
-    coordinates: "-25.9634, 32.5789",
+    location: "Nakasero",
+    coordinates: "0.3184, 32.5869",
     offenceType: "Device Tampered",
     offenceCategory: "Tracker Integrity",
     severity: "High",
@@ -137,8 +137,8 @@ const mockEnforcementLogs = [
     driverName: "JoÃ£o Silva",
     driverLicense: "DL-2345678",
     vehicleType: "Cargo Truck",
-    location: "Av. Julius Nyerere",
-    coordinates: "-25.9667, 32.5901",
+    location: "Kampala Road",
+    coordinates: "0.3136, 32.5811",
     offenceType: "Outstanding Payments",
     offenceCategory: "Payment Compliance",
     severity: "High",
@@ -156,8 +156,8 @@ const mockEnforcementLogs = [
     driverName: "Fernando Chissano",
     driverLicense: "DL-8901234",
     vehicleType: "Heavy Truck",
-    location: "Av. Mao Tse Tung",
-    coordinates: "-25.9589, 32.5912",
+    location: "Bombo Road",
+    coordinates: "0.3319, 32.5749",
     offenceType: "Signal Lost",
     offenceCategory: "Connectivity",
     severity: "Medium",
@@ -438,7 +438,7 @@ export function EnforcementPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-4xl font-semibold text-foreground">Enforcement Heatmap - Maputo</h1>
+              <h1 className="text-4xl font-semibold text-foreground">Enforcement Heatmap - Uganda</h1>
               <p className="text-lg text-muted-foreground">Real-time enforcement activity and alerts for nearby officers</p>
             </div>
           </div>
@@ -1136,7 +1136,7 @@ export function EnforcementPage() {
                   <Label htmlFor="coordinates" className="text-base">GPS Coordinates</Label>
                   <Input
                     id="coordinates"
-                    placeholder="e.g., -25.9655, 32.5892"
+                    placeholder="e.g., 0.3182, 32.5779"
                     value={formData.coordinates}
                     onChange={(e) => setFormData({ ...formData, coordinates: e.target.value })}
                     className="text-base h-11"

@@ -15,7 +15,6 @@ export function ConfigsPage() {
   // System Settings
   const [systemSettings, setSystemSettings] = useState({
     systemName: "Maputo RUC",
-    timezone: "Africa/Maputo",
     currency: "MZN",
     language: "en",
     dateFormat: "YYYY-MM-DD"
@@ -97,20 +96,6 @@ export function ConfigsPage() {
                 onChange={(e) => setSystemSettings({ ...systemSettings, systemName: e.target.value })}
                 className="text-base h-11"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="timezone" className="text-base">Timezone</Label>
-              <Select value={systemSettings.timezone} onValueChange={(value) => setSystemSettings({ ...systemSettings, timezone: value })}>
-                <SelectTrigger className="text-base h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="text-base">
-                  <SelectItem value="Africa/Maputo" className="text-base">Africa/Maputo (GMT+2)</SelectItem>
-                  <SelectItem value="Africa/Johannesburg" className="text-base">Africa/Johannesburg (GMT+2)</SelectItem>
-                  <SelectItem value="UTC" className="text-base">UTC (GMT+0)</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">

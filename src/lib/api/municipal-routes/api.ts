@@ -6,6 +6,7 @@ import {
   type CreateMunicipalRouteRequest,
   type MunicipalRouteDetailResponse,
   type MunicipalRouteListResponse,
+  type UpdateMunicipalRouteRequest,
 } from "./schemas";
 
 export interface ListMunicipalRoutesParams {
@@ -46,6 +47,25 @@ export const MunicipalRoutesApi = {
           municipalityId: DEFAULT_MUNICIPALITY_ID,
           ...payload,
         },
+      },
+      signal,
+      schema: MunicipalRouteDetailResponseSchema,
+    }),
+
+  /**
+   * Update municipal route
+   * PUT /v1/municipal-routes/{routeId}
+   */
+  updateMunicipalRoute: (
+    routeId: string,
+    payload: UpdateMunicipalRouteRequest,
+    signal?: AbortSignal,
+  ) =>
+    coreRequest<MunicipalRouteDetailResponse>({
+      method: "PUT",
+      url: `/v1/municipal-routes/${routeId}`,
+      data: {
+        data: payload,
       },
       signal,
       schema: MunicipalRouteDetailResponseSchema,

@@ -50,7 +50,10 @@ export const CreateMunicipalRouteRequestSchema = z.object({
   active: z.boolean().optional().default(true),
 });
 
+export const UpdateMunicipalRouteRequestSchema = CreateMunicipalRouteRequestSchema.partial();
+
 export type MunicipalRoute = z.infer<typeof MunicipalRouteSchema>;
 export type MunicipalRouteListResponse = z.infer<typeof MunicipalRouteListResponseSchema>;
 export type MunicipalRouteDetailResponse = z.infer<typeof MunicipalRouteDetailResponseSchema>;
 export type CreateMunicipalRouteRequest = z.infer<typeof CreateMunicipalRouteRequestSchema>;
+export type UpdateMunicipalRouteRequest = z.infer<typeof UpdateMunicipalRouteRequestSchema>;

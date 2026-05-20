@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { UGANDA_CENTER } from "@/lib/map-region"
 
 type GoogleMapsNamespace = any
 type GoogleMapInstance = any
@@ -17,6 +18,8 @@ export type MapMarker = {
   description?: string
   popupHtml?: string
   color?: string
+  shape?: "circle" | "truck"
+  imageUrl?: string
   glyph?: string
   active?: boolean
   draggable?: boolean
@@ -56,6 +59,7 @@ interface EditableGoogleMapProps {
   points: LatLngTuple[]
   onPointsChange: (points: LatLngTuple[]) => void
   shape: "line" | "polygon"
+  lineMode?: "straight" | "smooth"
   center?: LatLngTuple
   zoom?: number
   height?: string
@@ -165,6 +169,42 @@ const getGoogleMapsApi = () => {
 
 const toLatLngLiteral = ([lat, lng]: LatLngTuple) => ({ lat, lng })
 
+const createSmoothLinePath = (points: LatLngTuple[], segmentsPerCurve = 12) => {
+  if (points.length < 3) return points
+
+  const smoothed: LatLngTuple[] = []
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const [p0Lat, p0Lng] = points[Math.max(index - 1, 0)]
+    const [p1Lat, p1Lng] = points[index]
+    const [p2Lat, p2Lng] = points[index + 1]
+    const [p3Lat, p3Lng] = points[Math.min(index + 2, points.length - 1)]
+
+    for (let step = 0; step < segmentsPerCurve; step += 1) {
+      const t = step / segmentsPerCurve
+      const t2 = t * t
+      const t3 = t2 * t
+      const lat = 0.5 * (
+        2 * p1Lat +
+        (-p0Lat + p2Lat) * t +
+        (2 * p0Lat - 5 * p1Lat + 4 * p2Lat - p3Lat) * t2 +
+        (-p0Lat + 3 * p1Lat - 3 * p2Lat + p3Lat) * t3
+      )
+      const lng = 0.5 * (
+        2 * p1Lng +
+        (-p0Lng + p2Lng) * t +
+        (2 * p0Lng - 5 * p1Lng + 4 * p2Lng - p3Lng) * t2 +
+        (-p0Lng + 3 * p1Lng - 3 * p2Lng + p3Lng) * t3
+      )
+
+      smoothed.push([lat, lng])
+    }
+  }
+
+  smoothed.push(points[points.length - 1])
+  return smoothed
+}
+
 const getMapTypeId = (view: MapProps["defaultView"]) => view === "satellite" ? "hybrid" : "roadmap"
 
 const escapeHtml = (value: string) =>
@@ -185,6 +225,40 @@ const createPopupContent = (marker: MapMarker) =>
 const createMarkerIcon = (maps: GoogleMapsNamespace, marker: MapMarker) => {
   const color = marker.color ?? "#4FAF7C"
   const scale = marker.active ? 11 : 8
+
+  if (marker.imageUrl) {
+    const width = marker.active ? 62 : 50
+    const height = marker.active ? 43 : 35
+
+    return {
+      url: marker.imageUrl,
+      scaledSize: new maps.Size(width, height),
+      anchor: new maps.Point(width / 2, height / 2),
+    }
+  }
+
+  if (marker.shape === "truck") {
+    const size = marker.active ? 42 : 34
+    const truckSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 34 34">
+        <circle cx="17" cy="17" r="16" fill="${color}" stroke="#ffffff" stroke-width="${marker.active ? 4 : 3}"/>
+        <g fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(6 8)">
+          <path d="M9 14h4V3H1v11h2"/>
+          <path d="M13 14h1"/>
+          <path d="M19 14h2V9l-3-4h-5"/>
+          <path d="M1 10h12"/>
+          <circle cx="6" cy="14" r="2"/>
+          <circle cx="17" cy="14" r="2"/>
+        </g>
+      </svg>
+    `.trim()
+
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(truckSvg)}`,
+      scaledSize: new maps.Size(size, size),
+      anchor: new maps.Point(size / 2, size / 2),
+    }
+  }
 
   return {
     path: maps.SymbolPath.CIRCLE,
@@ -288,7 +362,7 @@ const createPopupOverlay = (maps: GoogleMapsNamespace, map: GoogleMapInstance): 
 }
 
 export function Map({
-  center = [-25.9655, 32.5832],
+  center = UGANDA_CENTER,
   zoom = 13,
   markers = [],
   route = [],
@@ -595,7 +669,8 @@ export function EditableGoogleMap({
   points,
   onPointsChange,
   shape,
-  center = [-25.9655, 32.5832],
+  lineMode = "straight",
+  center = UGANDA_CENTER,
   zoom = 11,
   height = "420px",
   className = "",
@@ -604,6 +679,9 @@ export function EditableGoogleMap({
   fillColor = "#5B8C5A",
   fitToBounds = false,
 }: EditableGoogleMapProps) {
+  const routePoints = shape === "line" && lineMode === "smooth"
+    ? createSmoothLinePath(points)
+    : points
   const markers: MapMarker[] = points.map((point, index) => ({
     position: point,
     label: `Point ${index + 1}`,
@@ -622,7 +700,7 @@ export function EditableGoogleMap({
       center={center}
       zoom={zoom}
       markers={markers}
-      route={points.length >= 2 ? points : []}
+      route={routePoints.length >= 2 ? routePoints : []}
       polygons={shape === "polygon" && points.length >= 3 ? [points] : []}
       circles={[]}
       height={height}

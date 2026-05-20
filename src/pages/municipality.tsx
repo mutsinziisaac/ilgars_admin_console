@@ -22,9 +22,14 @@ import {
   storeMunicipalities,
   upsertStoredMunicipality,
 } from "@/lib/municipality-registry"
+import { UGANDA_CENTER } from "@/lib/map-region"
 
-const defaultBoundaryData = "{\"type\":\"Polygon\",\"coordinates\":[[[32.45,-26.1],[32.75,-26.1],[32.75,-25.92],[32.64,-25.92],[32.64,-25.8],[32.45,-25.8],[32.45,-26.1]]]}"
-const MAPUTO_CENTER: [number, number] = [-25.9655, 32.5832]
+const defaultBoundaryData = "{\"type\":\"Polygon\",\"coordinates\":[[[29.4,-1.6],[35.1,-1.6],[35.1,4.4],[29.4,4.4],[29.4,-1.6]]]}"
+
+const getLocalTimeZone = () =>
+  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+
+const displayTimeZone = () => getLocalTimeZone()
 
 const getBoundaryVersionsStorageKey = (municipalityId: string) =>
   `${BOUNDARY_VERSIONS_STORAGE_KEY_PREFIX}.${municipalityId}`
@@ -242,13 +247,13 @@ export function MunicipalityPage() {
   const [municipalityForm, setMunicipalityForm] = useState({
     code: municipality?.code ?? "",
     name: municipality?.name ?? "",
-    timezone: municipality?.timezone ?? "Africa/Maputo"
+    timezone: displayTimeZone()
   })
 
   const [createMunicipalityForm, setCreateMunicipalityForm] = useState({
     code: "MAPUTO-UAT",
     name: "Maputo UAT",
-    timezone: "Africa/Maputo"
+    timezone: getLocalTimeZone()
   })
 
   const [boundaryForm, setBoundaryForm] = useState({
@@ -265,7 +270,7 @@ export function MunicipalityPage() {
     setMunicipalityForm({
       code: nextMunicipality.code,
       name: nextMunicipality.name,
-      timezone: nextMunicipality.timezone,
+      timezone: displayTimeZone(),
     })
   }, [])
 
@@ -431,7 +436,8 @@ export function MunicipalityPage() {
 
     const updatedMunicipality = {
       ...municipality,
-      ...municipalityForm
+      ...municipalityForm,
+      timezone: displayTimeZone(),
     }
     storeActiveMunicipality(updatedMunicipality)
     setIsEditMunicipalityOpen(false)
@@ -624,7 +630,7 @@ export function MunicipalityPage() {
       const response = await MunicipalitiesApi.createMunicipality({
         code: createMunicipalityForm.code,
         name: createMunicipalityForm.name,
-        timezone: createMunicipalityForm.timezone,
+        timezone: displayTimeZone(),
       })
       const newMunicipality = response.data
       storeActiveMunicipality(newMunicipality)
@@ -711,8 +717,8 @@ export function MunicipalityPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <Card>
+        <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.1fr)]">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-2xl">Boundary Details</CardTitle>
               <CardDescription className="text-base">
@@ -724,7 +730,7 @@ export function MunicipalityPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="version" className="text-base">Version Code *</Label>
                   <Input
@@ -747,10 +753,50 @@ export function MunicipalityPage() {
                   />
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="boundaryData" className="text-base">GeoJSON Data *</Label>
+                <p className="text-sm text-muted-foreground">
+                  Paste a GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection.
+                </p>
+                <Textarea
+                  id="boundaryData"
+                  value={boundaryForm.boundaryData}
+                  onChange={(e) => setBoundaryForm({ ...boundaryForm, boundaryData: e.target.value })}
+                  onBlur={() => setBoundaryForm((current) => ({ ...current, boundaryData: compactJson(current.boundaryData) }))}
+                  placeholder={defaultBoundaryData}
+                  rows={1}
+                  wrap="off"
+                  className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
+                />
+              </div>
+
+              <div className="flex justify-between gap-4 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditingBoundaryId(null)
+                    setIsAddBoundaryOpen(false)
+                  }}
+                  disabled={isCreatingBoundary}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={() => handleAddBoundary(false)} disabled={isCreatingBoundary}>
+                  {isCreatingBoundary ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    editingBoundaryId ? "Save Boundary" : "Create Boundary"
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-full">
             <CardHeader>
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -764,21 +810,22 @@ export function MunicipalityPage() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="h-[480px] overflow-hidden rounded-md border border-border">
+            <CardContent className="flex h-[560px] flex-col gap-4">
+              <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border">
                 <EditableGoogleMap
                   points={boundaryDraftPoints}
                   onPointsChange={setBoundaryDraftPoints}
                   shape="polygon"
-                  center={MAPUTO_CENTER}
+                  center={boundaryDraftPoints[0] ?? UGANDA_CENTER}
                   zoom={11}
                   height="100%"
                   markerColor="#5B8C5A"
                   strokeColor="#DAA22A"
                   fillColor="#5B8C5A"
+                  fitToBounds={boundaryDraftPoints.length > 0}
                 />
               </div>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid shrink-0 gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -807,67 +854,6 @@ export function MunicipalityPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">GeoJSON Data</CardTitle>
-              <CardDescription className="text-base">
-                Paste a GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                id="boundaryData"
-                value={boundaryForm.boundaryData}
-                onChange={(e) => setBoundaryForm({ ...boundaryForm, boundaryData: e.target.value })}
-                onBlur={() => setBoundaryForm((current) => ({ ...current, boundaryData: compactJson(current.boundaryData) }))}
-                placeholder={defaultBoundaryData}
-                rows={1}
-                wrap="off"
-                className="h-11 min-h-11 resize-y overflow-x-auto whitespace-nowrap font-mono text-sm"
-              />
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-between gap-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditingBoundaryId(null)
-                setIsAddBoundaryOpen(false)
-              }}
-              disabled={isCreatingBoundary}
-            >
-              Cancel
-            </Button>
-            <div className="flex gap-2">
-              {!editingBoundaryId && (
-                <Button
-                  variant="outline"
-                  onClick={() => handleAddBoundary(false)}
-                  disabled={isCreatingBoundary}
-                >
-                  {isCreatingBoundary ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    isCreatingInitialBoundary ? "Save Boundary" : "Save as Inactive"
-                  )}
-                </Button>
-              )}
-              <Button onClick={() => handleAddBoundary(!editingBoundaryId)} disabled={isCreatingBoundary}>
-                {isCreatingBoundary ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  editingBoundaryId ? "Save Boundary" : "Create & Activate"
-                )}
-              </Button>
-            </div>
-          </div>
         </div>
       </div>
     )
@@ -930,7 +916,7 @@ export function MunicipalityPage() {
                   <TableRow key={item.id}>
                     <TableCell className="text-base font-semibold">{item.name}</TableCell>
                     <TableCell className="text-base">{item.code}</TableCell>
-                    <TableCell className="text-base">{item.timezone}</TableCell>
+                    <TableCell className="text-base">{displayTimeZone()}</TableCell>
                     <TableCell>{getStatusBadge(getMunicipalityActiveStatus(item))}</TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -1010,7 +996,7 @@ export function MunicipalityPage() {
                   <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div>
                     <p className="text-sm text-muted-foreground">Timezone</p>
-                    <p className="text-base font-semibold">{municipality.timezone}</p>
+                    <p className="text-base font-semibold">{displayTimeZone()}</p>
                   </div>
                 </div>
 
@@ -1189,7 +1175,7 @@ export function MunicipalityPage() {
                 id="timezone"
                 value={municipalityForm.timezone}
                 onChange={(e) => setMunicipalityForm({ ...municipalityForm, timezone: e.target.value })}
-                placeholder="e.g., Africa/Maputo"
+                placeholder={`e.g., ${getLocalTimeZone()}`}
                 className="text-base h-11"
               />
             </div>
@@ -1258,7 +1244,7 @@ export function MunicipalityPage() {
                 id="createTimezone"
                 value={createMunicipalityForm.timezone}
                 onChange={(e) => setCreateMunicipalityForm({ ...createMunicipalityForm, timezone: e.target.value })}
-                placeholder="e.g., Africa/Maputo"
+                placeholder={`e.g., ${getLocalTimeZone()}`}
                 className="text-base h-11"
               />
             </div>
