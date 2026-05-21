@@ -30,6 +30,8 @@
     "overview": "Visao geral",
     "transactions": "Transacoes",
     "vehicles": "Veiculos",
+    "authorizations": "Autorizacoes",
+    "rolesManagement": "Gestao de Funcoes",
     "reports": "Relatorios",
     "permits": "Licencas",
     "roadClosurePermits": "Licencas de Interdicao de Estradas",

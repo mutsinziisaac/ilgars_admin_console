@@ -6,6 +6,7 @@ import {
   BarChart3, 
   ChevronDown,
   ShieldAlert,
+  UserCog,
   LogOut,
   Languages,
   Smartphone,
@@ -17,6 +18,7 @@ import { useAuth } from "react-oidc-context"
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n"
 import type { Locale } from "@/lib/i18n"
+import { useAuthorization } from "@/lib/auth/authorization"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,14 +31,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface SidebarProps {
-  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
-  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
+  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
 }
 
 type Page = SidebarProps["currentPage"]
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const auth = useAuth()
+  const { primaryRoleLabel } = useAuthorization()
   const { locale, setLocale, t } = useI18n()
   const [permitsOpen, setPermitsOpen] = useState(false)
   const [devicesOpen, setDevicesOpen] = useState(false)
@@ -70,6 +73,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { icon: LayoutDashboard, label: t("nav.overview"), page: "dashboard" as const, badge: undefined },
     { icon: Receipt, label: t("nav.transactions"), page: "transactions" as const, badge: undefined },
     { icon: Truck, label: t("nav.vehicles"), page: "vehicles" as const, badge: undefined },
+    { icon: UserCog, label: t("nav.rolesManagement"), page: "roles-management" as const, badge: undefined },
     { icon: BarChart3, label: t("nav.reports"), page: "reports" as const, badge: undefined },
   ]
 
@@ -354,7 +358,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               </div>
               <div className="flex-1 text-left">
                 <p className="text-base font-medium text-foreground">{userName}</p>
-                <p className="text-sm text-muted-foreground">{t("user.role")}</p>
+                <p className="text-sm text-muted-foreground">{primaryRoleLabel || t("user.role")}</p>
               </div>
               <ChevronDown className="h-5 w-5 text-foreground" />
             </button>

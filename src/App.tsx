@@ -23,8 +23,11 @@ import { GeofencingZonesPage } from "@/pages/geofencing-zones"
 import { VehicleClassificationPage } from "@/pages/vehicle-classification"
 import { WeightCategoriesPage } from "@/pages/weight-categories"
 import { TimeWindowsPage } from "@/pages/time-windows"
+import { RolesManagementPage } from "@/pages/roles-management"
 import { Toaster } from "@/components/ui/sonner"
 import { useI18n } from "@/lib/i18n"
+
+type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
 
 // Callback handler component for Keycloak redirect
 function AuthCallback() {
@@ -70,7 +73,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Main App Component
 function AppContent() {
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows">("dashboard")
+  const [currentPage, setCurrentPage] = useState<AppPage>("dashboard")
 
   const renderPage = () => {
     switch (currentPage) {
@@ -82,6 +85,8 @@ function AppContent() {
         return <RoadClosurePermitsContent />
       case "heavy-truck-permits":
         return <AuthorizationsPage />
+      case "roles-management":
+        return <RolesManagementPage />
       case "alerts":
         return <AlertsPage />
       case "enforcement":

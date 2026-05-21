@@ -3,10 +3,12 @@ import { Sidebar } from "./sidebar"
 import { Header } from "./header"
 import { PageLocalizer } from "./page-localizer"
 
+type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+
 interface LayoutProps {
   children: ReactNode
-  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
-  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
+  currentPage: AppPage
+  onNavigate: (page: AppPage) => void
 }
 
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {

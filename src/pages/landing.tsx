@@ -30,7 +30,10 @@ export function LandingPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[url('/maputo-municipality.jpg')] bg-cover bg-center">
+    <div
+      className="relative flex min-h-screen flex-col overflow-hidden bg-cover bg-center"
+      style={{ backgroundImage: "url('/Municipal_Maputo_(22096153185).jpg')" }}
+    >
       <div className="absolute inset-0 bg-gradient-to-l from-black/75 via-black/35 to-black/10" />
       {/* Header */}
       <header className="relative z-10 border-b border-border bg-white">

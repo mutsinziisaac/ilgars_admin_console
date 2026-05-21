@@ -30,6 +30,8 @@
     "overview": "Overview",
     "transactions": "Transactions",
     "vehicles": "Vehicles",
+    "authorizations": "Authorizations",
+    "rolesManagement": "Roles Management",
     "reports": "Reports",
     "permits": "Permits",
     "roadClosurePermits": "Road Closure Permits",

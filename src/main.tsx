@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { userManager } from "@/lib/userManager"
 import { queryClient } from "@/lib/queryClient"
 import { I18nProvider } from "@/lib/i18n"
+import { AuthorizationProvider } from "@/lib/auth/authorization"
 
 import "./index.css"
 import App from "./App.tsx"
@@ -16,7 +17,9 @@ createRoot(document.getElementById("root")!).render(
       <QueryClientProvider client={queryClient}>
         <I18nProvider>
           <ThemeProvider>
-            <App />
+            <AuthorizationProvider>
+              <App />
+            </AuthorizationProvider>
           </ThemeProvider>
         </I18nProvider>
       </QueryClientProvider>
