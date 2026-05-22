@@ -27,7 +27,7 @@ import { RolesManagementPage } from "@/pages/roles-management"
 import { Toaster } from "@/components/ui/sonner"
 import { useI18n } from "@/lib/i18n"
 
-type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
 
 // Callback handler component for Keycloak redirect
 function AuthCallback() {
@@ -85,8 +85,13 @@ function AppContent() {
         return <RoadClosurePermitsContent />
       case "heavy-truck-permits":
         return <AuthorizationsPage />
+      case "manage-staff":
       case "roles-management":
-        return <RolesManagementPage />
+        return <RolesManagementPage view="staff" onManageRoles={() => setCurrentPage("manage-roles")} />
+      case "manage-roles":
+        return <RolesManagementPage view="roles" onCreateRole={() => setCurrentPage("create-role")} />
+      case "create-role":
+        return <RolesManagementPage view="create-role" onManageRoles={() => setCurrentPage("manage-roles")} />
       case "alerts":
         return <AlertsPage />
       case "enforcement":

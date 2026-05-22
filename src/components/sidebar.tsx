@@ -31,8 +31,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface SidebarProps {
-  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
-  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
+  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
 }
 
 type Page = SidebarProps["currentPage"]
@@ -44,6 +44,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const [permitsOpen, setPermitsOpen] = useState(false)
   const [devicesOpen, setDevicesOpen] = useState(false)
   const [violationsOpen, setViolationsOpen] = useState(false)
+  const [staffRolesOpen, setStaffRolesOpen] = useState(false)
   const [configurationsOpen, setConfigurationsOpen] = useState(false)
   
   const handleLogout = () => {
@@ -58,6 +59,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     setPermitsOpen(false)
     setDevicesOpen(false)
     setViolationsOpen(false)
+    setStaffRolesOpen(false)
     setConfigurationsOpen(false)
   }
 
@@ -73,7 +75,6 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { icon: LayoutDashboard, label: t("nav.overview"), page: "dashboard" as const, badge: undefined },
     { icon: Receipt, label: t("nav.transactions"), page: "transactions" as const, badge: undefined },
     { icon: Truck, label: t("nav.vehicles"), page: "vehicles" as const, badge: undefined },
-    { icon: UserCog, label: t("nav.rolesManagement"), page: "roles-management" as const, badge: undefined },
     { icon: BarChart3, label: t("nav.reports"), page: "reports" as const, badge: undefined },
   ]
 
@@ -92,6 +93,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { label: t("nav.enforcement"), page: "enforcement" as const, badge: 12 },
   ]
 
+  const staffRolesSubItems = [
+    { label: t("nav.manageStaff"), page: "manage-staff" as const },
+    { label: t("nav.manageRoles"), page: "manage-roles" as const },
+  ]
+
   const configurationsSubItems = [
     { label: t("nav.municipality"), page: "municipality" as const },
     { label: t("nav.routes"), page: "routes" as const },
@@ -100,15 +106,20 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { label: t("nav.roadClosureRates"), page: "road-closure-rates" as const },
     { label: t("nav.finesConfiguration"), page: "fines-configuration" as const },
     { label: t("nav.geofencingZones"), page: "geofencing-zones" as const },
+    { label: t("nav.vehicleClassification"), page: "vehicle-classification" as const },
+    { label: t("nav.weightCategories"), page: "weight-categories" as const },
+    { label: t("nav.timeWindows"), page: "time-windows" as const },
   ]
 
   const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "heavy-truck-permits"
   const isDevicesActive = currentPage === "gps-tracking" || currentPage === "cameras"
   const isViolationsActive = currentPage === "alerts" || currentPage === "enforcement"
+  const isStaffRolesActive = currentPage === "manage-staff" || currentPage === "manage-roles" || currentPage === "create-role" || currentPage === "roles-management"
   const isConfigurationsActive = currentPage === "municipality" || currentPage === "tariff-plans" || currentPage === "ruc-policy" || currentPage === "routes" || currentPage === "road-closure-rates" || currentPage === "fines-configuration" || currentPage === "geofencing-zones" || currentPage === "vehicle-classification" || currentPage === "weight-categories" || currentPage === "time-windows"
   const showPermits = permitsOpen || isPermitsActive
   const showDevices = devicesOpen || isDevicesActive
   const showViolations = violationsOpen || isViolationsActive
+  const showStaffRoles = staffRolesOpen || isStaffRolesActive
   const showConfigurations = configurationsOpen || isConfigurationsActive
 
   return (
@@ -162,6 +173,48 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             </button>
           )
         })}
+
+        {/* Staff & Roles Dropdown */}
+        <div>
+          <button
+            onClick={() => setStaffRolesOpen(!staffRolesOpen)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
+              isStaffRolesActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            )}
+          >
+            <UserCog className="h-5 w-5" />
+            <span className="flex-1 text-left">{t("nav.staffRoles")}</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showStaffRoles && "rotate-180")} />
+          </button>
+
+          {showStaffRoles && (
+            <div className="mt-1 space-y-1 pl-8">
+              {staffRolesSubItems.map((subItem) => {
+                const isActive =
+                  subItem.page === currentPage ||
+                  (subItem.page === "manage-staff" && currentPage === "roles-management") ||
+                  (subItem.page === "manage-roles" && currentPage === "create-role")
+                return (
+                  <button
+                    key={subItem.label}
+                    onClick={() => handleNavigate(subItem.page)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <span className="flex-1 text-left">{subItem.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Permits Dropdown */}
         <div>
