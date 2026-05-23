@@ -21,7 +21,7 @@ export function ConfigsPage() {
   })
 
   // Notification Settings
-  const [notificationSettings, setNotificationSettings] = useState({
+  const [notificationSettings] = useState({
     emailNotifications: true,
     smsNotifications: false,
     overduePaymentAlerts: true,

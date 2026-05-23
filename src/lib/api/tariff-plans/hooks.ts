@@ -8,7 +8,6 @@ import type {
   TariffPlanDetailResponse,
   CreateTariffPlanRequest,
   UpdateTariffPlanRequest,
-  TariffPlan,
 } from "./schemas"
 import { tariffPlansKeys } from "./queryKeys"
 import { createCrudHooks, createMutationHook } from "@/lib/api/queryHooks"

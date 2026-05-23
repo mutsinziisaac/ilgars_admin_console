@@ -1,20 +1,52 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, FileText, Clock, CheckCircle2, XCircle, Eye, Upload, Download } from "lucide-react"
+import { ArrowLeft, FileText, Clock, CheckCircle2, XCircle, Eye, Download } from "lucide-react"
 import { toast } from "sonner"
 
+type EscortUnit = {
+  id: string
+  callSign: string
+  officer: string
+  vehicle: string
+  zone: string
+  status: "AVAILABLE" | "ON_DUTY"
+}
+
+type Authorization = {
+  id: number
+  authorizationType: string
+  vehiclePlate: string
+  vehicleClass: string
+  axleCount: number
+  grossWeight: number
+  applicantName: string
+  applicantContact: string
+  submittedDate: string
+  status: string
+  validFrom: string
+  validTo: string
+  approvedBy: string
+  approvedDate: string
+  documents: string[]
+  travelReason?: string
+  travelStartDate?: string
+  travelEndDate?: string
+  justification?: string
+  escortRequired?: boolean
+  escortAssigned?: boolean
+  rejectionReason?: string
+  assignedEscorts?: EscortUnit[]
+}
+
 // Mock authorization data
-const mockAuthorizations = [
+const mockAuthorizations: Authorization[] = [
   // PENDING (4 entries)
   {
     id: 1,
@@ -242,21 +274,6 @@ const mockAuthorizations = [
     documents: ["livrete.pdf", "title.pdf"]
   },
 ]
-
-type EscortUnit = {
-  id: string
-  callSign: string
-  officer: string
-  vehicle: string
-  zone: string
-  status: "AVAILABLE" | "ON_DUTY"
-}
-
-type Authorization = (typeof mockAuthorizations)[number] & {
-  escortRequired?: boolean
-  escortAssigned?: boolean
-  assignedEscorts?: EscortUnit[]
-}
 
 const escortUnits: EscortUnit[] = [
   {

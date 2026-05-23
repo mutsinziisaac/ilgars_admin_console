@@ -6,218 +6,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DollarSign, Plus, TrendingUp, Calendar, AlertCircle, Pencil, Trash2 } from "lucide-react"
+import { Plus, AlertCircle, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { TariffPlansApi, RoadClosureRatesApi, getApiErrorMessage } from "@/lib/api"
-import type { TariffPlan, RoadClosureRate } from "@/lib/api"
 import { queryClient } from "@/lib/queryClient"
 
-// Mock tariff data - Per Hour rates by Purpose, Road Type, and Closure Type
-const mockRoadClosureTariffs = [
-  {
-    id: 1,
-    purpose: "Construction Works",
-    closureType: "Full Road Closure",
-    protocolRoads: 50000,
-    secondaryRoads: 30000,
-    tertiaryRoads: 15000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 2,
-    purpose: "Construction Works",
-    closureType: "Partial Road Closure",
-    protocolRoads: 10000,
-    secondaryRoads: 5000,
-    tertiaryRoads: 3500,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 3,
-    purpose: "Filming",
-    closureType: "Full Road Closure",
-    protocolRoads: 50000,
-    secondaryRoads: 30000,
-    tertiaryRoads: 20000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 4,
-    purpose: "Filming",
-    closureType: "Partial Road Closure",
-    protocolRoads: 40000,
-    secondaryRoads: 30000,
-    tertiaryRoads: 20000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 5,
-    purpose: "Sporting Events",
-    closureType: "Full Road Closure",
-    protocolRoads: 10000,
-    secondaryRoads: 5000,
-    tertiaryRoads: 3500,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 6,
-    purpose: "Sporting Events",
-    closureType: "Partial Road Closure",
-    protocolRoads: 5000,
-    secondaryRoads: 3500,
-    tertiaryRoads: 1800,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 7,
-    purpose: "Fairs",
-    closureType: "Full Road Closure",
-    protocolRoads: 2000,
-    secondaryRoads: 1000,
-    tertiaryRoads: 0,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 8,
-    purpose: "Fairs",
-    closureType: "Partial Road Closure",
-    protocolRoads: 2000,
-    secondaryRoads: 1000,
-    tertiaryRoads: 0,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 9,
-    purpose: "For-Profit Events",
-    closureType: "Full Road Closure",
-    protocolRoads: 40000,
-    secondaryRoads: 20000,
-    tertiaryRoads: 10000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 10,
-    purpose: "For-Profit Events",
-    closureType: "Partial Road Closure",
-    protocolRoads: 20000,
-    secondaryRoads: 10000,
-    tertiaryRoads: 5000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-]
-
-// Mock circulation fees data - Weight-based charges for heavy vehicles
-const mockCirculationFees = [
-  {
-    id: 1,
-    activity: "Monthly authorisation for agricultural transit",
-    weightRange: "N/A",
-    dailyFee: 1000,
-    monthlyFee: null,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 2,
-    activity: "Circulation — cargo trucks",
-    weightRange: "8,000–16,000 kg",
-    dailyFee: 1000,
-    monthlyFee: null,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 3,
-    activity: "Circulation — cargo trucks",
-    weightRange: "16,001–25,000 kg",
-    dailyFee: 2000,
-    monthlyFee: 20000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 4,
-    activity: "Circulation — cargo trucks",
-    weightRange: "25,001–38,000 kg",
-    dailyFee: 3000,
-    monthlyFee: 20000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 5,
-    activity: "Circulation — cargo trucks",
-    weightRange: "38,001–48,000 kg",
-    dailyFee: 4000,
-    monthlyFee: 20000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 6,
-    activity: "Circulation — cargo trucks",
-    weightRange: "above 48,001 kg",
-    dailyFee: 5000,
-    monthlyFee: 20000,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 7,
-    activity: "Daily authorisation for non-authorised roads",
-    weightRange: "N/A",
-    dailyFee: 1000,
-    monthlyFee: null,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  },
-  {
-    id: 8,
-    activity: "Special circulation licence",
-    weightRange: "N/A",
-    dailyFee: 20000,
-    monthlyFee: null,
-    status: "Active",
-    effectiveDate: "2026-01-01",
-    lastUpdated: "2026-01-01"
-  }
-]
-
-export function TariffsPage(): JSX.Element {
+export function TariffsPage() {
   const [tariffType, setTariffType] = useState<"road-closure" | "circulation">("road-closure")
   const [selectedTariff, setSelectedTariff] = useState<any>(null)
   const [selectedCirculationFee, setSelectedCirculationFee] = useState<any>(null)
@@ -237,7 +37,7 @@ export function TariffsPage(): JSX.Element {
     queryKey: ["road-closure-rates", { page: currentPage, pageSize: itemsPerPage }],
     queryFn: ({ signal }) =>
       RoadClosureRatesApi.listRoadClosureRates(
-        { page: currentPage, pageSize: itemsPerPage, status: "ACTIVE" },
+        { page: currentPage, pageSize: itemsPerPage, status: "active" } as any,
         signal
       ),
     enabled: tariffType === "road-closure",
@@ -245,15 +45,15 @@ export function TariffsPage(): JSX.Element {
   })
 
   // Fetch Circulation Fees (Tariff Plans)
-  const { 
-    data: circulationData, 
+  const {
+    data: circulationData,
     isLoading: isLoadingCirculation,
-    error: circulationError 
+    error: circulationError
   } = useQuery({
     queryKey: ["tariff-plans", { page: currentPage, pageSize: itemsPerPage, type: "CIRCULATION" }],
     queryFn: ({ signal }) =>
       TariffPlansApi.listTariffPlans(
-        { page: currentPage, pageSize: itemsPerPage, type: "CIRCULATION", status: "ACTIVE" },
+        { page: currentPage, pageSize: itemsPerPage, type: "CIRCULATION", status: "active" } as any,
         signal
       ),
     enabled: tariffType === "circulation",
@@ -368,7 +168,7 @@ export function TariffsPage(): JSX.Element {
       duration: formData.closureType,
       rate: parseFloat(formData.rate),
       currency: "MZN",
-    })
+    } as any)
   }
 
   // Handle add circulation fee
@@ -387,7 +187,7 @@ export function TariffsPage(): JSX.Element {
       monthlyRate: circulationFormData.monthlyFee ? parseFloat(circulationFormData.monthlyFee) : undefined,
       currency: "MZN",
       effectiveFrom: circulationFormData.effectiveDate || undefined,
-    })
+    } as any)
   }
 
   // Handle edit road closure tariff
@@ -489,7 +289,7 @@ export function TariffsPage(): JSX.Element {
           Tariff Type:
         </Label>
         <Select value={tariffType} onValueChange={(value) => {
-          setTariffType(value)
+          setTariffType(value as "road-closure" | "circulation")
           setCurrentPage(1)
         }}>
           <SelectTrigger id="tariff-type" className="w-[250px] text-base h-11">
@@ -524,8 +324,8 @@ export function TariffsPage(): JSX.Element {
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Highest Rate</CardDescription>
                 <CardTitle className="text-4xl">
-                  {roadClosureRates.length > 0 
-                    ? Math.max(...roadClosureRates.map(t => t.rate)).toLocaleString()
+                  {roadClosureRates.length > 0
+                    ? Math.max(...roadClosureRates.map((t: any) => t.rate)).toLocaleString()
                     : "0"}
                 </CardTitle>
               </CardHeader>
@@ -538,8 +338,8 @@ export function TariffsPage(): JSX.Element {
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Lowest Rate</CardDescription>
                 <CardTitle className="text-4xl">
-                  {roadClosureRates.length > 0 
-                    ? Math.min(...roadClosureRates.map(t => t.rate)).toLocaleString()
+                  {roadClosureRates.length > 0
+                    ? Math.min(...roadClosureRates.map((t: any) => t.rate)).toLocaleString()
                     : "0"}
                 </CardTitle>
               </CardHeader>
@@ -554,8 +354,8 @@ export function TariffsPage(): JSX.Element {
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Highest Daily Fee</CardDescription>
                 <CardTitle className="text-4xl">
-                  {circulationFees.length > 0 
-                    ? Math.max(...circulationFees.filter(f => f.dailyRate).map(f => f.dailyRate!)).toLocaleString()
+                  {circulationFees.length > 0
+                    ? Math.max(...circulationFees.filter((f: any) => f.dailyRate).map((f: any) => f.dailyRate!)).toLocaleString()
                     : "0"}
                 </CardTitle>
               </CardHeader>
@@ -568,8 +368,8 @@ export function TariffsPage(): JSX.Element {
               <CardHeader className="pb-3">
                 <CardDescription className="text-base">Monthly Fee Range</CardDescription>
                 <CardTitle className="text-4xl">
-                  {circulationFees.length > 0 && circulationFees.some(f => f.monthlyRate)
-                    ? Math.max(...circulationFees.filter(f => f.monthlyRate).map(f => f.monthlyRate!)).toLocaleString()
+                  {circulationFees.length > 0 && circulationFees.some((f: any) => f.monthlyRate)
+                    ? Math.max(...circulationFees.filter((f: any) => f.monthlyRate).map((f: any) => f.monthlyRate!)).toLocaleString()
                     : "0"}
                 </CardTitle>
               </CardHeader>

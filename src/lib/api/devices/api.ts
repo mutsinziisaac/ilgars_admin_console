@@ -41,7 +41,7 @@ export const DevicesApi = {
       method: "POST",
       url: "/v1/devices",
       data: { data: payload },
-      schema: DeviceResponseSchema,
+      schema: DeviceResponseSchema as never,
     }),
 
   /**

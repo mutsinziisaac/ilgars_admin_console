@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from "@/components/ui/modal"
-import { Clock, Edit, Plus, Trash2, CheckCircle, XCircle } from "lucide-react"
+import { Edit, Plus, Trash2, CheckCircle, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 // Mock time windows data
