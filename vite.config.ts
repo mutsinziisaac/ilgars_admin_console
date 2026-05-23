@@ -16,6 +16,12 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // Proxy API requests to avoid CORS issues in development
+      '/auth': {
+        target: 'https://auth-rtms.ayinza.dev',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/auth/, ''),
+        secure: false,
+      },
       '/api/core': {
         target: 'https://ilgars.ayinza.dev',
         changeOrigin: true,

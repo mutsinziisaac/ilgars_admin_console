@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/auth/:path*", "destination": "https://auth-rtms.ayinza.dev/:path*" },
+    { "source": "/api/core/:path*", "destination": "https://ilgars.ayinza.dev/core/api/:path*" },
+    { "source": "/api/motorvehicle/:path*", "destination": "https://ilgars.ayinza.dev/motorvehicle/api/:path*" },
+    { "source": "/api/devices/:path*", "destination": "https://ilgars.ayinza.dev/devices/api/:path*" }
+  ]
+}

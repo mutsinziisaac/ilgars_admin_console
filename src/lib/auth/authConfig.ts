@@ -39,6 +39,10 @@ const storage = isBrowser ? window.sessionStorage : createMemoryStorage();
 
 const KEYCLOAK_URL =
   import.meta.env.VITE_KEYCLOAK_URL ?? "https://auth-rtms.ayinza.dev";
+// Same-origin proxy base for fetch endpoints to avoid CORS. The vite dev
+// server and Vercel both rewrite this prefix to KEYCLOAK_URL.
+const KEYCLOAK_PROXY_BASE =
+  import.meta.env.VITE_KEYCLOAK_PROXY_BASE ?? "/auth";
 const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM ?? "ilgars";
 const KEYCLOAK_CLIENT_ID =
   import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "ilgars-ui";
@@ -48,6 +52,7 @@ const POST_LOGOUT_REDIRECT_URI =
   import.meta.env.VITE_KEYCLOAK_POST_LOGOUT_REDIRECT_URI ?? getDefaultOrigin();
 
 export function getAuthConfig() {
+  const realmPath = `/realms/${KEYCLOAK_REALM}/protocol/openid-connect`;
   const config = {
     authority: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
     client_id: KEYCLOAK_CLIENT_ID,
@@ -61,12 +66,15 @@ export function getAuthConfig() {
     loadUserInfo: true,
     includeIdTokenInSilentRenew: true,
     metadata: {
+      // issuer must match the `iss` claim Keycloak signs into tokens
       issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
-      authorization_endpoint: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
-      token_endpoint: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
-      userinfo_endpoint: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
-      end_session_endpoint: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/logout`,
-      jwks_uri: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+      // Browser navigations — no CORS, hit Keycloak directly
+      authorization_endpoint: `${KEYCLOAK_URL}${realmPath}/auth`,
+      end_session_endpoint: `${KEYCLOAK_URL}${realmPath}/logout`,
+      // fetch() calls — must be same-origin to bypass CORS
+      token_endpoint: `${KEYCLOAK_PROXY_BASE}${realmPath}/token`,
+      userinfo_endpoint: `${KEYCLOAK_PROXY_BASE}${realmPath}/userinfo`,
+      jwks_uri: `${KEYCLOAK_PROXY_BASE}${realmPath}/certs`,
     },
   };
 
