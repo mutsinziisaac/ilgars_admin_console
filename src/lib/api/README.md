@@ -88,10 +88,12 @@ const newRate = await RoadClosureRatesApi.createRoadClosureRate({
 
 ```typescript
 import { RoadClosurePermitsApi } from "@/lib/api";
+import { DEFAULT_MUNICIPALITY_ID } from "@/lib/api/constants";
 
 // List permits
 const permits = await RoadClosurePermitsApi.listRoadClosurePermits({
-  status: "PENDING",
+  municipalityId: DEFAULT_MUNICIPALITY_ID,
+  status: "PENDING_ADMIN_APPROVAL",
   page: 1,
   pageSize: 20,
 });

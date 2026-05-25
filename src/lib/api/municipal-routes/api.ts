@@ -35,6 +35,18 @@ export const MunicipalRoutesApi = {
     }),
 
   /**
+   * Get municipal route details
+   * GET /v1/municipal-routes/{routeId}
+   */
+  getMunicipalRoute: (routeId: string, signal?: AbortSignal) =>
+    coreRequest<MunicipalRouteDetailResponse>({
+      method: "GET",
+      url: `/v1/municipal-routes/${encodeURIComponent(routeId)}`,
+      signal,
+      schema: MunicipalRouteDetailResponseSchema,
+    }),
+
+  /**
    * Create municipal route
    * POST /v1/municipal-routes
    */

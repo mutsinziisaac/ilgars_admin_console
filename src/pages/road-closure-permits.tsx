@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "react"
+﻿import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,32 +7,33 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody } from "@/components/ui/modal"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, FileText, Search, Eye, CheckCircle, XCircle, Clock, Receipt, MapPin, AlertTriangle, Shield, Calendar } from "lucide-react"
+import { ArrowLeft, FileText, Search, Eye, CheckCircle, XCircle, Clock, Receipt, MapPin, Calendar } from "lucide-react"
 import { toast } from "sonner"
-import { Map } from "@/components/ui/map"
-import { RoadClosurePermitsApi, getApiErrorMessage, type RoadClosurePermit } from "@/lib/api"
+import { Map, type LatLngTuple } from "@/components/ui/map"
+import {
+  ApiError,
+  MunicipalRoutesApi,
+  RoadClosurePermitsApi,
+  getApiErrorMessage,
+  type RoadClosurePermit,
+  type RoadClosurePermitListResponse,
+} from "@/lib/api"
+import {
+  removeRoadClosurePermitFromListResponse,
+  roadClosurePermitKeys,
+  usePendingRoadClosurePermits,
+} from "@/lib/api/permits/hooks"
+import { useAuthorization } from "@/lib/auth/authorization"
 import { userManager } from "@/lib/userManager"
-import { getStoredMunicipalityId } from "@/lib/municipality-registry"
-import { UGANDA_CENTER } from "@/lib/map-region"
-
-const TARIFFS: Record<string, Record<string, number>> = {
-  "Construction Works": { "Protocol Roads": 10000, "Secondary Roads": 5000,  "Tertiary Roads": 3500  },
-  "Filming":            { "Protocol Roads": 40000, "Secondary Roads": 30000, "Tertiary Roads": 20000 },
-  "Sporting Events":    { "Protocol Roads": 5000,  "Secondary Roads": 3500,  "Tertiary Roads": 1800  },
-  "Fairs":              { "Protocol Roads": 2000,  "Secondary Roads": 1000,  "Tertiary Roads": 0     },
-  "For-Profit Events":  { "Protocol Roads": 20000, "Secondary Roads": 10000, "Tertiary Roads": 5000  },
-}
-
-const PURPOSES = Object.keys(TARIFFS)
-const ROAD_TYPES = ["Protocol Roads", "Secondary Roads", "Tertiary Roads"]
 
 interface Permit {
   id: string
+  approvalId: string
+  routeId?: string
   applicant: string
   contactEmail: string
   contactPhone: string
@@ -47,24 +49,70 @@ interface Permit {
   paymentDeadline: string
   rejectionReason?: string
   notes?: string
+  routePoints?: LatLngTuple[]
 }
 
-const mockPermits: Permit[] = [
-  { id: "PRM-2026-001", applicant: "Maputo Film Productions", contactEmail: "info@maputofilm.co.mz", contactPhone: "+258 84 111 2222", purpose: "Filming", roadType: "Protocol Roads", location: "Av. Julius Nyerere, between Rua da Imprensa and Rua dos Desportistas", hours: 3, hourlyRate: 40000, totalFee: 120000, status: "Awaiting Admin Approval", submittedDate: "2026-05-01", eventDate: "2026-05-15", paymentDeadline: "2026-05-10", notes: "Feature film production. Road closure 06:00-09:00." },
-  { id: "PRM-2026-002", applicant: "Construtora Nacional Lda", contactEmail: "obras@construtora.co.mz", contactPhone: "+258 82 333 4444", purpose: "Construction Works", roadType: "Secondary Roads", location: "Av. 25 de Setembro, near Praca dos Trabalhadores", hours: 8, hourlyRate: 5000, totalFee: 40000, status: "Approved", submittedDate: "2026-04-20", eventDate: "2026-05-05", paymentDeadline: "2026-04-30", notes: "Water pipe replacement works." },
-  { id: "PRM-2026-003", applicant: "Maputo Sports Federation", contactEmail: "events@maputo-sports.co.mz", contactPhone: "+258 86 555 6666", purpose: "Sporting Events", roadType: "Protocol Roads", location: "Marginal Avenue, full stretch", hours: 5, hourlyRate: 5000, totalFee: 25000, status: "Approved", submittedDate: "2026-04-25", eventDate: "2026-05-10", paymentDeadline: "2026-05-05" },
-  { id: "PRM-2026-004", applicant: "Feira de Maputo Org.", contactEmail: "feira@maputo.co.mz", contactPhone: "+258 84 777 8888", purpose: "Fairs", roadType: "Secondary Roads", location: "Av. Eduardo Mondlane, block between Rua 1389 and Rua Consiglieri Pedroso", hours: 12, hourlyRate: 1000, totalFee: 12000, status: "Awaiting Admin Approval", submittedDate: "2026-05-03", eventDate: "2026-05-20", paymentDeadline: "2026-05-13", notes: "Annual trade fair. Partial road closure required." },
-  { id: "PRM-2026-005", applicant: "Sunset Events Lda", contactEmail: "hello@sunsetevents.co.mz", contactPhone: "+258 82 999 0000", purpose: "For-Profit Events", roadType: "Tertiary Roads", location: "Rua da Mesquita, Sommerschield", hours: 6, hourlyRate: 5000, totalFee: 30000, status: "Rejected", submittedDate: "2026-04-28", eventDate: "2026-05-08", paymentDeadline: "2026-05-03", rejectionReason: "Incomplete documentation. Missing municipal approval letter." },
-  { id: "PRM-2026-006", applicant: "TeleMaputo Broadcasting", contactEmail: "producao@telemaputo.co.mz", contactPhone: "+258 84 123 9876", purpose: "Filming", roadType: "Secondary Roads", location: "Av. Samora Machel, central section", hours: 4, hourlyRate: 30000, totalFee: 120000, status: "Awaiting Admin Approval", submittedDate: "2026-05-04", eventDate: "2026-05-18", paymentDeadline: "2026-05-14", notes: "TV commercial shoot. Night filming 22:00-02:00." },
-  { id: "PRM-2026-007", applicant: "Maputo Marathon Committee", contactEmail: "marathon@maputo.gov.mz", contactPhone: "+258 86 321 6543", purpose: "Sporting Events", roadType: "Protocol Roads", location: "City centre circuit - Av. Julius Nyerere, Marginal, Av. Acordos de Lusaka", hours: 6, hourlyRate: 5000, totalFee: 30000, status: "Approved", submittedDate: "2026-04-15", eventDate: "2026-05-25", paymentDeadline: "2026-04-25" },
-  { id: "PRM-2026-008", applicant: "Infraestrutura Mocambique EP", contactEmail: "projetos@infra.gov.mz", contactPhone: "+258 82 456 7890", purpose: "Construction Works", roadType: "Tertiary Roads", location: "Rua dos Desportistas, Polana", hours: 10, hourlyRate: 3500, totalFee: 35000, status: "Awaiting Admin Approval", submittedDate: "2026-05-05", eventDate: "2026-05-22", paymentDeadline: "2026-05-15", notes: "Fibre optic cable installation." },
-]
+const getLineCoordinates = (value: unknown): unknown[] | null => {
+  if (!value || typeof value !== "object") return null
+
+  const record = value as Record<string, unknown>
+  if (record.type === "Feature") return getLineCoordinates(record.geometry)
+
+  if (record.type === "FeatureCollection" && Array.isArray(record.features)) {
+    const lineFeature = record.features
+      .map((feature) => getLineCoordinates(feature))
+      .find((coordinates): coordinates is unknown[] => Boolean(coordinates))
+    return lineFeature ?? null
+  }
+
+  if (record.type === "LineString" && Array.isArray(record.coordinates)) return record.coordinates
+
+  if (record.type === "MultiLineString" && Array.isArray(record.coordinates)) {
+    const [firstLine] = record.coordinates
+    return Array.isArray(firstLine) ? firstLine : null
+  }
+
+  return null
+}
+
+const extractLineLatLngs = (geoJson: unknown): LatLngTuple[] => {
+  if (!geoJson) return []
+
+  try {
+    const parsedGeoJson = typeof geoJson === "string" ? JSON.parse(geoJson) : geoJson
+    const coordinates = getLineCoordinates(parsedGeoJson)
+    if (!coordinates) return []
+
+    return coordinates
+      .map((coordinate) => {
+        if (!Array.isArray(coordinate) || coordinate.length < 2) return null
+        const [lng, lat] = coordinate
+        if (typeof lat !== "number" || typeof lng !== "number") return null
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+        return [lat, lng] as LatLngTuple
+      })
+      .filter((point): point is LatLngTuple => Boolean(point))
+  } catch {
+    return []
+  }
+}
 
 const normalizePermitStatus = (status: string): Permit["status"] => {
   const normalized = status.toUpperCase()
   if (normalized === "APPROVED") return "Approved"
   if (normalized === "REJECTED") return "Rejected"
   return "Awaiting Admin Approval"
+}
+
+const isApprovedPermitStatus = (status: string) => normalizePermitStatus(status) === "Approved"
+const isRejectedPermitStatus = (status: string) => normalizePermitStatus(status) === "Rejected"
+
+const getPermitDecisionErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof ApiError && error.status === 403) {
+    return "Your account is authenticated, but it is not authorized to approve or reject road closure permits."
+  }
+
+  return getApiErrorMessage(error, fallback)
 }
 
 const calculateHours = (startAt: string, endAt: string) => {
@@ -75,8 +123,17 @@ const calculateHours = (startAt: string, endAt: string) => {
   return Math.max(1, Math.ceil((end - start) / 3600000))
 }
 
+const firstString = (...values: unknown[]) =>
+  values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim()
+
 const toPermitRow = (permit: RoadClosurePermit): Permit => {
   const extra = permit as RoadClosurePermit & {
+    approvalId?: string | null
+    roadClosurePermitId?: string | null
+    roadClosurePermitRequestId?: string | null
+    permitId?: string | null
+    requestId?: string | null
+    applicationId?: string | null
     applicantEmail?: string | null
     roadType?: string | null
     location?: string | null
@@ -85,12 +142,41 @@ const toPermitRow = (permit: RoadClosurePermit): Permit => {
     totalFee?: number | null
     rejectionReason?: string | null
     notes?: string | null
+    geoJson?: unknown
+    routeGeoJson?: unknown
+    requestedRouteGeoJson?: unknown
+    geometry?: unknown
+    route?: {
+      geoJson?: unknown
+      geometry?: unknown
+      name?: string | null
+    } | null
   }
   const hours = calculateHours(permit.requestedStartAt, permit.requestedEndAt)
   const hourlyRate = extra.hourlyRate ?? 0
+  const routePoints = extractLineLatLngs(
+    extra.route?.geoJson ??
+      extra.route?.geometry ??
+      extra.routeGeoJson ??
+      extra.requestedRouteGeoJson ??
+      extra.geoJson ??
+      extra.geometry,
+  )
+  const approvalId =
+    firstString(
+      extra.approvalId,
+      extra.roadClosurePermitId,
+      extra.roadClosurePermitRequestId,
+      extra.permitId,
+      extra.requestId,
+      extra.applicationId,
+      permit.id,
+    ) ?? permit.id
 
   return {
     id: permit.id,
+    approvalId,
+    routeId: permit.routeId ?? undefined,
     applicant: permit.applicantName,
     contactEmail: extra.applicantEmail ?? "",
     contactPhone: permit.applicantPhone ?? "",
@@ -106,59 +192,15 @@ const toPermitRow = (permit: RoadClosurePermit): Permit => {
     paymentDeadline: permit.approvedAt?.split("T")[0] ?? "N/A",
     rejectionReason: extra.rejectionReason ?? undefined,
     notes: extra.notes ?? permit.conditions ?? undefined,
+    routePoints,
   }
 }
 
-const MOCK_BOOKED_ROUTES: Array<{
-  name: string
-  route: Array<[number, number]>
-  center: [number, number]
-  checkpoints: string[]
-}> = [
-  {
-    name: "Kampala Road booked closure",
-    center: [0.3182, 32.5779],
-    route: [
-      [0.3136, 32.5811],
-      [0.3160, 32.5800],
-      [0.3182, 32.5779],
-      [0.3204, 32.5764],
-      [0.3228, 32.5750],
-    ],
-    checkpoints: ["Kampala Road", "Bombo Road junction", "Nakasero"],
-  },
-  {
-    name: "Entebbe Road service corridor",
-    center: [0.2607, 32.5504],
-    route: [
-      [0.2500, 32.5452],
-      [0.2552, 32.5480],
-      [0.2607, 32.5504],
-      [0.2665, 32.5533],
-    ],
-    checkpoints: ["Kajansi approach", "Entebbe Road", "Clock Tower approach"],
-  },
-  {
-    name: "Jinja Road event loop",
-    center: [0.3316, 32.6163],
-    route: [
-      [0.3258, 32.6034],
-      [0.3292, 32.6101],
-      [0.3316, 32.6163],
-      [0.3348, 32.6230],
-    ],
-    checkpoints: ["Nakawa", "Jinja Road", "Event finish zone"],
-  },
-]
-
-const getMockBookedRoute = (permitId: string) => {
-  const index = permitId.split("").reduce((total, char) => total + char.charCodeAt(0), 0) % MOCK_BOOKED_ROUTES.length
-  return MOCK_BOOKED_ROUTES[index]
-}
-
 export function RoadClosurePermitsContent() {
-  const [permits, setPermits] = useState<Permit[]>(mockPermits)
-  const [isLoading, setIsLoading] = useState(false)
+  const queryClient = useQueryClient()
+  const { hasPermission } = useAuthorization()
+  const canApprovePermits = hasPermission("permits:approve")
+  const pendingPermitsQuery = usePendingRoadClosurePermits()
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("Awaiting Admin Approval")
@@ -166,41 +208,13 @@ export function RoadClosurePermitsContent() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isApproveOpen, setIsApproveOpen] = useState(false)
   const [isRejectOpen, setIsRejectOpen] = useState(false)
-  const [isAddOpen, setIsAddOpen] = useState(false)
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false)
   const [isDecidingPermit, setIsDecidingPermit] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
-  const [form, setForm] = useState({ applicant: "", contactEmail: "", contactPhone: "", purpose: "", roadType: "", location: "", hours: "", eventDate: "", notes: "" })
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
-
-  const previewRate = form.purpose && form.roadType ? (TARIFFS[form.purpose]?.[form.roadType] ?? 0) : 0
-  const previewFee  = previewRate * (Number(form.hours) || 0)
-
-  const loadPermits = async () => {
-    try {
-      setIsLoading(true)
-      const response = await RoadClosurePermitsApi.listRoadClosurePermits({
-        municipalityId: getStoredMunicipalityId(),
-        status: "PENDING_ADMIN_APPROVAL",
-      })
-      const apiPermits = response.data ?? response.content ?? []
-
-      if (apiPermits.length) {
-        setPermits(apiPermits.map(toPermitRow))
-      }
-    } catch (error) {
-      toast.error("Failed to load road closure permits", {
-        description: error instanceof Error ? error.message : "Permit list request failed",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadPermits()
-  }, [])
+  const permits = (pendingPermitsQuery.data?.data ?? pendingPermitsQuery.data?.content ?? []).map(toPermitRow)
+  const isLoading = pendingPermitsQuery.isLoading
 
   const pendingCount  = permits.filter(p => p.status === "Awaiting Admin Approval").length
   const approvedCount = permits.filter(p => p.status === "Approved").length
@@ -226,7 +240,28 @@ export function RoadClosurePermitsContent() {
 
     try {
       const response = await RoadClosurePermitsApi.getRoadClosurePermit(permit.id)
-      setSelectedPermit(toPermitRow(response.data))
+      const permitRow = toPermitRow(response.data)
+
+      if (permitRow.routeId && !permitRow.routePoints?.length) {
+        try {
+          const routeResponse = await MunicipalRoutesApi.getMunicipalRoute(permitRow.routeId)
+          const routeExtra = routeResponse.data as typeof routeResponse.data & {
+            geometry?: unknown
+            routeGeoJson?: unknown
+          }
+          permitRow.routePoints = extractLineLatLngs(
+            routeExtra.geoJson ?? routeExtra.routeGeoJson ?? routeExtra.geometry,
+          )
+          permitRow.location = routeResponse.data.name || permitRow.location
+          permitRow.roadType = routeResponse.data.roadType || permitRow.roadType
+        } catch (routeError) {
+          toast.error("Failed to load permit route", {
+            description: getApiErrorMessage(routeError, "Route detail request failed"),
+          })
+        }
+      }
+
+      setSelectedPermit(permitRow)
     } catch (error) {
       if (typeof error === "object" && error !== null && "status" in error && error.status === 404) {
         return
@@ -241,10 +276,20 @@ export function RoadClosurePermitsContent() {
   }
 
   const getCurrentApprover = async () => {
-    const user = await userManager.getUser()
+    let user = await userManager.getUser()
+
+    if (!user?.access_token?.trim()) {
+      user = await userManager.signinSilent()
+    }
+
+    if (!user?.access_token?.trim()) {
+      throw new Error("Your session token is missing. Sign in again before approving permits.")
+    }
+
     const profile = user?.profile
 
     return (
+      profile?.sub ||
       profile?.name ||
       profile?.preferred_username ||
       profile?.email ||
@@ -252,21 +297,63 @@ export function RoadClosurePermitsContent() {
     )
   }
 
+  const getFreshPermitForDecision = async (permit: Permit) => {
+    try {
+      const response = await RoadClosurePermitsApi.getRoadClosurePermit(permit.id)
+      return toPermitRow(response.data)
+    } catch {
+      return permit
+    }
+  }
+
+  const removePendingPermitFromCache = (permit: Permit) => {
+    queryClient.setQueryData<RoadClosurePermitListResponse | undefined>(
+      roadClosurePermitKeys.pending(),
+      (current) =>
+        removeRoadClosurePermitFromListResponse(
+          removeRoadClosurePermitFromListResponse(current, permit.id),
+          permit.approvalId,
+        ),
+    )
+  }
+
   const handleApprove = async () => {
     if (!selectedPermit) return
+    if (!canApprovePermits) {
+      toast.error("Approval unavailable", {
+        description: "Your role does not include permits:approve.",
+      })
+      return
+    }
 
     try {
       setIsDecidingPermit(true)
-      await RoadClosurePermitsApi.decideRoadClosurePermit(selectedPermit.id, {
-        decision: "APPROVED",
-        approvedBy: await getCurrentApprover(),
-      })
-      setPermits(prev => prev.map(p => p.id === selectedPermit.id ? { ...p, status: "Approved" as const } : p))
+      const freshPermit = await getFreshPermitForDecision(selectedPermit)
+      const response = await RoadClosurePermitsApi.decideRoadClosurePermit(
+        freshPermit.approvalId,
+        {
+          decision: "APPROVED",
+          approvedBy: await getCurrentApprover(),
+        },
+        undefined,
+        freshPermit.id,
+      )
+
+      if (!isApprovedPermitStatus(response.data.status)) {
+        await queryClient.invalidateQueries({ queryKey: roadClosurePermitKeys.lists() })
+        toast.error("Permit approval was not persisted", {
+          description: `${selectedPermit.id} is still ${response.data.status}. Refreshing pending permits.`,
+        })
+        return
+      }
+
+      removePendingPermitFromCache(freshPermit)
+      void queryClient.invalidateQueries({ queryKey: roadClosurePermitKeys.lists() })
       setIsApproveOpen(false); setIsDetailsOpen(false)
       toast.success("Permit approved", { description: `${selectedPermit.id} is now active.` })
     } catch (error) {
       toast.error("Failed to approve permit", {
-        description: error instanceof Error ? error.message : "Approval request failed",
+        description: getPermitDecisionErrorMessage(error, "Approval request failed"),
       })
     } finally {
       setIsDecidingPermit(false)
@@ -275,50 +362,51 @@ export function RoadClosurePermitsContent() {
 
   const handleReject = async () => {
     if (!selectedPermit || !rejectionReason.trim()) return
+    if (!canApprovePermits) {
+      toast.error("Rejection unavailable", {
+        description: "Your role does not include permits:approve.",
+      })
+      return
+    }
 
     try {
       setIsDecidingPermit(true)
-      await RoadClosurePermitsApi.decideRoadClosurePermit(selectedPermit.id, {
-        decision: "REJECTED",
-        approvedBy: await getCurrentApprover(),
-        notes: rejectionReason.trim(),
-      })
-      setPermits(prev => prev.map(p => p.id === selectedPermit.id ? { ...p, status: "Rejected" as const, rejectionReason } : p))
+      const freshPermit = await getFreshPermitForDecision(selectedPermit)
+      const response = await RoadClosurePermitsApi.decideRoadClosurePermit(
+        freshPermit.approvalId,
+        {
+          decision: "REJECTED",
+          approvedBy: await getCurrentApprover(),
+          notes: rejectionReason.trim(),
+        },
+        undefined,
+        freshPermit.id,
+      )
+
+      if (!isRejectedPermitStatus(response.data.status)) {
+        await queryClient.invalidateQueries({ queryKey: roadClosurePermitKeys.lists() })
+        toast.error("Permit rejection was not persisted", {
+          description: `${selectedPermit.id} is still ${response.data.status}. Refreshing pending permits.`,
+        })
+        return
+      }
+
+      removePendingPermitFromCache(freshPermit)
+      void queryClient.invalidateQueries({ queryKey: roadClosurePermitKeys.lists() })
       setIsRejectOpen(false); setIsDetailsOpen(false); setRejectionReason("")
       toast.error("Permit rejected", { description: `${selectedPermit.id} has been rejected.` })
     } catch (error) {
       toast.error("Failed to reject permit", {
-        description: error instanceof Error ? error.message : "Rejection request failed",
+        description: getPermitDecisionErrorMessage(error, "Rejection request failed"),
       })
     } finally {
       setIsDecidingPermit(false)
     }
   }
 
-  const handleAddPermit = () => {
-    const rate  = TARIFFS[form.purpose]?.[form.roadType] ?? 0
-    const hours = Number(form.hours)
-    const today    = new Date().toISOString().split("T")[0]
-    const deadline = new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]
-    const np: Permit = {
-      id: `PRM-2026-${String(permits.length + 1).padStart(3, "0")}`,
-      applicant: form.applicant, contactEmail: form.contactEmail, contactPhone: form.contactPhone,
-      purpose: form.purpose, roadType: form.roadType, location: form.location,
-      hours, hourlyRate: rate, totalFee: rate * hours,
-      status: "Awaiting Admin Approval", submittedDate: today, eventDate: form.eventDate, paymentDeadline: deadline,
-      notes: form.notes || undefined,
-    }
-      setPermits(prev => [np, ...prev])
-    setIsAddOpen(false)
-    setForm({ applicant: "", contactEmail: "", contactPhone: "", purpose: "", roadType: "", location: "", hours: "", eventDate: "", notes: "" })
-    toast.success("Permit submitted", { description: `${np.id} is pending review.` })
-  }
-
   const handleRefresh = () => {
-    loadPermits()
+    void pendingPermitsQuery.refetch()
   }
-
-  const isFormValid = !!(form.applicant && form.contactEmail && form.purpose && form.roadType && form.location && Number(form.hours) > 0 && form.eventDate)
 
   const statusBadge = (status: string) => {
     if (status === "Approved") return <Badge className="bg-[#D6F0E0] text-[#1C1C1C] text-sm px-3 py-1 gap-1"><CheckCircle className="h-3.5 w-3.5" />{status}</Badge>
@@ -341,7 +429,7 @@ export function RoadClosurePermitsContent() {
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" disabled={isDecidingPermit} onClick={() => setIsApproveOpen(false)} className="text-base h-11 px-6">Cancel</Button>
-          <Button disabled={isDecidingPermit} onClick={handleApprove} className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-base h-11 px-6">
+          <Button disabled={isDecidingPermit || !canApprovePermits} onClick={handleApprove} className="bg-[#D6F0E0] text-[#1C1C1C] hover:bg-[#D6F0E0]/80 text-base h-11 px-6">
             {isDecidingPermit ? "Approving..." : "Confirm"}
           </Button>
         </DialogFooter>
@@ -350,9 +438,9 @@ export function RoadClosurePermitsContent() {
   ) : null
 
   if (isDetailsOpen && selectedPermit) {
-    const bookedRoute = getMockBookedRoute(selectedPermit.id)
-    const startPoint = bookedRoute.route[0]
-    const endPoint = bookedRoute.route[bookedRoute.route.length - 1]
+    const routePoints = selectedPermit.routePoints ?? []
+    const startPoint = routePoints[0]
+    const endPoint = routePoints[routePoints.length - 1]
 
     return (
       <div className="space-y-6">
@@ -372,11 +460,22 @@ export function RoadClosurePermitsContent() {
           </div>
           {selectedPermit.status === "Awaiting Admin Approval" && (
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setIsRejectOpen(true)} className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10">
+              <Button
+                variant="outline"
+                onClick={() => setIsRejectOpen(true)}
+                disabled={!canApprovePermits}
+                title={!canApprovePermits ? "Requires permits:approve" : undefined}
+                className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10"
+              >
                 <XCircle className="h-4 w-4 mr-2" />
                 Reject
               </Button>
-              <Button onClick={() => setIsApproveOpen(true)} className="text-base h-11 px-6 bg-[#4FAF7C] text-white hover:bg-[#4FAF7C]/90">
+              <Button
+                onClick={() => setIsApproveOpen(true)}
+                disabled={!canApprovePermits}
+                title={!canApprovePermits ? "Requires permits:approve" : undefined}
+                className="text-base h-11 px-6 bg-[#4FAF7C] text-white hover:bg-[#4FAF7C]/90"
+              >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Approve
               </Button>
@@ -397,39 +496,62 @@ export function RoadClosurePermitsContent() {
           <div className="space-y-6">
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="space-y-6">
-              <Card>
-                <CardContent className="space-y-4 pt-6">
-                  <Map
-                    center={bookedRoute.center}
-                    zoom={15}
-                    route={bookedRoute.route}
-                    markers={[
-                      {
-                        position: startPoint,
-                        label: "Closure start",
-                        description: selectedPermit.location,
-                      },
-                      {
-                        position: endPoint,
-                        label: "Closure end",
-                        description: `${selectedPermit.hours} hour booking`,
-                      },
-                    ]}
-                    height="430px"
-                    className="border"
-                    defaultView="satellite"
-                  />
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {bookedRoute.checkpoints.map((checkpoint, index) => (
-                      <div key={checkpoint} className="rounded-md border bg-muted/20 p-4">
-                        <p className="text-xs font-medium uppercase text-muted-foreground">Checkpoint {index + 1}</p>
-                        <p className="mt-1 text-base font-semibold">{checkpoint}</p>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-2xl">Route Map</CardTitle>
+                    <CardDescription className="text-base">
+                      {routePoints.length >= 2
+                        ? "Requested road closure route"
+                        : "Route geometry has not been provided by the permit response"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {routePoints.length >= 2 && startPoint && endPoint ? (
+                      <Map
+                        center={startPoint}
+                        zoom={15}
+                        route={routePoints}
+                        markers={[
+                          {
+                            position: startPoint,
+                            label: "Closure start",
+                            description: selectedPermit.location,
+                          },
+                          {
+                            position: endPoint,
+                            label: "Closure end",
+                            description: `${selectedPermit.hours} hour booking`,
+                          },
+                        ]}
+                        height="430px"
+                        className="border"
+                        defaultView="satellite"
+                        fitToBounds
+                      />
+                    ) : (
+                      <div className="flex min-h-[430px] items-center justify-center rounded-md border bg-muted/20 p-6 text-center">
+                        <div className="max-w-md space-y-3">
+                          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                            <MapPin className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <p className="text-lg font-semibold">Route map unavailable</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              The approval page loaded the permit, but no drawable GeoJSON route was returned.
+                            </p>
+                          </div>
+                          <div className="rounded-md bg-background p-3 text-left text-sm">
+                            <p className="font-medium">Requested section</p>
+                            <p className="mt-1 text-muted-foreground">{selectedPermit.location}</p>
+                            {selectedPermit.routeId && (
+                              <p className="mt-2 break-all text-xs text-muted-foreground">Route ID: {selectedPermit.routeId}</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
+                    )}
+                  </CardContent>
+                </Card>
               </div>
 
               <div className="space-y-6">
@@ -445,39 +567,6 @@ export function RoadClosurePermitsContent() {
                   <div className="space-y-2 text-sm">
                     <p className="text-muted-foreground break-all">{selectedPermit.contactEmail || "No email on file"}</p>
                     <p className="text-muted-foreground">{selectedPermit.contactPhone || "No phone on file"}</p>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">History score</span>
-                    <div className="text-right">
-                      <p className="text-lg font-bold">4.8 / 5</p>
-                      <p className="text-xs text-[#4FAF7C]">Trusted</p>
-                    </div>
-                  </div>
-                </CardContent>
-                </Card>
-
-                <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription className="text-xs uppercase">Automated Checks</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {["Road class verified", "No conflicting permits in window", "Insurance policy active", "Safety plan approved"].map((check) => (
-                    <div key={check} className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
-                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
-                      </div>
-                      <p className="text-sm font-medium">{check}</p>
-                    </div>
-                  ))}
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-full bg-[#DAA22A]/30 p-1 mt-0.5">
-                      <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Overlaps weekend market</p>
-                      <p className="text-xs text-muted-foreground">(informational)</p>
-                    </div>
                   </div>
                 </CardContent>
                 </Card>
@@ -550,7 +639,7 @@ export function RoadClosurePermitsContent() {
             </div>
             <DialogFooter>
               <Button variant="outline" disabled={isDecidingPermit} onClick={() => setIsRejectOpen(false)} className="text-base h-11 px-6">Cancel</Button>
-              <Button disabled={!rejectionReason.trim() || isDecidingPermit} onClick={handleReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">
+              <Button disabled={!rejectionReason.trim() || isDecidingPermit || !canApprovePermits} onClick={handleReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">
                 {isDecidingPermit ? "Rejecting..." : "Reject Permit"}
               </Button>
             </DialogFooter>
@@ -683,312 +772,6 @@ export function RoadClosurePermitsContent() {
           )}
         </CardContent>
       </Card>
-
-
-      {/* ── Details Dialog ── */}
-      <Modal open={isDetailsOpen} onOpenChange={setIsDetailsOpen} className="w-[95vw] max-w-[1400px]">
-        <ModalHeader onClose={() => setIsDetailsOpen(false)}>
-          <div className="flex items-center justify-between w-full">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <ModalTitle>{selectedPermit?.id}</ModalTitle>
-                <span className="text-sm text-muted-foreground">• Submitted {selectedPermit?.submittedDate}</span>
-              </div>
-              <ModalDescription>
-                {selectedPermit?.purpose} — {selectedPermit?.applicant}
-              </ModalDescription>
-            </div>
-            {selectedPermit?.status === "Awaiting Admin Approval" && (
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setIsRejectOpen(true)} className="text-base h-11 px-6 text-destructive border-destructive/30 hover:bg-destructive/10">
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-                <Button onClick={() => setIsApproveOpen(true)} className="text-base h-11 px-6 bg-[#4FAF7C] text-white hover:bg-[#4FAF7C]/90">
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve
-                </Button>
-              </div>
-            )}
-          </div>
-        </ModalHeader>
-        
-        <ModalBody>
-          {isDetailLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-8 w-1/3" />
-              <Skeleton className="h-[360px] w-full" />
-              <Skeleton className="h-24 w-full" />
-            </div>
-          ) : selectedPermit && (
-            <div className="grid grid-cols-3 gap-6">
-              {/* Left Column - Main Details */}
-              <div className="col-span-2 space-y-6">
-                {/* Location & Route Info */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                    <MapPin className="h-4 w-4" />
-                    <span>{selectedPermit.location}</span>
-                  </div>
-                  
-                  {/* Interactive Map */}
-                  <Map
-                    center={UGANDA_CENTER}
-                    zoom={16}
-                    markers={[
-                      {
-                        position: UGANDA_CENTER,
-                        label: selectedPermit.location,
-                        description: `${selectedPermit.purpose} - ${selectedPermit.roadType}`,
-                      },
-                    ]}
-                    height="250px"
-                    className="rounded-lg border"
-                    defaultView="satellite"
-                  />
-
-                  {/* Route Details Grid */}
-                  <div className="grid grid-cols-3 gap-4 pt-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase">Road Class</Label>
-                      <p className="text-lg font-semibold">{selectedPermit.roadType}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase">Hourly Rate</Label>
-                      <p className="text-lg font-semibold">{selectedPermit.hourlyRate.toLocaleString()} MZN</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase">Hours</Label>
-                      <p className="text-lg font-semibold">{selectedPermit.hours}h</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase">Event Date & Time</Label>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-base font-medium">{selectedPermit.eventDate}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase">Total Fee</Label>
-                      <p className="text-2xl font-bold text-[#4FAF7C]">{selectedPermit.totalFee.toLocaleString()} MZN</p>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Justification */}
-                {selectedPermit.notes && (
-                  <>
-                    <div className="space-y-3">
-                      <h3 className="text-base font-semibold uppercase text-muted-foreground">Justification</h3>
-                      <div className="rounded-lg bg-muted/40 p-4">
-                        <p className="text-base leading-relaxed">{selectedPermit.notes}</p>
-                      </div>
-                    </div>
-                    <Separator />
-                  </>
-                )}
-                {/* Rejection Reason if applicable */}
-                {selectedPermit.rejectionReason && (
-                  <>
-                    <Separator />
-                    <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4">
-                      <div className="flex items-start gap-3">
-                        <XCircle className="h-5 w-5 text-destructive mt-0.5" />
-                        <div className="flex-1">
-                          <p className="font-semibold text-destructive mb-1">Rejection Reason</p>
-                          <p className="text-sm text-muted-foreground">{selectedPermit.rejectionReason}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Right Column - Applicant & Checks */}
-              <div className="space-y-6">
-                {/* Applicant Info */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardDescription className="text-xs uppercase">Applicant</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <p className="text-lg font-bold mb-1">{selectedPermit.applicant}</p>
-                    </div>
-                    <Separator />
-                    <div className="space-y-2 text-sm">
-                      <p className="text-muted-foreground break-all">{selectedPermit.contactEmail}</p>
-                      <p className="text-muted-foreground">{selectedPermit.contactPhone}</p>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">History score</span>
-                      <div className="text-right">
-                        <p className="text-lg font-bold">4.8 / 5</p>
-                        <p className="text-xs text-[#4FAF7C]">Trusted</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Automated Checks */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardDescription className="text-xs uppercase">Automated Checks</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {/* Check items */}
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
-                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Road class verified</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
-                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">No conflicting permits in window</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#DAA22A]/30 p-1 mt-0.5">
-                        <AlertTriangle className="h-4 w-4 text-[#DAA22A]" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Overlaps weekend market</p>
-                        <p className="text-xs text-muted-foreground">(informational)</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
-                        <CheckCircle className="h-4 w-4 text-[#4FAF7C]" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Insurance policy active</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-full bg-[#D6F0E0] p-1 mt-0.5">
-                        <Shield className="h-4 w-4 text-[#4FAF7C]" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Safety plan approved</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Status Badge */}
-                <div className="flex justify-center">
-                  {statusBadge(selectedPermit.status)}
-                </div>
-              </div>
-            </div>
-          )}
-        </ModalBody>
-
-      </Modal>
-
-      {/* ── Approve Dialog ── */}
-      {approveConfirmation}
-
-      {/* ── Reject Dialog ── */}
-      <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
-        <DialogContent className="text-base">
-          <DialogHeader><DialogTitle className="text-2xl">Reject Permit</DialogTitle><DialogDescription className="text-base">Provide a reason for rejecting {selectedPermit?.id}</DialogDescription></DialogHeader>
-          <div className="py-4 space-y-2">
-            <Label className="text-base">Rejection Reason *</Label>
-            <Textarea placeholder="Enter reason..." value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={4} className="text-base" />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" disabled={isDecidingPermit} onClick={() => setIsRejectOpen(false)} className="text-base h-11 px-6">Cancel</Button>
-            <Button disabled={!rejectionReason.trim() || isDecidingPermit} onClick={handleReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-base h-11 px-6">
-              {isDecidingPermit ? "Rejecting..." : "Reject Permit"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-
-      {/* ── New Permit Dialog ── */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-2xl text-base">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">New Permit Application</DialogTitle>
-            <DialogDescription className="text-base">Submit a road usage permit request. Fee is calculated automatically.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-2">
-                <Label className="text-base">Applicant / Organisation *</Label>
-                <Input placeholder="e.g. Maputo Film Productions" value={form.applicant} onChange={e => setForm({...form, applicant: e.target.value})} className="text-base h-11" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base">Contact Email *</Label>
-                <Input type="email" placeholder="email@example.co.mz" value={form.contactEmail} onChange={e => setForm({...form, contactEmail: e.target.value})} className="text-base h-11" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base">Contact Phone</Label>
-                <Input placeholder="+258 84 000 0000" value={form.contactPhone} onChange={e => setForm({...form, contactPhone: e.target.value})} className="text-base h-11" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base">Purpose *</Label>
-                <Select value={form.purpose} onValueChange={v => setForm({...form, purpose: v, roadType: ""})}>
-                  <SelectTrigger className="text-base h-11"><SelectValue placeholder="Select purpose" /></SelectTrigger>
-                  <SelectContent>{PURPOSES.map(p => <SelectItem key={p} value={p} className="text-base">{p}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base">Road Type *</Label>
-                <Select value={form.roadType} onValueChange={v => setForm({...form, roadType: v})} disabled={!form.purpose}>
-                  <SelectTrigger className="text-base h-11"><SelectValue placeholder="Select road type" /></SelectTrigger>
-                  <SelectContent>{ROAD_TYPES.map(r => <SelectItem key={r} value={r} className="text-base">{r} — {form.purpose ? (TARIFFS[form.purpose]?.[r] ?? 0).toLocaleString() : "—"} MZN/hr</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base">Duration (hours) *</Label>
-                <Input type="number" min="1" placeholder="e.g. 3" value={form.hours} onChange={e => setForm({...form, hours: e.target.value})} className="text-base h-11" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base">Event Date *</Label>
-                <Input type="date" value={form.eventDate} onChange={e => setForm({...form, eventDate: e.target.value})} className="text-base h-11" />
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label className="text-base">Location / Road Section *</Label>
-                <Input placeholder="e.g. Av. Julius Nyerere, between Rua A and Rua B" value={form.location} onChange={e => setForm({...form, location: e.target.value})} className="text-base h-11" />
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label className="text-base">Notes (optional)</Label>
-                <Textarea placeholder="Any additional details..." value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={2} className="text-base" />
-              </div>
-            </div>
-            {previewFee > 0 && (
-              <div className="rounded-lg bg-muted/40 border p-4 space-y-1">
-                <p className="text-sm text-muted-foreground">Fee Preview</p>
-                <p className="text-base">{previewRate.toLocaleString()} MZN/hr × {form.hours || 0} hrs</p>
-                <p className="text-2xl font-bold text-primary">= {previewFee.toLocaleString()} MZN</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddOpen(false)} className="text-base h-11 px-6">Cancel</Button>
-            <Button disabled={!isFormValid} onClick={handleAddPermit} className="text-base h-11 px-6">Submit Application</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ── Invoice Dialog ── */}
       <Dialog open={isInvoiceOpen} onOpenChange={setIsInvoiceOpen}>

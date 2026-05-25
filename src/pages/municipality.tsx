@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { ArrowLeft, Building2, MapPin, Clock, Plus, Edit, CheckCircle, XCircle, Loader2, AlertCircle, Search } from "lucide-react"
 import { EditableGoogleMap } from "@/components/ui/map"
 import { toast } from "sonner"
-import { MunicipalitiesApi } from "@/lib/api"
+import { getApiErrorMessage, MunicipalitiesApi } from "@/lib/api"
 import type { BoundaryVersion, Municipality } from "@/lib/api"
 import { BOUNDARY_VERSIONS_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
 import {
@@ -625,12 +625,21 @@ export function MunicipalityPage() {
   }
 
   const handleCreateMunicipality = async () => {
+    const code = createMunicipalityForm.code.trim()
+    const name = createMunicipalityForm.name.trim()
+    const timezone = createMunicipalityForm.timezone.trim()
+
+    if (!code || !name || !timezone) {
+      toast.error("Code, name, and timezone are required")
+      return
+    }
+
     setIsCreatingMunicipality(true)
     try {
       const response = await MunicipalitiesApi.createMunicipality({
-        code: createMunicipalityForm.code,
-        name: createMunicipalityForm.name,
-        timezone: displayTimeZone(),
+        code,
+        name,
+        timezone,
       })
       const newMunicipality = response.data
       storeActiveMunicipality(newMunicipality)
@@ -644,7 +653,7 @@ export function MunicipalityPage() {
       await loadMunicipalityFromDb(newMunicipality.id)
       toast.success("Municipality created successfully")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create municipality")
+      toast.error(getApiErrorMessage(error, "Failed to create municipality"))
     } finally {
       setIsCreatingMunicipality(false)
     }

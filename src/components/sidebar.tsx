@@ -20,6 +20,10 @@ import { useI18n } from "@/lib/i18n"
 import type { Locale } from "@/lib/i18n"
 import { useAuthorization } from "@/lib/auth/authorization"
 import {
+  readRoadClosurePermitTotal,
+  usePendingRoadClosurePermits,
+} from "@/lib/api/permits/hooks"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -46,6 +50,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const [violationsOpen, setViolationsOpen] = useState(false)
   const [staffRolesOpen, setStaffRolesOpen] = useState(false)
   const [configurationsOpen, setConfigurationsOpen] = useState(false)
+  const pendingPermitsQuery = usePendingRoadClosurePermits()
+  const pendingRoadClosurePermits = pendingPermitsQuery.data
+    ? readRoadClosurePermitTotal(pendingPermitsQuery.data)
+    : undefined
+  const pendingRoadClosurePermitBadge =
+    pendingPermitsQuery.isLoading ? "..." : pendingRoadClosurePermits
   
   const handleLogout = () => {
     auth.signoutRedirect()
@@ -79,7 +89,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   ]
 
   const permitsSubItems = [
-    { label: t("nav.roadClosurePermits"), page: "road-closure-permits" as const, badge: 8 },
+    { label: t("nav.roadClosurePermits"), page: "road-closure-permits" as const, badge: pendingRoadClosurePermitBadge },
     { label: t("nav.heavyTruckPermits"), page: "heavy-truck-permits" as const, badge: 5 },
   ]
 
@@ -229,9 +239,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           >
             <FileText className="h-5 w-5" />
             <span className="flex-1 text-left">{t("nav.permits")}</span>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground">
-              13
-            </span>
+            {(pendingPermitsQuery.isLoading || Boolean(pendingRoadClosurePermits)) && (
+              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-sm text-primary-foreground">
+                {pendingRoadClosurePermitBadge}
+              </span>
+            )}
             <ChevronDown className={cn("h-4 w-4 transition-transform", showPermits && "rotate-180")} />
           </button>
           
@@ -251,8 +263,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                     )}
                   >
                     <span className="flex-1 text-left">{subItem.label}</span>
-                    {subItem.badge && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DAA22A] text-xs text-[#1C1C1C] font-semibold">
+                    {(subItem.badge === "..." || Boolean(subItem.badge)) && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#DAA22A] px-1.5 text-xs text-[#1C1C1C] font-semibold">
                         {subItem.badge}
                       </span>
                     )}
