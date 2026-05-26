@@ -110,27 +110,27 @@ export const RoadClosurePermitsApi = {
     const attempts = [
       {
         url: `/v1/road-closure-permits/${encodedPermitId}/approval`,
-        data: decisionPayload,
-      },
-      {
-        url: "/v1/road-closure-permits/approval",
-        data: decisionPayload,
-      },
-      {
-        url: "/v1/road-closure-permits//approval",
-        data: decisionPayload,
+        data: { data: decisionPayload },
       },
       {
         url: `/v1/road-closure-permits/${encodedPermitId}/approval`,
-        data: { data: decisionPayload },
+        data: decisionPayload,
       },
       {
         url: "/v1/road-closure-permits/approval",
         data: { data: decisionPayload },
       },
       {
+        url: "/v1/road-closure-permits/approval",
+        data: decisionPayload,
+      },
+      {
         url: "/v1/road-closure-permits//approval",
         data: { data: decisionPayload },
+      },
+      {
+        url: "/v1/road-closure-permits//approval",
+        data: decisionPayload,
       },
     ];
 

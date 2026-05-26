@@ -33,6 +33,7 @@ import { userManager } from "@/lib/userManager"
 interface Permit {
   id: string
   approvalId: string
+  municipalityId: string
   routeId?: string
   applicant: string
   contactEmail: string
@@ -176,6 +177,7 @@ const toPermitRow = (permit: RoadClosurePermit): Permit => {
   return {
     id: permit.id,
     approvalId,
+    municipalityId: permit.municipalityId,
     routeId: permit.routeId ?? undefined,
     applicant: permit.applicantName,
     contactEmail: extra.applicantEmail ?? "",
@@ -333,6 +335,7 @@ export function RoadClosurePermitsContent() {
         freshPermit.approvalId,
         {
           decision: "APPROVED",
+          municipalityId: freshPermit.municipalityId,
           approvedBy: await getCurrentApprover(),
         },
         undefined,
@@ -376,6 +379,7 @@ export function RoadClosurePermitsContent() {
         freshPermit.approvalId,
         {
           decision: "REJECTED",
+          municipalityId: freshPermit.municipalityId,
           approvedBy: await getCurrentApprover(),
           notes: rejectionReason.trim(),
         },

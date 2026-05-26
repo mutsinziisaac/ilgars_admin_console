@@ -46,7 +46,7 @@ const tariff = await TariffPlansApi.getTariffPlan("tariff-id");
 
 // Create tariff plan
 const newTariff = await TariffPlansApi.createTariffPlan({
-  name: "Heavy Cargo 25-38 tons",
+  name: "Heavy Cargo 25,001-38,000 kg",
   type: "CIRCULATION",
   weightMin: 25001,
   weightMax: 38000,
