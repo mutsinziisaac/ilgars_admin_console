@@ -1,5 +1,6 @@
 import { coreRequest } from "../httpClient";
 import { DEFAULT_MUNICIPALITY_ID } from "../constants";
+import { toApiError } from "../errors";
 import { RoadClosureRatesApi } from "../road-closure-rates/api";
 import {
   RoadClosurePermitDetailResponseSchema,
@@ -19,6 +20,22 @@ export interface RoadClosurePermitSearchParams {
   status?: string;
   routeId?: string;
 }
+
+const shouldTryNextDecisionRequest = (error: unknown) => {
+  const apiError = toApiError(error);
+  return apiError.status === 400 || apiError.status === 404 || apiError.status === 422;
+};
+
+const normalizeDecisionResponse = async (
+  roadClosurePermitId: string,
+  response: unknown,
+  signal?: AbortSignal,
+): Promise<RoadClosurePermitDetailResponse> => {
+  const parsed = RoadClosurePermitDetailResponseSchema.safeParse(response);
+  if (parsed.success) return parsed.data;
+
+  return RoadClosurePermitsApi.getRoadClosurePermit(roadClosurePermitId, signal);
+};
 
 export const RoadClosurePermitsApi = {
   /**
@@ -81,14 +98,71 @@ export const RoadClosurePermitsApi = {
     roadClosurePermitId: string,
     payload: RoadClosurePermitApprovalRequest,
     signal?: AbortSignal,
-  ) =>
-    coreRequest<RoadClosurePermitDetailResponse>({
-      method: "POST",
-      url: `/v1/road-closure-permits/${encodeURIComponent(roadClosurePermitId)}/approval`,
-      data: { data: payload },
-      signal,
-      schema: RoadClosurePermitDetailResponseSchema,
-    }),
+    detailRoadClosurePermitId = roadClosurePermitId,
+  ) => {
+    const encodedPermitId = encodeURIComponent(roadClosurePermitId);
+    const decisionPayload = {
+      municipalityId: DEFAULT_MUNICIPALITY_ID,
+      permitId: roadClosurePermitId,
+      roadClosurePermitId,
+      ...payload,
+    };
+    const attempts = [
+      {
+        url: `/v1/road-closure-permits/${encodedPermitId}/approval`,
+        data: { data: decisionPayload },
+      },
+      {
+        url: `/v1/road-closure-permits/${encodedPermitId}/approval`,
+        data: decisionPayload,
+      },
+      {
+        url: "/v1/road-closure-permits/approval",
+        data: { data: decisionPayload },
+      },
+      {
+        url: "/v1/road-closure-permits/approval",
+        data: decisionPayload,
+      },
+      {
+        url: "/v1/road-closure-permits//approval",
+        data: { data: decisionPayload },
+      },
+      {
+        url: "/v1/road-closure-permits//approval",
+        data: decisionPayload,
+      },
+    ];
+
+    const runAttempt = async (index: number): Promise<RoadClosurePermitDetailResponse> => {
+      const attempt = attempts[index];
+      if (!attempt) {
+        throw new Error("No road closure permit approval endpoint is available.");
+      }
+
+      try {
+        const response = await coreRequest<unknown>({
+          method: "POST",
+          url: attempt.url,
+          params: {
+            municipalityId: DEFAULT_MUNICIPALITY_ID,
+          },
+          data: attempt.data,
+          signal,
+        });
+
+        return normalizeDecisionResponse(detailRoadClosurePermitId, response, signal);
+      } catch (error) {
+        if (index < attempts.length - 1 && shouldTryNextDecisionRequest(error)) {
+          return runAttempt(index + 1);
+        }
+
+        throw error;
+      }
+    };
+
+    return runAttempt(0);
+  },
 
   /**
    * Issue a road closure permit after payment

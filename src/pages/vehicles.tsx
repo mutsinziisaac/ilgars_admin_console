@@ -9,9 +9,83 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Truck, Eye, CheckCircle, AlertCircle } from "lucide-react"
+import { ArrowLeft, Truck, Eye, CheckCircle, AlertCircle, Clock, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
+import { mockTransactions, type MockTransaction } from "@/lib/mock-transactions"
+
+const normalizeVehicleRef = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toUpperCase()
+
+const getTransactionStatusBadge = (status: MockTransaction["status"]) => {
+  switch (status) {
+    case "Completed":
+      return (
+        <Badge className="bg-[#4CAF50] text-white text-xs px-2 py-1">
+          <CheckCircle className="mr-1 h-3.5 w-3.5" />
+          {status}
+        </Badge>
+      )
+    case "Pending":
+      return (
+        <Badge className="bg-[#F4A62A] text-white text-xs px-2 py-1">
+          <Clock className="mr-1 h-3.5 w-3.5" />
+          {status}
+        </Badge>
+      )
+    case "Failed":
+      return (
+        <Badge className="bg-[#E5533D] text-white text-xs px-2 py-1">
+          <XCircle className="mr-1 h-3.5 w-3.5" />
+          {status}
+        </Badge>
+      )
+    default:
+      return <Badge className="text-xs px-2 py-1">{status}</Badge>
+  }
+}
+
+const createMockTransactionsForVehicle = (vehicle: any): MockTransaction[] => {
+  const vehiclePlate = vehicle.plate || vehicle.plateNumber || vehicle.truckNumber || "Unknown"
+  const vehicleType = vehicle.vehicleType || [vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"
+  const baseAmount = Number(vehicle.dailyRate || vehicle.currentLogbookCapacity ? 2000 : 1500)
+  const transactionPrefix = `TXN-${normalizeVehicleRef(vehiclePlate).replace(/[^A-Z0-9]/g, "")}`
+
+  return [
+    {
+      id: `${transactionPrefix}-001`,
+      vehicle: vehiclePlate,
+      vehicleType,
+      amount: baseAmount,
+      status: "Completed",
+      date: "2026-05-06 10:45",
+      location: "Maputo Central",
+      operator: "Joana Macavel",
+    },
+    {
+      id: `${transactionPrefix}-002`,
+      vehicle: vehiclePlate,
+      vehicleType,
+      amount: baseAmount,
+      status: "Pending",
+      date: "2026-05-04 14:20",
+      location: "Matola Gate",
+      operator: "Maria Santos",
+    },
+    {
+      id: `${transactionPrefix}-003`,
+      vehicle: vehiclePlate,
+      vehicleType,
+      amount: baseAmount,
+      status: "Completed",
+      date: "2026-04-29 08:15",
+      location: "Maputo Port",
+      operator: "Pedro Costa",
+    },
+  ]
+}
 
 export function VehiclesPage() {
   const [statusFilter, setStatusFilter] = useState("all")
@@ -51,6 +125,20 @@ export function VehiclesPage() {
   }
   const getVehicleRegistrationDate = (vehicle: any) =>
     vehicle.registrationDate || vehicle.createdAt?.split?.("T")?.[0] || "N/A"
+  const getVehicleTransactions = (vehicle: any) => {
+    const vehicleRefs = [
+      vehicle.plate,
+      vehicle.plateNumber,
+      vehicle.truckNumber,
+      vehicle.id,
+    ].map(normalizeVehicleRef)
+
+    const mappedTransactions = mockTransactions
+      .filter((transaction) => vehicleRefs.includes(normalizeVehicleRef(transaction.vehicle)))
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+
+    return mappedTransactions.length > 0 ? mappedTransactions : createMockTransactionsForVehicle(vehicle)
+  }
   const toVehicleView = (vehicle: any) => ({
     ...vehicle,
     plate: vehicle.plateNumber,
@@ -208,6 +296,9 @@ export function VehiclesPage() {
   )
 
   if (selectedVehicle) {
+    const vehicleTransactions = getVehicleTransactions(selectedVehicle)
+    const latestVehicleTransactions = vehicleTransactions.slice(0, 5)
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-6">
@@ -318,6 +409,45 @@ export function VehiclesPage() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">Latest Transactions</CardTitle>
+            <CardDescription className="text-base">
+              Transactions mapped to {selectedVehicle.plate}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-base">Transaction ID</TableHead>
+                  <TableHead className="text-base">Vehicle</TableHead>
+                  <TableHead className="text-base">Date & Time</TableHead>
+                  <TableHead className="text-base">Location</TableHead>
+                  <TableHead className="text-base">Amount</TableHead>
+                  <TableHead className="text-base">Status</TableHead>
+                  <TableHead className="text-base">Operator</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {latestVehicleTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell className="text-base font-medium">{transaction.id}</TableCell>
+                    <TableCell className="font-mono text-base">{transaction.vehicle}</TableCell>
+                    <TableCell className="text-base">{transaction.date}</TableCell>
+                    <TableCell className="text-base">{transaction.location}</TableCell>
+                    <TableCell className="text-base font-semibold">
+                      {transaction.amount.toLocaleString()} MZN
+                    </TableCell>
+                    <TableCell>{getTransactionStatusBadge(transaction.status)}</TableCell>
+                    <TableCell className="text-base">{transaction.operator}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 

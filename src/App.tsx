@@ -29,6 +29,24 @@ import { useI18n } from "@/lib/i18n"
 
 type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
 
+function FullPageStatus({
+  title,
+  description,
+}: {
+  title: string
+  description?: string
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
+        <h1 className="text-xl font-semibold">{title}</h1>
+        {description && <p className="mt-2 text-sm text-muted-foreground">{description}</p>}
+      </div>
+    </div>
+  )
+}
+
 // Callback handler component for Keycloak redirect
 function AuthCallback() {
   const auth = useAuth()
@@ -42,14 +60,7 @@ function AuthCallback() {
     }
   }, [auth.isAuthenticated, navigate])
 
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-        <p className="text-muted-foreground">{t("auth.callbackTitle")}</p>
-      </div>
-    </div>
-  )
+  return <FullPageStatus title={t("auth.callbackTitle")} description="Completing sign in..." />
 }
 
 // Protected Route Component
@@ -57,10 +68,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const auth = useAuth()
 
   if (auth.isLoading) {
+    return <FullPageStatus title="Loading dashboard" description="Checking your session..." />
+  }
+
+  if (auth.error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
+      <FullPageStatus
+        title="Session check failed"
+        description={auth.error.message || "Refresh again or sign in to continue."}
+      />
     )
   }
 

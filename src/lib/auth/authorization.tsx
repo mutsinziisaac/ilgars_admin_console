@@ -86,8 +86,13 @@ const ROLE_PERMISSIONS: Record<IlgarsRole, IlgarsPermission[]> = {
 
 const ROLE_ALIASES: Record<string, IlgarsRole> = {
   admin: "ilgars-admin",
+  systemadmin: "ilgars-admin",
+  "system-admin": "ilgars-admin",
+  "system_admin": "ilgars-admin",
   "ilgars_admin": "ilgars-admin",
   "ilgars-admin": "ilgars-admin",
+  "municipal_admin": "municipality-admin",
+  "municipal-admin": "municipality-admin",
   "municipality_admin": "municipality-admin",
   "municipality-admin": "municipality-admin",
   "revenue_officer": "revenue-officer",

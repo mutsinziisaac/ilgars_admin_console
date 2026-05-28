@@ -114,7 +114,8 @@ const getAccessToken = async (): Promise<string | undefined> => {
     }
   }
 
-  return token;
+  const normalizedToken = token?.trim();
+  return normalizedToken || undefined;
 };
 
 const buildHeaders = async (

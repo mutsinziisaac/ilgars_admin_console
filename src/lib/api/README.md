@@ -46,7 +46,7 @@ const tariff = await TariffPlansApi.getTariffPlan("tariff-id");
 
 // Create tariff plan
 const newTariff = await TariffPlansApi.createTariffPlan({
-  name: "Heavy Cargo 25-38 tons",
+  name: "Heavy Cargo 25,001-38,000 kg",
   type: "CIRCULATION",
   weightMin: 25001,
   weightMax: 38000,
@@ -88,10 +88,12 @@ const newRate = await RoadClosureRatesApi.createRoadClosureRate({
 
 ```typescript
 import { RoadClosurePermitsApi } from "@/lib/api";
+import { DEFAULT_MUNICIPALITY_ID } from "@/lib/api/constants";
 
 // List permits
 const permits = await RoadClosurePermitsApi.listRoadClosurePermits({
-  status: "PENDING",
+  municipalityId: DEFAULT_MUNICIPALITY_ID,
+  status: "PENDING_ADMIN_APPROVAL",
   page: 1,
   pageSize: 20,
 });

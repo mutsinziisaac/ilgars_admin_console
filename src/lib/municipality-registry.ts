@@ -6,41 +6,55 @@ import {
   MUNICIPALITIES_STORAGE_KEY,
 } from "@/lib/api/constants"
 
-export const getStoredMunicipality = (): Municipality | null => {
-  if (typeof window === "undefined") return null
+let activeMunicipality: Municipality | null = null
+let activeMunicipalityId = DEFAULT_MUNICIPALITY_ID
+let municipalities: Municipality[] = []
+
+const readSessionJson = <T,>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback
 
   try {
-    const stored = localStorage.getItem(ACTIVE_MUNICIPALITY_STORAGE_KEY)
-    return stored ? (JSON.parse(stored) as Municipality) : null
+    const stored = window.sessionStorage.getItem(key)
+    return stored ? (JSON.parse(stored) as T) : fallback
   } catch {
-    return null
+    return fallback
   }
+}
+
+const writeSessionJson = (key: string, value: unknown) => {
+  if (typeof window === "undefined") return
+
+  window.sessionStorage.setItem(key, JSON.stringify(value))
+}
+
+export const getStoredMunicipality = (): Municipality | null => {
+  if (!activeMunicipality) {
+    activeMunicipality = readSessionJson<Municipality | null>(ACTIVE_MUNICIPALITY_STORAGE_KEY, null)
+  }
+
+  return activeMunicipality
 }
 
 export const getStoredMunicipalityId = () => {
-  if (typeof window === "undefined") return DEFAULT_MUNICIPALITY_ID
+  if (activeMunicipalityId === DEFAULT_MUNICIPALITY_ID && typeof window !== "undefined") {
+    activeMunicipalityId =
+      window.sessionStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
+  }
 
-  return localStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
+  return activeMunicipalityId
 }
 
 export const getStoredMunicipalities = (): Municipality[] => {
-  if (typeof window === "undefined") return []
-
-  try {
-    const stored = localStorage.getItem(MUNICIPALITIES_STORAGE_KEY)
-    const municipalities = stored ? (JSON.parse(stored) as Municipality[]) : []
-    const activeMunicipality = getStoredMunicipality()
-    return activeMunicipality ? mergeMunicipalities(municipalities, [activeMunicipality]) : municipalities
-  } catch {
-    const activeMunicipality = getStoredMunicipality()
-    return activeMunicipality ? [activeMunicipality] : []
+  if (!municipalities.length) {
+    municipalities = readSessionJson<Municipality[]>(MUNICIPALITIES_STORAGE_KEY, [])
   }
+
+  return activeMunicipality ? mergeMunicipalities(municipalities, [activeMunicipality]) : municipalities
 }
 
-export const storeMunicipalities = (municipalities: Municipality[]) => {
-  if (typeof window === "undefined") return
-
-  localStorage.setItem(MUNICIPALITIES_STORAGE_KEY, JSON.stringify(municipalities))
+export const storeMunicipalities = (nextMunicipalities: Municipality[]) => {
+  municipalities = mergeMunicipalities(nextMunicipalities)
+  writeSessionJson(MUNICIPALITIES_STORAGE_KEY, municipalities)
 }
 
 export const mergeMunicipalities = (
@@ -62,16 +76,14 @@ export const upsertStoredMunicipality = (municipality: Municipality) => {
 }
 
 export const setActiveMunicipality = (municipality: Municipality) => {
-  if (typeof window === "undefined") return
-
-  const previousMunicipality = getStoredMunicipality()
-  const nextMunicipalities = previousMunicipality
-    ? mergeMunicipalities(getStoredMunicipalities(), [previousMunicipality, municipality])
-    : mergeMunicipalities(getStoredMunicipalities(), [municipality])
-
+  activeMunicipality = municipality
+  activeMunicipalityId = municipality.id
+  const nextMunicipalities = mergeMunicipalities(getStoredMunicipalities(), [municipality])
   storeMunicipalities(nextMunicipalities)
-  localStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, municipality.id)
-  localStorage.setItem(ACTIVE_MUNICIPALITY_STORAGE_KEY, JSON.stringify(municipality))
+  writeSessionJson(ACTIVE_MUNICIPALITY_STORAGE_KEY, municipality)
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, municipality.id)
+  }
 }
 
 export const getMunicipalityDisplayName = (municipalityId = getStoredMunicipalityId()) => {

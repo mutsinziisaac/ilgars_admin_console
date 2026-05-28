@@ -131,6 +131,10 @@ const getServerErrorDetail = (details: unknown): string | undefined => {
   if (typeof error === "string" && error.trim()) {
     return error.trim();
   }
+  const errorMessage = getStringRecordValue(error, "message");
+  if (typeof errorMessage === "string" && errorMessage.trim()) {
+    return errorMessage.trim();
+  }
 
   const validationErrors = getStringRecordValue(details, "validation_errors");
   if (Array.isArray(validationErrors) && validationErrors.length > 0) {
