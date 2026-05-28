@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from "@/components/ui/skeleton"
 import { Settings, Edit, Info, Plus, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import { getApiErrorMessage } from "@/lib/api"
 import {
   useRUCPoliciesList,
   useCreateRUCPolicy,
@@ -45,8 +46,8 @@ export function RUCPolicyPage() {
       setSelectedMunicipalityId(policyForm.municipalityId)
       resetForm()
     },
-    onError: (error: any) => {
-      toast.error(`Failed to create RUC policy: ${error.message}`)
+    onError: (error: unknown) => {
+      toast.error(`Failed to create RUC policy: ${getApiErrorMessage(error, "Create request failed")}`)
     },
   })
 
@@ -56,8 +57,8 @@ export function RUCPolicyPage() {
       setIsEditOpen(false)
       setSelectedPolicy(null)
     },
-    onError: (error: any) => {
-      toast.error(`Failed to update RUC policy: ${error.message}`)
+    onError: (error: unknown) => {
+      toast.error(`Failed to update RUC policy: ${getApiErrorMessage(error, "Update request failed")}`)
     },
   })
 
@@ -71,9 +72,9 @@ export function RUCPolicyPage() {
       setActivatingPolicyId(null)
       toast.success("RUC policy activated")
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       setActivatingPolicyId(null)
-      toast.error(`Failed to activate RUC policy: ${error.message}`)
+      toast.error(`Failed to activate RUC policy: ${getApiErrorMessage(error, "Activation request failed")}`)
     },
   })
 
@@ -110,7 +111,7 @@ export function RUCPolicyPage() {
       specialPermitCapacityThreshold: policyForm.specialPermitCapacityThreshold,
       specialPermitCapacityUnit: policyForm.specialPermitCapacityUnit,
       gracePeriodHours: policyForm.gracePeriodHours,
-      active: false
+      active: true
     }, {
       onSuccess: () => {
         setSelectedMunicipalityId(policyForm.municipalityId)
@@ -269,7 +270,7 @@ export function RUCPolicyPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="h-12 w-12 text-destructive mb-4" />
               <h3 className="text-lg font-semibold mb-2">Failed to load RUC policies</h3>
-              <p className="text-muted-foreground mb-4">{(error as any)?.message || "An error occurred"}</p>
+              <p className="text-muted-foreground mb-4">{getApiErrorMessage(error, "An error occurred")}</p>
               <Button variant="outline" onClick={() => refetch()}>
                 Try Again
               </Button>
@@ -363,7 +364,7 @@ export function RUCPolicyPage() {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">Policy Scope</p>
                 <p className="text-sm text-muted-foreground">
-                  This policy will be created for the active municipality and can be activated after review.
+                  This policy will be created as active for the selected municipality so heavy truck permit requests can pass backend validation.
                 </p>
               </div>
             </div>
@@ -389,7 +390,7 @@ export function RUCPolicyPage() {
                 className="text-base h-11"
               />
               <p className="text-sm text-muted-foreground">
-                Vehicles exceeding this weight require circulation licence (in {policyForm.specialPermitCapacityUnit})
+                Vehicles at or above this threshold require a heavy truck special permit route request (in {policyForm.specialPermitCapacityUnit}).
               </p>
             </div>
 

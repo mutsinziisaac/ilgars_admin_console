@@ -21,7 +21,7 @@ import {
 
 type ClosureType = "FULL_CLOSURE" | "PARTIAL_RESTRICTION"
 type RoadType = "PRIMARY_ROAD" | "SECONDARY_ROAD" | "TERTIARY_ROAD"
-type Purpose = "CONSTRUCTION" | "FILMING" | "SPORTING_EVENTS" | "FAIRS" | "FOR_PROFIT_EVENTS"
+type Purpose = "CONSTRUCTION" | "FILMING" | "SPORTING_EVENT" | "FAIRS" | "FOR_PROFIT_EVENTS"
 
 const roadTypes: Array<{ label: string; value: RoadType }> = [
   { label: "Protocol Roads", value: "PRIMARY_ROAD" },
@@ -32,7 +32,7 @@ const roadTypes: Array<{ label: string; value: RoadType }> = [
 const purposes: Array<{ label: string; value: Purpose }> = [
   { label: "Construction works", value: "CONSTRUCTION" },
   { label: "Filming", value: "FILMING" },
-  { label: "Sporting events", value: "SPORTING_EVENTS" },
+  { label: "Sporting events", value: "SPORTING_EVENT" },
   { label: "Fairs", value: "FAIRS" },
   { label: "For-profit events", value: "FOR_PROFIT_EVENTS" },
 ]
@@ -41,14 +41,14 @@ const defaultRates: Record<ClosureType, Record<Purpose, Record<RoadType, number>
   FULL_CLOSURE: {
     CONSTRUCTION: { PRIMARY_ROAD: 50000, SECONDARY_ROAD: 30000, TERTIARY_ROAD: 15000 },
     FILMING: { PRIMARY_ROAD: 50000, SECONDARY_ROAD: 30000, TERTIARY_ROAD: 20000 },
-    SPORTING_EVENTS: { PRIMARY_ROAD: 10000, SECONDARY_ROAD: 5000, TERTIARY_ROAD: 3500 },
+    SPORTING_EVENT: { PRIMARY_ROAD: 10000, SECONDARY_ROAD: 5000, TERTIARY_ROAD: 3500 },
     FAIRS: { PRIMARY_ROAD: 2000, SECONDARY_ROAD: 1000, TERTIARY_ROAD: 0 },
     FOR_PROFIT_EVENTS: { PRIMARY_ROAD: 40000, SECONDARY_ROAD: 20000, TERTIARY_ROAD: 10000 },
   },
   PARTIAL_RESTRICTION: {
     CONSTRUCTION: { PRIMARY_ROAD: 10000, SECONDARY_ROAD: 5000, TERTIARY_ROAD: 3500 },
     FILMING: { PRIMARY_ROAD: 40000, SECONDARY_ROAD: 30000, TERTIARY_ROAD: 20000 },
-    SPORTING_EVENTS: { PRIMARY_ROAD: 5000, SECONDARY_ROAD: 3500, TERTIARY_ROAD: 1800 },
+    SPORTING_EVENT: { PRIMARY_ROAD: 5000, SECONDARY_ROAD: 3500, TERTIARY_ROAD: 1800 },
     FAIRS: { PRIMARY_ROAD: 2000, SECONDARY_ROAD: 1000, TERTIARY_ROAD: 0 },
     FOR_PROFIT_EVENTS: { PRIMARY_ROAD: 20000, SECONDARY_ROAD: 10000, TERTIARY_ROAD: 5000 },
   },
@@ -214,7 +214,21 @@ export function RoadClosureRatesPage() {
           }),
         ),
       )
-      const createdRates = responses.map((response) => ({
+      const activeResponses = await Promise.all(
+        responses.map(async (response) => {
+          if (response.data.active) return response
+
+          await RoadClosureRatesApi.activateRoadClosureRate(response.data.id)
+          return {
+            ...response,
+            data: {
+              ...response.data,
+              active: true,
+            },
+          }
+        }),
+      )
+      const createdRates = activeResponses.map((response) => ({
         ...response.data,
         municipalityId: response.data.municipalityId || municipalityId,
         closureType,

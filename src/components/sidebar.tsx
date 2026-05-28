@@ -90,7 +90,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
   const permitsSubItems = [
     { label: t("nav.roadClosurePermits"), page: "road-closure-permits" as const, badge: pendingRoadClosurePermitBadge },
-    { label: t("nav.heavyTruckPermits"), page: "heavy-truck-permits" as const, badge: 5 },
+    { label: t("nav.heavyTruckPermits"), page: "heavy-truck-permits" as const, badge: undefined },
   ]
 
   const devicesSubItems = [
@@ -116,16 +116,16 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     { label: t("nav.roadClosureRates"), page: "road-closure-rates" as const },
     { label: t("nav.finesConfiguration"), page: "fines-configuration" as const },
     { label: t("nav.geofencingZones"), page: "geofencing-zones" as const },
-    { label: t("nav.vehicleClassification"), page: "vehicle-classification" as const },
-    { label: t("nav.weightCategories"), page: "weight-categories" as const },
-    { label: t("nav.timeWindows"), page: "time-windows" as const },
+    // { label: t("nav.vehicleClassification"), page: "vehicle-classification" as const },
+    // { label: t("nav.weightCategories"), page: "weight-categories" as const },
+    // { label: t("nav.timeWindows"), page: "time-windows" as const },
   ]
 
   const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "heavy-truck-permits"
   const isDevicesActive = currentPage === "gps-tracking" || currentPage === "cameras"
   const isViolationsActive = currentPage === "alerts" || currentPage === "enforcement"
   const isStaffRolesActive = currentPage === "manage-staff" || currentPage === "manage-roles" || currentPage === "create-role" || currentPage === "roles-management"
-  const isConfigurationsActive = currentPage === "municipality" || currentPage === "tariff-plans" || currentPage === "ruc-policy" || currentPage === "routes" || currentPage === "road-closure-rates" || currentPage === "fines-configuration" || currentPage === "geofencing-zones" || currentPage === "vehicle-classification" || currentPage === "weight-categories" || currentPage === "time-windows"
+  const isConfigurationsActive = currentPage === "municipality" || currentPage === "tariff-plans" || currentPage === "ruc-policy" || currentPage === "routes" || currentPage === "road-closure-rates" || currentPage === "fines-configuration" || currentPage === "geofencing-zones"
   const showPermits = permitsOpen || isPermitsActive
   const showDevices = devicesOpen || isDevicesActive
   const showViolations = violationsOpen || isViolationsActive

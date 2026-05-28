@@ -1,14 +1,14 @@
 ﻿import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RoadClosurePermitsContent } from "@/pages/road-closure-permits"
-import { AuthorizationsPage } from "@/pages/authorizations"
+import { HeavyTruckPermitsPage } from "@/pages/heavy-truck-permits"
 
 export function PermitsPage() {
   const [activeTab, setActiveTab] = useState("road-closure-permits")
   
-  // Count badges from mock data
+  // Count badges are kept lightweight here; each tab fetches its own live data.
   const roadClosurePermitsBadge = 8 // From mockPermits pending count
-  const heavyTruckPermitsBadge = 5 // From mockAuthorizations pending count
+  const heavyTruckPermitsBadge = 0
 
   return (
     <div className="space-y-6">
@@ -44,7 +44,7 @@ export function PermitsPage() {
         </TabsContent>
 
         <TabsContent value="heavy-truck-permits" className="mt-6">
-          <AuthorizationsPage />
+          <HeavyTruckPermitsPage />
         </TabsContent>
       </Tabs>
     </div>

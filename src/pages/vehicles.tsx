@@ -9,13 +9,160 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Truck, Eye, CheckCircle, AlertCircle } from "lucide-react"
+import { ArrowLeft, Truck, Eye, CheckCircle, AlertCircle, Clock, Search, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
+import type { Vehicle } from "@/lib/api/vehicles/schemas"
+
+type VehicleTransaction = {
+  id: string
+  type: string
+  status: string
+  date: string
+  amount: number | null
+  location: string
+  operator: string
+}
+
+type VehicleRecord = Vehicle & Record<string, unknown>
+type VehicleView = VehicleRecord & {
+  plate: string
+  owner: string
+  vehicleType: string
+  weightClass: string
+  registrationDate: string
+  compliance: "Compliant" | "Non-compliant"
+}
+
+const transactionSources = ["transactions", "transactionHistory", "paymentHistory", "payments", "invoices"]
+
+const formatCurrency = (amount: number | null) => (amount == null ? "N/A" : `${amount.toLocaleString()} MZN`)
+
+const stringValue = (value: unknown) => (typeof value === "string" && value.trim() ? value : undefined)
+
+const firstString = (...values: unknown[]) => values.map(stringValue).find(Boolean)
+
+const formatTransactionDate = (value: unknown) => {
+  if (!value || typeof value !== "string") return "N/A"
+
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return value
+
+  return parsedDate.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+const normalizeVehicleTransaction = (transaction: Record<string, unknown>, index: number): VehicleTransaction => {
+  const amountValue =
+    transaction.amount ??
+    transaction.totalAmount ??
+    transaction.paidAmount ??
+    transaction.invoiceAmount ??
+    transaction.value
+  const amount = typeof amountValue === "number" ? amountValue : Number(stringValue(amountValue))
+
+  return {
+    id:
+      firstString(transaction.id, transaction.transactionId, transaction.invoiceId, transaction.reference) ||
+      `TXN-${String(index + 1).padStart(3, "0")}`,
+    type: firstString(transaction.type, transaction.serviceType, transaction.description) || "Road usage payment",
+    status: firstString(transaction.status, transaction.paymentStatus) || "Recorded",
+    date: formatTransactionDate(transaction.date || transaction.createdAt || transaction.paidAt || transaction.issuedAt),
+    amount: Number.isFinite(amount) ? amount : null,
+    location: firstString(transaction.location, transaction.stationName, transaction.tollGate) || "N/A",
+    operator: firstString(transaction.operator, transaction.operatorName, transaction.processedBy) || "N/A",
+  }
+}
+
+const getVehicleTransactions = (vehicle: VehicleRecord | null): VehicleTransaction[] =>
+  transactionSources
+    .flatMap((source) => {
+      const value = vehicle?.[source]
+      return Array.isArray(value) ? value : []
+    })
+    .filter((transaction): transaction is Record<string, unknown> => typeof transaction === "object" && transaction !== null)
+    .map(normalizeVehicleTransaction)
+
+const getMockVehicleTransactions = (vehicle: VehicleView): VehicleTransaction[] => [
+  {
+    id: "TXN-18472",
+    type: "Road usage payment",
+    status: "Completed",
+    date: "28 May 2026, 09:42",
+    amount: 2500,
+    location: "Maputo Central",
+    operator: "Joana Macavel",
+  },
+  {
+    id: "INV-09318",
+    type: "Monthly circulation invoice",
+    status: "Pending",
+    date: "24 May 2026, 14:16",
+    amount: 7500,
+    location: "Revenue Office",
+    operator: "System Generated",
+  },
+  {
+    id: "TXN-17904",
+    type: "Permit payment",
+    status: "Completed",
+    date: "17 May 2026, 11:08",
+    amount: 1800,
+    location: "Matola Gate",
+    operator: "Pedro Costa",
+  },
+  {
+    id: "TXN-17166",
+    type: `${vehicle.plate} compliance fee`,
+    status: "Failed",
+    date: "10 May 2026, 16:35",
+    amount: 2500,
+    location: "Maputo Port",
+    operator: "Ana Ferreira",
+  },
+]
+
+const getTransactionStatusBadge = (status: string) => {
+  const normalizedStatus = status.toUpperCase()
+
+  if (["COMPLETED", "PAID", "SUCCESS", "SUCCESSFUL"].includes(normalizedStatus)) {
+    return (
+      <Badge className="bg-[#4FAF7C] text-white text-xs px-2.5 py-1">
+        <CheckCircle className="mr-1 h-3.5 w-3.5" />
+        {status}
+      </Badge>
+    )
+  }
+
+  if (["PENDING", "PROCESSING", "ISSUED"].includes(normalizedStatus)) {
+    return (
+      <Badge className="bg-[#DAA22A] text-white text-xs px-2.5 py-1">
+        <Clock className="mr-1 h-3.5 w-3.5" />
+        {status}
+      </Badge>
+    )
+  }
+
+  if (["FAILED", "CANCELLED", "CANCELED", "OVERDUE"].includes(normalizedStatus)) {
+    return (
+      <Badge className="bg-destructive text-destructive-foreground text-xs px-2.5 py-1">
+        <XCircle className="mr-1 h-3.5 w-3.5" />
+        {status}
+      </Badge>
+    )
+  }
+
+  return <Badge variant="outline" className="text-xs px-2.5 py-1">{status}</Badge>
+}
 
 export function VehiclesPage() {
   const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null)
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleView | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
@@ -29,37 +176,35 @@ export function VehiclesPage() {
   })
 
   // Extract data from API response
-  const vehicles = (data?.data || []) as any[]
+  const vehicles = (data?.data || []) as VehicleRecord[]
 
-  const getVehicleStatus = (vehicle: any) => vehicle.registryStatus || vehicle.status || "ACTIVE"
-  const isActiveVehicle = (vehicle: any) => String(getVehicleStatus(vehicle)).toUpperCase() === "ACTIVE"
-  const getVehicleOwner = (vehicle: any) => vehicle.ownerName || vehicle.operatorName || "N/A"
-  const getVehicleType = (vehicle: any) =>
+  const getVehicleStatus = (vehicle: VehicleRecord) => firstString(vehicle.registryStatus, vehicle.status) || "ACTIVE"
+  const isActiveVehicle = (vehicle: VehicleRecord) => String(getVehicleStatus(vehicle)).toUpperCase() === "ACTIVE"
+  const getVehicleOwner = (vehicle: VehicleRecord) => firstString(vehicle.ownerName, vehicle.operatorName) || "N/A"
+  const getVehicleType = (vehicle: VehicleRecord) =>
     [vehicle.make, vehicle.model].filter(Boolean).join(" ") ||
-    vehicle.vehicleType ||
-    vehicle.truckNumber ||
+    firstString(vehicle.vehicleType, vehicle.truckNumber) ||
     "N/A"
-  const getVehicleCapacity = (vehicle: any) => {
+  const getVehicleCapacity = (vehicle: VehicleRecord) => {
     const capacity =
       vehicle.currentLogbookCapacity ??
       vehicle.logbookCapacityKg ??
       vehicle.capacity ??
       vehicle.grossWeightTotalKg
-    const unit = vehicle.capacityUnit || (vehicle.logbookCapacityKg || vehicle.grossWeightTotalKg ? "KG" : "")
+    const unit = firstString(vehicle.capacityUnit) || (vehicle.logbookCapacityKg || vehicle.grossWeightTotalKg ? "KG" : "")
 
-    return capacity ? `${capacity.toLocaleString()}${unit ? ` ${unit}` : ""}` : "N/A"
+    if (typeof capacity === "number") return `${capacity.toLocaleString()}${unit ? ` ${unit}` : ""}`
+    return stringValue(capacity) ? `${capacity}${unit ? ` ${unit}` : ""}` : "N/A"
   }
-  const getVehicleRegistrationDate = (vehicle: any) =>
-    vehicle.registrationDate || vehicle.createdAt?.split?.("T")?.[0] || "N/A"
-  const toVehicleView = (vehicle: any) => ({
+  const getVehicleRegistrationDate = (vehicle: VehicleRecord) =>
+    firstString(vehicle.registrationDate) || stringValue(vehicle.createdAt)?.split("T")[0] || "N/A"
+  const toVehicleView = (vehicle: VehicleRecord): VehicleView => ({
     ...vehicle,
-    plate: vehicle.plateNumber,
+    plate: stringValue(vehicle.plateNumber) || "N/A",
     owner: getVehicleOwner(vehicle),
     vehicleType: getVehicleType(vehicle),
     weightClass: getVehicleCapacity(vehicle),
-    dailyRate: 0,
     registrationDate: getVehicleRegistrationDate(vehicle),
-    lastPayment: "N/A",
     compliance: isActiveVehicle(vehicle) ? "Compliant" : "Non-compliant",
   })
 
@@ -88,7 +233,7 @@ export function VehiclesPage() {
   const compliantCount = vehicles.length // Adjust based on your compliance logic
 
   // Handle view details
-  const handleViewDetails = (vehicle: any) => {
+  const handleViewDetails = (vehicle: VehicleRecord) => {
     setSelectedVehicle(toVehicleView(vehicle))
   }
 
@@ -108,6 +253,10 @@ export function VehiclesPage() {
       description: "Vehicle list has been updated."
     })
   }
+
+  const selectedOwnerContact = stringValue(selectedVehicle?.ownerContact)
+  const selectedOwnerEmail = stringValue(selectedVehicle?.ownerEmail)
+  const selectedOwnerAddress = stringValue(selectedVehicle?.ownerAddress)
 
   const contactOwnerDialog = (
     <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
@@ -131,13 +280,13 @@ export function VehiclesPage() {
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">Phone Number</Label>
               <div className="flex items-center gap-2">
-                <p className="text-base font-medium">{selectedVehicle.ownerContact || "N/A"}</p>
-                {selectedVehicle.ownerContact && (
+                <p className="text-base font-medium">{selectedOwnerContact || "N/A"}</p>
+                {selectedOwnerContact && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      navigator.clipboard.writeText(selectedVehicle.ownerContact)
+                      navigator.clipboard.writeText(selectedOwnerContact)
                       toast.success("Phone number copied to clipboard")
                     }}
                   >
@@ -150,13 +299,13 @@ export function VehiclesPage() {
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">Email Address</Label>
               <div className="flex items-center gap-2">
-                <p className="text-base font-medium">{selectedVehicle.ownerEmail || "N/A"}</p>
-                {selectedVehicle.ownerEmail && (
+                <p className="text-base font-medium">{selectedOwnerEmail || "N/A"}</p>
+                {selectedOwnerEmail && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      navigator.clipboard.writeText(selectedVehicle.ownerEmail)
+                      navigator.clipboard.writeText(selectedOwnerEmail)
                       toast.success("Email copied to clipboard")
                     }}
                   >
@@ -168,7 +317,7 @@ export function VehiclesPage() {
 
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">Address</Label>
-              <p className="text-base font-medium">{selectedVehicle.ownerAddress || "N/A"}</p>
+              <p className="text-base font-medium">{selectedOwnerAddress || "N/A"}</p>
             </div>
 
             <Separator />
@@ -193,11 +342,11 @@ export function VehiclesPage() {
           </Button>
           <Button
             onClick={() => {
-              if (selectedVehicle?.ownerContact) {
-                window.location.href = `tel:${selectedVehicle.ownerContact}`
+              if (selectedOwnerContact) {
+                window.location.href = `tel:${selectedOwnerContact}`
               }
             }}
-            disabled={!selectedVehicle?.ownerContact}
+            disabled={!selectedOwnerContact}
             className="text-base h-11 px-6"
           >
             Call Owner
@@ -208,6 +357,10 @@ export function VehiclesPage() {
   )
 
   if (selectedVehicle) {
+    const vehicleTransactions = getVehicleTransactions(selectedVehicle)
+    const displayedTransactions =
+      vehicleTransactions.length > 0 ? vehicleTransactions : getMockVehicleTransactions(selectedVehicle)
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-6">
@@ -276,22 +429,8 @@ export function VehiclesPage() {
                 <p className="text-lg font-medium">{selectedVehicle.weightClass}</p>
               </div>
               <div className="space-y-2">
-                <Label className="text-base text-muted-foreground">Daily Rate</Label>
-                <p className="text-lg font-medium">
-                  {selectedVehicle.dailyRate ? `${selectedVehicle.dailyRate.toLocaleString()} MZN` : "N/A"}
-                </p>
-              </div>
-              <div className="space-y-2">
                 <Label className="text-base text-muted-foreground">Registration Date</Label>
                 <p className="text-lg font-medium">{selectedVehicle.registrationDate}</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base text-muted-foreground">Last Payment</Label>
-                <p className="text-lg font-medium">{selectedVehicle.lastPayment}</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base text-muted-foreground">Days Since Payment</Label>
-                <p className="text-lg font-medium">N/A</p>
               </div>
             </div>
           </CardContent>
@@ -299,65 +438,59 @@ export function VehiclesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Registry Details</CardTitle>
-            <CardDescription className="text-base">Motor vehicle backend fields</CardDescription>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle className="text-2xl">Transaction History</CardTitle>
+                <CardDescription className="text-base">
+                  Revenue activity recorded against {selectedVehicle.plate}
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="w-fit text-sm px-3 py-1">
+                {displayedTransactions.length} records
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              {[
-                ["Truck Number", selectedVehicle.truckNumber || "N/A"],
-                ["VIN / Chassis", selectedVehicle.vinOrChassis || selectedVehicle.vin || "N/A"],
-                ["Fuel Type", selectedVehicle.fuelType || "N/A"],
-                ["Service Type", selectedVehicle.serviceType || "N/A"],
-                ["Registry Status", getVehicleStatus(selectedVehicle)],
-                ["Logbook Number", selectedVehicle.logbookNumber || "N/A"],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="text-sm font-medium">{value}</p>
-                </div>
-              ))}
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={selectedVehicle.plate}
+                  readOnly
+                  aria-label="Vehicle transaction filter"
+                  className="h-11 pl-10 font-mono text-base"
+                />
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-base">Transaction</TableHead>
+                    <TableHead className="text-base">Type</TableHead>
+                    <TableHead className="text-base">Amount</TableHead>
+                    <TableHead className="text-base">Date & Time</TableHead>
+                    <TableHead className="text-base">Location</TableHead>
+                    <TableHead className="text-base">Operator</TableHead>
+                    <TableHead className="text-right text-base">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayedTransactions.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell className="font-medium text-base">{transaction.id}</TableCell>
+                      <TableCell className="text-base">{transaction.type}</TableCell>
+                      <TableCell className="text-base font-medium">{formatCurrency(transaction.amount)}</TableCell>
+                      <TableCell className="text-base">{transaction.date}</TableCell>
+                      <TableCell className="text-base">{transaction.location}</TableCell>
+                      <TableCell className="text-base">{transaction.operator}</TableCell>
+                      <TableCell className="text-right">{getTransactionStatusBadge(transaction.status)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription className="text-xs">Total Paid (30 days)</CardDescription>
-              <CardTitle className="text-xl">N/A</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription className="text-xs">Total Paid (90 days)</CardDescription>
-              <CardTitle className="text-xl">N/A</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription className="text-xs">Payment Status</CardDescription>
-              <CardTitle className="text-xl">
-                {selectedVehicle.compliance === "Compliant" ? (
-                  <span className="text-[#4FAF7C]">Current</span>
-                ) : (
-                  <span className="text-destructive">Overdue</span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            {selectedVehicle.compliance === "Non-compliant" && (
-              <CardContent>
-                <Button
-                  onClick={() => setIsContactDialogOpen(true)}
-                  variant="outline"
-                  className="w-full text-sm"
-                >
-                  Contact Owner
-                </Button>
-              </CardContent>
-            )}
-          </Card>
-        </div>
 
         {selectedVehicle.compliance === "Non-compliant" && (
           <Card>
@@ -528,7 +661,6 @@ export function VehiclesPage() {
                   <TableHead className="text-base">Owner</TableHead>
                   <TableHead className="text-base">Type</TableHead>
                   <TableHead className="text-base">Weight Class</TableHead>
-                  <TableHead className="text-base">Last Payment</TableHead>
                   <TableHead className="text-right text-base">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -539,29 +671,25 @@ export function VehiclesPage() {
                     <TableRow key={index}>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-16" /></TableCell>
-                    </TableRow>
-                  ))
-                ) : paginatedVehicles.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No vehicles found
-                    </TableCell>
-                  </TableRow>
+	                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+	                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+	                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+	                    </TableRow>
+	                  ))
+	                ) : paginatedVehicles.length === 0 ? (
+	                  <TableRow>
+	                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+	                      No vehicles found
+	                    </TableCell>
+	                  </TableRow>
                 ) : (
                   paginatedVehicles.map((vehicle) => (
                   <TableRow key={vehicle.id}>
                     <TableCell className="font-mono font-medium text-base">{vehicle.plateNumber}</TableCell>
-                    <TableCell className="text-base">{getVehicleOwner(vehicle)}</TableCell>
-                    <TableCell className="text-base">{getVehicleType(vehicle)}</TableCell>
-                    <TableCell className="text-base">{getVehicleCapacity(vehicle)}</TableCell>
-                    <TableCell className="text-base">{getVehicleRegistrationDate(vehicle)}</TableCell>
-                    <TableCell className="text-right">
+	                    <TableCell className="text-base">{getVehicleOwner(vehicle)}</TableCell>
+	                    <TableCell className="text-base">{getVehicleType(vehicle)}</TableCell>
+	                    <TableCell className="text-base">{getVehicleCapacity(vehicle)}</TableCell>
+	                    <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"

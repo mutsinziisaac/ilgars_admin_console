@@ -1,5 +1,6 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
 import { DEFAULT_MUNICIPALITY_ID } from "../constants"
+import { toApiError } from "../errors"
 import {
   RUCPolicyDetailResponseSchema,
   RUCPolicyListResponseSchema,
@@ -83,18 +84,33 @@ export const RUCPoliciesApi = {
     }),
 
   /**
-   * Activate RUC policy through update.
-   * The deployed collection exposes create/list for RUC policies and carries
-   * activation as the `active` field, not as a separate activate endpoint.
+   * Activate RUC policy
+   * POST /v1/ruc-policies/{id}/activate
    */
-  activateRUCPolicy: (policy: RUCPolicy) =>
-    RUCPoliciesApi.updateRUCPolicy(policy.id, {
-      gracePeriodHours: policy.gracePeriodHours,
-      specialPermitCapacityThreshold: policy.specialPermitCapacityThreshold,
-      specialPermitCapacityUnit: policy.specialPermitCapacityUnit,
-      municipalityId: policy.municipalityId,
-      active: true,
-    }),
+  activateRUCPolicy: async (policy: RUCPolicy) => {
+    try {
+      return await coreRequest<RUCPolicyDetailResponse>({
+        method: "POST",
+        url: `/v1/ruc-policies/${encodeURIComponent(policy.id)}/activate`,
+        data: {},
+        schema: RUCPolicyDetailResponseSchema,
+      })
+    } catch (error) {
+      const apiError = toApiError(error)
+
+      if (apiError.status !== 404 && apiError.status !== 405) {
+        throw error
+      }
+
+      return RUCPoliciesApi.updateRUCPolicy(policy.id, {
+        gracePeriodHours: policy.gracePeriodHours,
+        specialPermitCapacityThreshold: policy.specialPermitCapacityThreshold,
+        specialPermitCapacityUnit: policy.specialPermitCapacityUnit,
+        municipalityId: policy.municipalityId,
+        active: true,
+      })
+    }
+  },
 
   /**
    * Delete RUC policy

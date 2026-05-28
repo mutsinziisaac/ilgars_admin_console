@@ -6,7 +6,7 @@ import { LandingPage } from "@/pages/landing"
 import { DashboardPage } from "@/pages/dashboard"
 import { TransactionsPage } from "@/pages/transactions"
 import { RoadClosurePermitsContent } from "@/pages/road-closure-permits"
-import { AuthorizationsPage } from "@/pages/authorizations"
+import { HeavyTruckPermitsPage } from "@/pages/heavy-truck-permits"
 import { AlertsPage } from "@/pages/alerts"
 import { EnforcementPage } from "@/pages/enforcement"
 import { VehiclesPage } from "@/pages/vehicles"
@@ -100,7 +100,7 @@ function AppContent() {
       case "road-closure-permits":
         return <RoadClosurePermitsContent />
       case "heavy-truck-permits":
-        return <AuthorizationsPage />
+        return <HeavyTruckPermitsPage />
       case "manage-staff":
       case "roles-management":
         return <RolesManagementPage view="staff" onManageRoles={() => setCurrentPage("manage-roles")} />

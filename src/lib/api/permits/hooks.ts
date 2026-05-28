@@ -68,6 +68,18 @@ export const removeRoadClosurePermitFromListResponse = (
   }
 }
 
+export const useRoadClosurePermitsList = (
+  params?: RoadClosurePermitSearchParams,
+) =>
+  useQuery({
+    queryKey: roadClosurePermitKeys.list(params),
+    queryFn: ({ signal }) =>
+      RoadClosurePermitsApi.listRoadClosurePermits(params, signal),
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
+
 export const usePendingRoadClosurePermits = () =>
   useQuery({
     queryKey: roadClosurePermitKeys.pending(),
