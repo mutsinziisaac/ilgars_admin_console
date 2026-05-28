@@ -5,10 +5,12 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, PieChart, Pie, Cell } from "recharts"
 import { useState } from "react"
 import { TrendingUp, TrendingDown } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
 import { useOfficerKpis } from "@/lib/api/enforcement/hooks"
 import type { OfficerKpisResponse } from "@/lib/api/enforcement/schemas"
-import { RoadClosurePermitsApi } from "@/lib/api/permits/api"
+import {
+  readRoadClosurePermitTotal,
+  usePendingRoadClosurePermits,
+} from "@/lib/api/permits/hooks"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
 
 const getOfficerKpisPayload = (response: OfficerKpisResponse | undefined): Record<string, unknown> | undefined => {
@@ -52,14 +54,7 @@ export function DashboardPage() {
   const [timeRange, setTimeRange] = useState<"day" | "week" | "month">("week")
   const officerKpisQuery = useOfficerKpis()
   const activeVehiclesQuery = useVehiclesList({ page: 0, size: 100, status: "ACTIVE" })
-  const pendingPermitsQuery = useQuery({
-    queryKey: ["dashboard", "pending-road-closure-permits"],
-    queryFn: ({ signal }) =>
-      RoadClosurePermitsApi.listRoadClosurePermits({ page: 0, size: 100, status: "PENDING" }, signal),
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: false,
-    retry: 1,
-  })
+  const pendingPermitsQuery = usePendingRoadClosurePermits()
 
   // Revenue data for different time ranges
   const revenueDataDay = [
@@ -135,7 +130,7 @@ export function DashboardPage() {
 
   const officerKpis = getOfficerKpisPayload(officerKpisQuery.data)
   const activeVehiclesTotal = activeVehiclesQuery.isError ? 2367 : readTotal(activeVehiclesQuery.data)
-  const pendingPermitsTotal = pendingPermitsQuery.isError ? 8 : readTotal(pendingPermitsQuery.data)
+  const pendingPermitsTotal = pendingPermitsQuery.isError ? 0 : readRoadClosurePermitTotal(pendingPermitsQuery.data)
   const enforcementActionsTotal = officerKpisQuery.isError
     ? 47
     : readNumber(
@@ -203,7 +198,7 @@ export function DashboardPage() {
                 API
               </Badge>
               <span className="text-sm text-muted-foreground">
-                {pendingPermitsQuery.isError ? "local fallback" : "awaiting review"}
+                {pendingPermitsQuery.isError ? "unavailable" : "awaiting review"}
               </span>
             </div>
           </CardContent>

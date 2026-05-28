@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { ArrowLeft, Building2, MapPin, Clock, Plus, Edit, CheckCircle, XCircle, Loader2, AlertCircle, Search } from "lucide-react"
 import { EditableGoogleMap } from "@/components/ui/map"
 import { toast } from "sonner"
-import { MunicipalitiesApi } from "@/lib/api"
+import { getApiErrorMessage, MunicipalitiesApi } from "@/lib/api"
 import type { BoundaryVersion, Municipality } from "@/lib/api"
 import { BOUNDARY_VERSIONS_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
 import {
@@ -31,27 +31,35 @@ const getLocalTimeZone = () =>
 
 const displayTimeZone = () => getLocalTimeZone()
 
+const boundaryVersionsByMunicipality = new Map<string, BoundaryVersion[]>()
+
 const getBoundaryVersionsStorageKey = (municipalityId: string) =>
   `${BOUNDARY_VERSIONS_STORAGE_KEY_PREFIX}.${municipalityId}`
 
 const getStoredBoundaryVersions = (municipalityId: string): BoundaryVersion[] => {
+  const cached = boundaryVersionsByMunicipality.get(municipalityId)
+  if (cached) return cached
+
   if (typeof window === "undefined") return []
 
   try {
-    const stored = localStorage.getItem(getBoundaryVersionsStorageKey(municipalityId))
-    return stored ? (JSON.parse(stored) as BoundaryVersion[]) : []
+    const stored = window.sessionStorage.getItem(getBoundaryVersionsStorageKey(municipalityId))
+    const boundaries = stored ? (JSON.parse(stored) as BoundaryVersion[]) : []
+    boundaryVersionsByMunicipality.set(municipalityId, boundaries)
+    return boundaries
   } catch {
     return []
   }
 }
 
 const storeBoundaryVersions = (municipalityId: string, boundaryVersions: BoundaryVersion[]) => {
-  if (typeof window === "undefined") return
-
-  localStorage.setItem(
-    getBoundaryVersionsStorageKey(municipalityId),
-    JSON.stringify(boundaryVersions),
-  )
+  boundaryVersionsByMunicipality.set(municipalityId, boundaryVersions)
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(
+      getBoundaryVersionsStorageKey(municipalityId),
+      JSON.stringify(boundaryVersions),
+    )
+  }
 }
 
 const compactJson = (value: string) => {
@@ -60,18 +68,6 @@ const compactJson = (value: string) => {
   } catch {
     return value
   }
-}
-
-const isMunicipality = (value: unknown): value is Municipality => {
-  if (!value || typeof value !== "object") return false
-
-  const candidate = value as Partial<Municipality>
-  return Boolean(candidate.id && candidate.code && candidate.name && candidate.timezone)
-}
-
-const getBoundaryVersions = async (municipalityId: string, signal?: AbortSignal) => {
-  const response = await MunicipalitiesApi.listBoundaryVersions(municipalityId, signal)
-  return response.data ?? response.content ?? response.items ?? []
 }
 
 type LocallyTrackedBoundaryVersion = BoundaryVersion & {
@@ -113,13 +109,6 @@ const mergeBoundaryVersions = (
 
 const isBoundaryVersionActivated = (boundary: BoundaryVersion) =>
   hasConfirmedBoundaryActivation(boundary)
-
-const isCancelledRequest = (error: unknown, signal?: AbortSignal) => {
-  if (signal?.aborted) return true
-  if (!(error instanceof Error)) return false
-
-  return error.message.toLowerCase().includes("cancelled")
-}
 
 const toLatLngFromGeoJsonCoordinate = (coordinate: unknown): [number, number] | null => {
   if (!Array.isArray(coordinate) || coordinate.length < 2) return null
@@ -200,32 +189,6 @@ const createBoundaryGeoJson = (points: [number, number][]) => {
   })
 }
 
-const normalizeConfiguration = (
-  response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
-): { municipality?: Municipality; boundaryVersions: BoundaryVersion[] } => {
-  const data = response.data as Record<string, unknown>
-  const nestedMunicipality = data.municipality
-  const municipality = isMunicipality(nestedMunicipality)
-    ? nestedMunicipality
-    : isMunicipality(data)
-      ? data
-      : null
-
-  const boundaryVersions =
-    Array.isArray(data.boundaryVersions)
-      ? (data.boundaryVersions as BoundaryVersion[])
-      : Array.isArray(data.boundaries)
-        ? (data.boundaries as BoundaryVersion[])
-        : data.activeBoundaryVersion
-          ? [data.activeBoundaryVersion as BoundaryVersion]
-          : []
-
-  return {
-    municipality: municipality ?? undefined,
-    boundaryVersions,
-  }
-}
-
 export function MunicipalityPage() {
   const [municipality, setMunicipality] = useState<Municipality | null>(() => getStoredMunicipality())
   const [municipalities, setMunicipalities] = useState<Municipality[]>(() => getStoredMunicipalities())
@@ -274,161 +237,39 @@ export function MunicipalityPage() {
     })
   }, [])
 
-  const loadMunicipalityFromDb = useCallback(
-    async (
-      municipalityId = getStoredMunicipalityId(),
-      signal?: AbortSignal,
-      fallbackBoundaries: BoundaryVersion[] = [],
-    ) => {
-      setIsLoadingMunicipality(true)
-      setMunicipalityError(null)
+  const hydrateMunicipalityFromStorage = useCallback(
+    (municipalityId = getStoredMunicipalityId(), fallbackBoundaries: BoundaryVersion[] = []) => {
+      const storedMunicipalities = getStoredMunicipalities()
+      const storedMunicipality =
+        storedMunicipalities.find((item) => item.id === municipalityId) ??
+        getStoredMunicipality()
+      const storedBoundaries = getStoredBoundaryVersions(municipalityId)
 
-      try {
-        const [municipalityResponse, boundaryVersions] = await Promise.all([
-          MunicipalitiesApi.getMunicipality(municipalityId, signal),
-          getBoundaryVersions(municipalityId, signal),
-        ])
-        storeActiveMunicipality(municipalityResponse.data)
-        setBoundaries((current) => {
-          const merged = mergeBoundaryVersions(
-            boundaryVersions,
-            fallbackBoundaries.length ? fallbackBoundaries : current,
-          )
-          storeBoundaryVersions(municipalityResponse.data.id, merged)
-          return merged
-        })
-      } catch (directReadError) {
-        if (isCancelledRequest(directReadError, signal)) return
-
-        try {
-          const configurationResponse = await MunicipalitiesApi.getMunicipalityConfiguration(municipalityId, signal)
-          const configuration = normalizeConfiguration(configurationResponse)
-          if (configuration.municipality) {
-            storeActiveMunicipality(configuration.municipality)
-          }
-          setBoundaries((current) => {
-            const merged = mergeBoundaryVersions(
-              configuration.boundaryVersions,
-              fallbackBoundaries.length ? fallbackBoundaries : current,
-            )
-            storeBoundaryVersions(municipalityId, merged)
-            return merged
-          })
-          return
-        } catch (configurationError) {
-          if (isCancelledRequest(configurationError, signal)) return
-
-          // The deployed API currently returns 405 for /configuration in UAT,
-          // so fall back to the municipality list before surfacing an error.
-        }
-
-        try {
-          const listResponse = await MunicipalitiesApi.listMunicipalities(signal)
-          const municipalities =
-            listResponse.data ??
-            listResponse.content ??
-            listResponse.items ??
-            []
-          if (municipalities.length) {
-            const nextMunicipalities = mergeMunicipalities(getStoredMunicipalities(), municipalities)
-            setMunicipalities(nextMunicipalities)
-            storeMunicipalities(nextMunicipalities)
-          }
-          const nextMunicipality =
-            municipalities.find((item) => item.id === municipalityId) ??
-            getStoredMunicipalities().find((item) => item.id === municipalityId) ??
-            getStoredMunicipality()
-
-          if (nextMunicipality) {
-            storeActiveMunicipality(nextMunicipality)
-            try {
-              const boundaryVersions = await getBoundaryVersions(nextMunicipality.id, signal)
-              setBoundaries((current) => {
-                const merged = mergeBoundaryVersions(
-                  boundaryVersions,
-                  fallbackBoundaries.length ? fallbackBoundaries : current,
-                )
-                storeBoundaryVersions(nextMunicipality.id, merged)
-                return merged
-              })
-            } catch {
-              setBoundaries((current) => {
-                const stored = getStoredBoundaryVersions(nextMunicipality.id)
-                const merged = fallbackBoundaries.length
-                  ? mergeBoundaryVersions(fallbackBoundaries, current)
-                  : mergeBoundaryVersions(stored, current)
-                storeBoundaryVersions(nextMunicipality.id, merged)
-                return merged
-              })
-            }
-            return
-          }
-
-          throw directReadError
-        } catch (listError) {
-          if (isCancelledRequest(listError, signal)) return
-
-          const storedMunicipality = getStoredMunicipality()
-          const storedBoundaries = getStoredBoundaryVersions(municipalityId)
-
-          if (storedMunicipality || storedBoundaries.length || fallbackBoundaries.length) {
-            if (storedMunicipality) {
-              storeActiveMunicipality(storedMunicipality)
-            }
-
-            setBoundaries((current) => {
-              const cachedBoundaries = fallbackBoundaries.length ? fallbackBoundaries : storedBoundaries
-              const merged = mergeBoundaryVersions(cachedBoundaries, current)
-              if (merged.length) {
-                storeBoundaryVersions(municipalityId, merged)
-              }
-              return merged
-            })
-            setMunicipalityError(null)
-            return
-          }
-
-          setMunicipalityError(
-            listError instanceof Error
-              ? listError.message
-              : "Failed to load municipality from database",
-          )
-        }
-      } finally {
-        setIsLoadingMunicipality(false)
+      if (storedMunicipality) {
+        storeActiveMunicipality(storedMunicipality)
       }
+
+      setMunicipalities(storedMunicipalities)
+      setBoundaries((current) => {
+        const cachedBoundaries = fallbackBoundaries.length ? fallbackBoundaries : storedBoundaries
+        const merged = mergeBoundaryVersions(cachedBoundaries, current)
+        if (merged.length) {
+          storeBoundaryVersions(municipalityId, merged)
+        }
+        return merged
+      })
+      setMunicipalityError(null)
+      setIsLoadingMunicipality(false)
     },
     [storeActiveMunicipality],
   )
 
   useEffect(() => {
-    const controller = new AbortController()
-    void Promise.resolve().then(() => {
-      void loadMunicipalityFromDb(getStoredMunicipalityId(), controller.signal)
-    })
-
-    return () => controller.abort()
-  }, [loadMunicipalityFromDb])
+    hydrateMunicipalityFromStorage(getStoredMunicipalityId())
+  }, [hydrateMunicipalityFromStorage])
 
   useEffect(() => {
-    const controller = new AbortController()
-
-    MunicipalitiesApi.listMunicipalities(controller.signal)
-      .then((response) => {
-        const dbMunicipalities = response.data ?? response.content ?? response.items ?? []
-        if (!dbMunicipalities.length) return
-
-        const nextMunicipalities = mergeMunicipalities(getStoredMunicipalities(), dbMunicipalities)
-        setMunicipalities(nextMunicipalities)
-        storeMunicipalities(nextMunicipalities)
-      })
-      .catch((error) => {
-        if (!isCancelledRequest(error, controller.signal)) {
-          setMunicipalities(getStoredMunicipalities())
-        }
-      })
-
-    return () => controller.abort()
+    setMunicipalities(getStoredMunicipalities())
   }, [])
 
   const handleUpdateMunicipality = () => {
@@ -444,11 +285,11 @@ export function MunicipalityPage() {
     toast.success("Municipality updated successfully")
   }
 
-  const handleSelectMunicipality = async (nextMunicipality: Municipality) => {
+  const handleSelectMunicipality = (nextMunicipality: Municipality) => {
     storeActiveMunicipality(nextMunicipality)
     const storedBoundaries = getStoredBoundaryVersions(nextMunicipality.id)
     setBoundaries(storedBoundaries)
-    await loadMunicipalityFromDb(nextMunicipality.id, undefined, storedBoundaries)
+    hydrateMunicipalityFromStorage(nextMunicipality.id, storedBoundaries)
   }
 
   const getNextBoundaryVersion = () => {
@@ -552,6 +393,7 @@ export function MunicipalityPage() {
         version: boundaryForm.version,
         displayName: boundaryForm.displayName,
         format: boundaryForm.format,
+        active: false,
         boundaryData: boundaryForm.boundaryData,
       })
       let createdBoundary: LocallyTrackedBoundaryVersion = {
@@ -593,7 +435,7 @@ export function MunicipalityPage() {
         boundaryData: defaultBoundaryData,
       })
       toast.success(activateAfterCreate ? "Boundary version created and activated" : "Boundary version created successfully")
-      await loadMunicipalityFromDb(municipality.id, undefined, nextBoundaries)
+      hydrateMunicipalityFromStorage(municipality.id, nextBoundaries)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create boundary")
     } finally {
@@ -614,7 +456,7 @@ export function MunicipalityPage() {
       setBoundaries(nextBoundaries)
       storeBoundaryVersions(municipality?.id ?? getStoredMunicipalityId(), nextBoundaries)
       if (municipality?.id) {
-        await loadMunicipalityFromDb(municipality.id, undefined, nextBoundaries)
+        hydrateMunicipalityFromStorage(municipality.id, nextBoundaries)
       }
       toast.success("Boundary version activated")
     } catch (error) {
@@ -625,12 +467,21 @@ export function MunicipalityPage() {
   }
 
   const handleCreateMunicipality = async () => {
+    const code = createMunicipalityForm.code.trim()
+    const name = createMunicipalityForm.name.trim()
+    const timezone = createMunicipalityForm.timezone.trim()
+
+    if (!code || !name || !timezone) {
+      toast.error("Code, name, and timezone are required")
+      return
+    }
+
     setIsCreatingMunicipality(true)
     try {
       const response = await MunicipalitiesApi.createMunicipality({
-        code: createMunicipalityForm.code,
-        name: createMunicipalityForm.name,
-        timezone: displayTimeZone(),
+        code,
+        name,
+        timezone,
       })
       const newMunicipality = response.data
       storeActiveMunicipality(newMunicipality)
@@ -641,10 +492,10 @@ export function MunicipalityPage() {
       })
       setIsCreateMunicipalityOpen(false)
       setBoundaries([])
-      await loadMunicipalityFromDb(newMunicipality.id)
+      hydrateMunicipalityFromStorage(newMunicipality.id)
       toast.success("Municipality created successfully")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create municipality")
+      toast.error(getApiErrorMessage(error, "Failed to create municipality"))
     } finally {
       setIsCreatingMunicipality(false)
     }

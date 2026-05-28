@@ -86,6 +86,7 @@ export const CreateBoundaryVersionRequestSchema = z.object({
   version: z.string(),
   displayName: z.string(),
   format: z.string().default("GEOJSON"),
+  active: z.boolean().optional(),
   boundaryData: z.string(),
 });
 

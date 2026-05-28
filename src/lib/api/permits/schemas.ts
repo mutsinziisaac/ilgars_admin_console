@@ -57,6 +57,7 @@ export const CreateRoadClosurePermitRequestSchema = z.object({
 });
 
 export const RoadClosurePermitApprovalRequestSchema = z.object({
+  municipalityId: z.string().optional(),
   decision: z.enum(["APPROVED", "REJECTED"]),
   approvedBy: z.string(),
   notes: z.string().optional(),

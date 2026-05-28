@@ -83,8 +83,8 @@ export function RUCPolicyPage() {
   
   const [policyForm, setPolicyForm] = useState({
     municipalityId: getStoredMunicipalityId(),
-    specialPermitCapacityThreshold: 8000,
-    specialPermitCapacityUnit: "TONNES",
+    specialPermitCapacityThreshold: 20000,
+    specialPermitCapacityUnit: "KGS",
     gracePeriodHours: 168 // 7 days default
   })
 
@@ -93,8 +93,8 @@ export function RUCPolicyPage() {
     setSelectedMunicipalityId(municipalityId)
     setPolicyForm({
       municipalityId,
-      specialPermitCapacityThreshold: 8000,
-      specialPermitCapacityUnit: "TONNES",
+      specialPermitCapacityThreshold: 20000,
+      specialPermitCapacityUnit: "KGS",
       gracePeriodHours: 168
     })
   }

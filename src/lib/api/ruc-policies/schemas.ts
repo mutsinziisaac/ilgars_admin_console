@@ -41,7 +41,7 @@ export const CreateRUCPolicyRequestSchema = z.object({
   municipalityId: z.string().optional(),
   gracePeriodHours: z.number(),
   specialPermitCapacityThreshold: z.number(),
-  specialPermitCapacityUnit: z.string().default("TONNES"),
+  specialPermitCapacityUnit: z.string().default("KGS"),
   active: z.boolean().optional().default(false),
 })
 
