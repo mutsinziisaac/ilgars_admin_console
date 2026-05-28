@@ -168,11 +168,22 @@ export const RoadClosurePermitsApi = {
    * Issue a road closure permit after payment
    * POST /v1/road-closure-permits/{roadClosurePermitId}/issue
    */
-  issueRoadClosurePermit: (roadClosurePermitId: string, signal?: AbortSignal) =>
+  issueRoadClosurePermit: (
+    roadClosurePermitId: string,
+    payload: { paymentReference: string },
+    signal?: AbortSignal,
+  ) =>
     coreRequest<RoadClosurePermitDetailResponse>({
       method: "POST",
       url: `/v1/road-closure-permits/${encodeURIComponent(roadClosurePermitId)}/issue`,
-      data: {},
+      data: {
+        data: {
+          municipalityId: DEFAULT_MUNICIPALITY_ID,
+          permitId: roadClosurePermitId,
+          roadClosurePermitId,
+          paymentReference: payload.paymentReference,
+        },
+      },
       signal,
       schema: RoadClosurePermitDetailResponseSchema,
     }),
