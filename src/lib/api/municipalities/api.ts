@@ -2,13 +2,27 @@ import { coreRequest } from "../httpClient";
 import {
   BoundaryVersionDetailResponseSchema,
   MunicipalityDetailResponseSchema,
+  MunicipalityConfigurationResponseSchema,
   type BoundaryVersionDetailResponse,
   type CreateBoundaryVersionRequest,
   type CreateMunicipalityRequest,
+  type MunicipalityConfigurationResponse,
   type MunicipalityDetailResponse,
 } from "./schemas";
 
 export const MunicipalitiesApi = {
+  /**
+   * Get municipality configuration
+   * GET /v1/municipalities/{municipalityId}/configuration
+   */
+  getMunicipalityConfiguration: (municipalityId: string, signal?: AbortSignal) =>
+    coreRequest<MunicipalityConfigurationResponse>({
+      method: "GET",
+      url: `/v1/municipalities/${encodeURIComponent(municipalityId)}/configuration`,
+      signal,
+      schema: MunicipalityConfigurationResponseSchema,
+    }),
+
   /**
    * Create municipality
    * POST /v1/municipalities

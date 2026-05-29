@@ -10,26 +10,27 @@ let activeMunicipality: Municipality | null = null
 let activeMunicipalityId = DEFAULT_MUNICIPALITY_ID
 let municipalities: Municipality[] = []
 
-const readSessionJson = <T,>(key: string, fallback: T): T => {
+const readPersistentJson = <T,>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback
 
   try {
-    const stored = window.sessionStorage.getItem(key)
+    const stored = window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key)
     return stored ? (JSON.parse(stored) as T) : fallback
   } catch {
     return fallback
   }
 }
 
-const writeSessionJson = (key: string, value: unknown) => {
+const writePersistentJson = (key: string, value: unknown) => {
   if (typeof window === "undefined") return
 
+  window.localStorage.setItem(key, JSON.stringify(value))
   window.sessionStorage.setItem(key, JSON.stringify(value))
 }
 
 export const getStoredMunicipality = (): Municipality | null => {
   if (!activeMunicipality) {
-    activeMunicipality = readSessionJson<Municipality | null>(ACTIVE_MUNICIPALITY_STORAGE_KEY, null)
+    activeMunicipality = readPersistentJson<Municipality | null>(ACTIVE_MUNICIPALITY_STORAGE_KEY, null)
   }
 
   return activeMunicipality
@@ -38,7 +39,9 @@ export const getStoredMunicipality = (): Municipality | null => {
 export const getStoredMunicipalityId = () => {
   if (activeMunicipalityId === DEFAULT_MUNICIPALITY_ID && typeof window !== "undefined") {
     activeMunicipalityId =
-      window.sessionStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) || DEFAULT_MUNICIPALITY_ID
+      window.localStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) ||
+      window.sessionStorage.getItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY) ||
+      DEFAULT_MUNICIPALITY_ID
   }
 
   return activeMunicipalityId
@@ -46,7 +49,7 @@ export const getStoredMunicipalityId = () => {
 
 export const getStoredMunicipalities = (): Municipality[] => {
   if (!municipalities.length) {
-    municipalities = readSessionJson<Municipality[]>(MUNICIPALITIES_STORAGE_KEY, [])
+    municipalities = readPersistentJson<Municipality[]>(MUNICIPALITIES_STORAGE_KEY, [])
   }
 
   return activeMunicipality ? mergeMunicipalities(municipalities, [activeMunicipality]) : municipalities
@@ -54,7 +57,7 @@ export const getStoredMunicipalities = (): Municipality[] => {
 
 export const storeMunicipalities = (nextMunicipalities: Municipality[]) => {
   municipalities = mergeMunicipalities(nextMunicipalities)
-  writeSessionJson(MUNICIPALITIES_STORAGE_KEY, municipalities)
+  writePersistentJson(MUNICIPALITIES_STORAGE_KEY, municipalities)
 }
 
 export const mergeMunicipalities = (
@@ -80,8 +83,9 @@ export const setActiveMunicipality = (municipality: Municipality) => {
   activeMunicipalityId = municipality.id
   const nextMunicipalities = mergeMunicipalities(getStoredMunicipalities(), [municipality])
   storeMunicipalities(nextMunicipalities)
-  writeSessionJson(ACTIVE_MUNICIPALITY_STORAGE_KEY, municipality)
+  writePersistentJson(ACTIVE_MUNICIPALITY_STORAGE_KEY, municipality)
   if (typeof window !== "undefined") {
+    window.localStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, municipality.id)
     window.sessionStorage.setItem(ACTIVE_MUNICIPALITY_ID_STORAGE_KEY, municipality.id)
   }
 }

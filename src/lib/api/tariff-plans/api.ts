@@ -1,5 +1,5 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
-import { DEFAULT_MUNICIPALITY_ID } from "../constants"
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope"
 import {
   TariffPlanDetailResponseSchema,
   TariffPlanListResponseSchema,
@@ -21,9 +21,8 @@ export const TariffPlansApi = {
    */
   listTariffPlans: async (params?: ListTariffPlansParams, signal?: AbortSignal): Promise<TariffPlanListResponse> => {
     const effectiveParams = {
-      municipalityId: DEFAULT_MUNICIPALITY_ID,
       status: "all",
-      ...params,
+      ...withActiveMunicipality(params),
     }
     
     return coreRequest<TariffPlanListResponse>({
@@ -57,10 +56,7 @@ export const TariffPlansApi = {
       method: "POST",
       url: "/v1/tariff-plans",
       data: {
-        data: {
-          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       schema: TariffPlanDetailResponseSchema,
     }),
@@ -74,10 +70,7 @@ export const TariffPlansApi = {
       method: "PUT",
       url: `/v1/tariff-plans/${encodeURIComponent(id)}`,
       data: {
-        data: {
-          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       schema: TariffPlanDetailResponseSchema,
     }),

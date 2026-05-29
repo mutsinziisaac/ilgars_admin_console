@@ -4,7 +4,7 @@ import { z } from "zod"
 export const RoadClosureRateSchema = z.object({
   id: z.string(),
   municipalityId: z.string(),
-  purpose: z.string(), // CONSTRUCTION, FILMING, SPORTING_EVENTS, FAIRS, FOR_PROFIT_EVENTS
+  purpose: z.string(), // CONSTRUCTION, FILMING, SPORTING_EVENT, FAIRS, FOR_PROFIT_EVENTS
   roadType: z.string(), // PRIMARY_ROAD, SECONDARY_ROAD, TERTIARY_ROAD
   closureType: z.string().optional(), // FULL_CLOSURE, PARTIAL_RESTRICTION
   hourlyRate: z.number(),

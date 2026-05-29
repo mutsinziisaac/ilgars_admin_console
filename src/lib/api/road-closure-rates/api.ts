@@ -1,5 +1,5 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
-import { DEFAULT_MUNICIPALITY_ID } from "../constants"
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope"
 import {
   RoadClosureRateDetailResponseSchema,
   RoadClosureRateListResponseSchema,
@@ -23,8 +23,7 @@ export const RoadClosureRatesApi = {
    */
   listRoadClosureRates: async (params?: ListRoadClosureRatesParams, signal?: AbortSignal): Promise<RoadClosureRateListResponse> => {
     const effectiveParams = {
-      municipalityId: DEFAULT_MUNICIPALITY_ID,
-      ...params,
+      ...withActiveMunicipality(params),
     }
     
     return coreRequest<RoadClosureRateListResponse>({
@@ -58,10 +57,7 @@ export const RoadClosureRatesApi = {
       method: "POST",
       url: "/v1/road-closure-rates",
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       schema: RoadClosureRateDetailResponseSchema,
     }),
@@ -75,10 +71,7 @@ export const RoadClosureRatesApi = {
       method: "PUT",
       url: `/v1/road-closure-rates/${encodeURIComponent(id)}`,
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       schema: RoadClosureRateDetailResponseSchema,
     }),

@@ -38,7 +38,7 @@
     "reports": "Reports",
     "permits": "Permits",
     "roadClosurePermits": "Road Closure Permits",
-    "heavyTruckPermits": "Heavy Truck Permits",
+    "specialPermits": "Special Permits",
     "violations": "Violations",
     "alerts": "Alerts",
     "enforcement": "Enforcement",
@@ -52,7 +52,7 @@
     "routes": "Routes",
     "roadClosureRates": "Road Closure Rates",
     "finesConfiguration": "Fines Configuration",
-    "geofencingZones": "Exempted Routes",
+    "geofencingZones": "Exempt Areas",
     "vehicleClassification": "Vehicle Classification",
     "weightCategories": "Weight Categories",
     "timeWindows": "Time Windows"

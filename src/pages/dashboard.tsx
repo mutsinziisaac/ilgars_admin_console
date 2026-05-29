@@ -11,6 +11,11 @@ import {
   readRoadClosurePermitTotal,
   usePendingRoadClosurePermits,
 } from "@/lib/api/permits/hooks"
+import {
+  readSpecialPermitTotal,
+  useSpecialPermitRouteRequestsList,
+  useSpecialPermitsList,
+} from "@/lib/api/special-permits/hooks"
 import { useVehiclesList } from "@/lib/api/vehicles/hooks"
 
 const getOfficerKpisPayload = (response: OfficerKpisResponse | undefined): Record<string, unknown> | undefined => {
@@ -55,6 +60,16 @@ export function DashboardPage() {
   const officerKpisQuery = useOfficerKpis()
   const activeVehiclesQuery = useVehiclesList({ page: 0, size: 100, status: "ACTIVE" })
   const pendingPermitsQuery = usePendingRoadClosurePermits()
+  const pendingSpecialPermitsQuery = useSpecialPermitsList({
+    page: 0,
+    size: 100,
+    status: "PENDING",
+  })
+  const pendingRouteRequestsQuery = useSpecialPermitRouteRequestsList({
+    page: 0,
+    size: 100,
+    status: "PENDING_SECURITY_REVIEW",
+  })
 
   // Revenue data for different time ranges
   const revenueDataDay = [
@@ -130,7 +145,18 @@ export function DashboardPage() {
 
   const officerKpis = getOfficerKpisPayload(officerKpisQuery.data)
   const activeVehiclesTotal = activeVehiclesQuery.isError ? 2367 : readTotal(activeVehiclesQuery.data)
-  const pendingPermitsTotal = pendingPermitsQuery.isError ? 0 : readRoadClosurePermitTotal(pendingPermitsQuery.data)
+  const pendingRoadClosurePermitsTotal = pendingPermitsQuery.isError ? 0 : readRoadClosurePermitTotal(pendingPermitsQuery.data)
+  const pendingSpecialPermitsTotal = pendingSpecialPermitsQuery.isError ? 0 : readSpecialPermitTotal(pendingSpecialPermitsQuery.data)
+  const pendingRouteRequestsTotal = pendingRouteRequestsQuery.isError ? 0 : readSpecialPermitTotal(pendingRouteRequestsQuery.data)
+  const pendingPermitsTotal = pendingRoadClosurePermitsTotal + pendingSpecialPermitsTotal + pendingRouteRequestsTotal
+  const pendingPermitsLoading =
+    pendingPermitsQuery.isLoading ||
+    pendingSpecialPermitsQuery.isLoading ||
+    pendingRouteRequestsQuery.isLoading
+  const pendingPermitsUnavailable =
+    pendingPermitsQuery.isError &&
+    pendingSpecialPermitsQuery.isError &&
+    pendingRouteRequestsQuery.isError
   const enforcementActionsTotal = officerKpisQuery.isError
     ? 47
     : readNumber(
@@ -191,14 +217,14 @@ export function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">{pendingPermitsQuery.isLoading ? "..." : pendingPermitsTotal.toLocaleString()}</div>
+            <div className="text-4xl font-bold">{pendingPermitsLoading ? "..." : pendingPermitsTotal.toLocaleString()}</div>
             <div className="mt-2 flex items-center gap-2">
               <Badge variant="outline" className="border-[#DAA22A]/30 bg-[#DAA22A]/10 text-[#1C1C1C] hover:bg-[#DAA22A]/20 text-sm px-2 py-1 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3" />
                 API
               </Badge>
               <span className="text-sm text-muted-foreground">
-                {pendingPermitsQuery.isError ? "unavailable" : "awaiting review"}
+                {pendingPermitsUnavailable ? "unavailable" : "road closure + special"}
               </span>
             </div>
           </CardContent>

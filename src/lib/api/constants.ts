@@ -1,5 +1,5 @@
 export const DEFAULT_MUNICIPALITY_ID =
-  import.meta.env.VITE_MUNICIPALITY_ID ?? "aa73ac5e-4912-460f-a927-ba3ccbe57207"
+  import.meta.env.VITE_MUNICIPALITY_ID ?? "1296689c-6c4b-4477-884f-bc218219cdb2"
 
 export const ACTIVE_MUNICIPALITY_ID_STORAGE_KEY = "ilgars.activeMunicipalityId"
 export const ACTIVE_MUNICIPALITY_STORAGE_KEY = "ilgars.activeMunicipality"

@@ -1,4 +1,5 @@
 import { coreRequest } from "../httpClient"
+import { withActiveMunicipality } from "../municipality-scope"
 import {
   HeatmapResponseSchema,
   LiveMapResponseSchema,
@@ -22,7 +23,7 @@ export const AnalyticsApi = {
     coreRequest<HeatmapResponse>({
       method: "GET",
       url: "/v1/analytics/trips/heatmap",
-      params,
+      params: withActiveMunicipality(params),
       signal,
       schema: HeatmapResponseSchema,
     }),
@@ -35,7 +36,7 @@ export const AnalyticsApi = {
     coreRequest<LiveMapResponse>({
       method: "GET",
       url: "/v1/admin/live-map",
-      params,
+      params: withActiveMunicipality(params),
       signal,
       schema: LiveMapResponseSchema,
     }),

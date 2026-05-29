@@ -1,5 +1,5 @@
 import { coreRequest } from "../httpClient";
-import { DEFAULT_MUNICIPALITY_ID } from "../constants";
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope";
 import {
   MunicipalRouteDetailResponseSchema,
   MunicipalRouteListResponseSchema,
@@ -26,10 +26,7 @@ export const MunicipalRoutesApi = {
     coreRequest<MunicipalRouteListResponse>({
       method: "GET",
       url: "/v1/municipal-routes",
-      params: {
-        municipalityId: DEFAULT_MUNICIPALITY_ID,
-        ...params,
-      },
+      params: withActiveMunicipality(params),
       signal,
       schema: MunicipalRouteListResponseSchema,
     }),
@@ -55,10 +52,7 @@ export const MunicipalRoutesApi = {
       method: "POST",
       url: "/v1/municipal-routes",
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: MunicipalRouteDetailResponseSchema,
@@ -77,7 +71,7 @@ export const MunicipalRoutesApi = {
       method: "PUT",
       url: `/v1/municipal-routes/${routeId}`,
       data: {
-        data: payload,
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: MunicipalRouteDetailResponseSchema,
