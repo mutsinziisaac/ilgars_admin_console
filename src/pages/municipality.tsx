@@ -250,19 +250,16 @@ export function MunicipalityPage() {
   const getConfigMunicipality = (
     response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
     municipalityId: string,
-  ) => {
-    const configData = response.data as Municipality | {
-      municipality?: Municipality | null
-      boundaryVersions?: BoundaryVersion[]
-      boundaries?: BoundaryVersion[]
-      activeBoundaryVersion?: BoundaryVersion | null
-    }
+  ): Municipality => {
+    // Cast to `any` because Municipality's passthrough() schema gives every key
+    // an `unknown` index signature that swallows the union's named fields.
+    const configData = response.data as any
 
-    if ("municipality" in configData && configData.municipality) {
+    if (configData?.municipality) {
       return configData.municipality
     }
 
-    if ("id" in configData && "name" in configData && "code" in configData) {
+    if (configData?.id && configData?.name && configData?.code) {
       return configData as Municipality
     }
 
@@ -271,17 +268,13 @@ export function MunicipalityPage() {
 
   const getConfigBoundaries = (
     response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
-  ) => {
-    const configData = response.data as Municipality | {
-      boundaryVersions?: BoundaryVersion[]
-      boundaries?: BoundaryVersion[]
-      activeBoundaryVersion?: BoundaryVersion | null
-    }
+  ): BoundaryVersion[] => {
+    const configData = response.data as any
 
-    if ("boundaryVersions" in configData || "boundaries" in configData || "activeBoundaryVersion" in configData) {
+    if (configData?.boundaryVersions || configData?.boundaries || configData?.activeBoundaryVersion) {
       return [
-        ...(configData.boundaryVersions ?? configData.boundaries ?? []),
-        ...(configData.activeBoundaryVersion ? [configData.activeBoundaryVersion] : []),
+        ...((configData.boundaryVersions ?? configData.boundaries ?? []) as BoundaryVersion[]),
+        ...(configData.activeBoundaryVersion ? [configData.activeBoundaryVersion as BoundaryVersion] : []),
       ]
     }
 

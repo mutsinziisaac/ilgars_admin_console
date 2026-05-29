@@ -102,8 +102,14 @@ export const SpecialPermitActionResponseSchema = z
   .transform((response) => response)
 
 export type SpecialPermit = z.infer<typeof SpecialPermitSchema>
-export type SpecialPermitListResponse = z.infer<typeof SpecialPermitListResponseSchema>
-export type SpecialPermitDetailResponse = z.infer<typeof SpecialPermitDetailResponseSchema>
+// Written explicitly because Zod v4 collapses union + transform output to `{}`
+export type SpecialPermitListResponse = {
+  data: SpecialPermit[]
+  meta?: Record<string, unknown>
+}
+export type SpecialPermitDetailResponse = {
+  data: SpecialPermit
+}
 export type CreateSpecialPermitVehicleSelectionRequest = Record<string, unknown>
 export type CreateSpecialPermitRouteRequest = Record<string, unknown>
 export type ApproveSpecialPermitRequest = Record<string, unknown>

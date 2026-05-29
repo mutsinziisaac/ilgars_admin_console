@@ -64,7 +64,7 @@ export const SpecialPermitsApi = {
         data: withActiveMunicipalityData(payload),
       },
       signal,
-      schema: SpecialPermitDetailResponseSchema,
+      schema: SpecialPermitDetailResponseSchema as never,
     }),
 
   /**
@@ -94,7 +94,7 @@ export const SpecialPermitsApi = {
       url: `/v1/special-permits/${encodeURIComponent(permitId)}`,
       params: withActiveMunicipality(),
       signal,
-      schema: SpecialPermitDetailResponseSchema,
+      schema: SpecialPermitDetailResponseSchema as never,
     }),
 
   /**
@@ -108,7 +108,7 @@ export const SpecialPermitsApi = {
         data: withActiveMunicipalityData(payload),
       },
       signal,
-      schema: SpecialPermitDetailResponseSchema,
+      schema: SpecialPermitDetailResponseSchema as never,
     }),
 
   /**

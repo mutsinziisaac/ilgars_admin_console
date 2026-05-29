@@ -4,14 +4,14 @@ import { DEFAULT_MUNICIPALITY_ID } from "./constants"
 export const getActiveMunicipalityId = () =>
   getStoredMunicipalityId() || DEFAULT_MUNICIPALITY_ID
 
-export const withActiveMunicipality = <TParams extends Record<string, unknown> | undefined>(
+export const withActiveMunicipality = <TParams extends object | undefined>(
   params?: TParams,
 ) => ({
   ...(params ?? {}),
   municipalityId: getActiveMunicipalityId(),
 })
 
-export const withActiveMunicipalityData = <TPayload extends Record<string, unknown>>(
+export const withActiveMunicipalityData = <TPayload extends object>(
   payload: TPayload,
 ) => ({
   ...payload,

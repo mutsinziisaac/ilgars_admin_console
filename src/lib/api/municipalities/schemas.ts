@@ -94,7 +94,10 @@ export type Municipality = z.infer<typeof MunicipalitySchema>;
 export type BoundaryVersion = z.infer<typeof BoundaryVersionSchema>;
 export type MunicipalityDetailResponse = z.infer<typeof MunicipalityDetailResponseSchema>;
 export type MunicipalityListResponse = z.infer<typeof MunicipalityListResponseSchema>;
-export type MunicipalityConfigurationResponse = z.infer<typeof MunicipalityConfigurationResponseSchema>;
+// Written explicitly because Zod v4 collapses union inside object output to `{}`
+export type MunicipalityConfigurationResponse = {
+  data: z.infer<typeof MunicipalityConfigurationDataSchema> | Municipality;
+};
 export type BoundaryVersionDetailResponse = z.infer<typeof BoundaryVersionDetailResponseSchema>;
 export type BoundaryVersionListResponse = z.infer<typeof BoundaryVersionListResponseSchema>;
 export type CreateMunicipalityRequest = z.infer<typeof CreateMunicipalityRequestSchema>;

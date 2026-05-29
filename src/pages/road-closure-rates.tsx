@@ -352,7 +352,7 @@ export function RoadClosureRatesPage() {
                   {error instanceof Error ? error.message : "An error occurred"}
                 </p>
               </div>
-              <Button onClick={() => refetch()} variant="outline" size="sm">
+              <Button onClick={() => queryClient.invalidateQueries({ queryKey: roadClosureRatesKeys.all() })} variant="outline" size="sm">
                 Retry
               </Button>
             </div>
