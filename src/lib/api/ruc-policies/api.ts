@@ -1,5 +1,5 @@
 import { coreRequest, coreHttpClient } from "../httpClient"
-import { DEFAULT_MUNICIPALITY_ID } from "../constants"
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope"
 import { toApiError } from "../errors"
 import {
   RUCPolicyDetailResponseSchema,
@@ -23,8 +23,7 @@ export const RUCPoliciesApi = {
    */
   listRUCPolicies: async (params?: ListRUCPoliciesParams, signal?: AbortSignal): Promise<RUCPolicyListResponse> => {
     const effectiveParams = {
-      municipalityId: DEFAULT_MUNICIPALITY_ID,
-      ...params,
+      ...withActiveMunicipality(params),
     }
     
     return coreRequest<RUCPolicyListResponse>({
@@ -58,10 +57,7 @@ export const RUCPoliciesApi = {
       method: "POST",
       url: "/v1/ruc-policies",
       data: {
-        data: {
-          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       schema: RUCPolicyDetailResponseSchema,
     }),
@@ -75,10 +71,7 @@ export const RUCPoliciesApi = {
       method: "PUT",
       url: `/v1/ruc-policies/${encodeURIComponent(id)}`,
       data: {
-        data: {
-          municipalityId: payload.municipalityId ?? DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       schema: RUCPolicyDetailResponseSchema,
     }),

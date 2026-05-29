@@ -3,7 +3,7 @@ import { Sidebar } from "./sidebar"
 import { Header } from "./header"
 import { PageLocalizer } from "./page-localizer"
 
-type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "special-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
 
 interface LayoutProps {
   children: ReactNode

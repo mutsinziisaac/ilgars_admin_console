@@ -24,6 +24,11 @@ import {
   usePendingRoadClosurePermits,
 } from "@/lib/api/permits/hooks"
 import {
+  readSpecialPermitTotal,
+  useSpecialPermitRouteRequestsList,
+  useSpecialPermitsList,
+} from "@/lib/api/special-permits/hooks"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -35,8 +40,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface SidebarProps {
-  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
-  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
+  currentPage: "dashboard" | "transactions" | "road-closure-permits" | "special-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+  onNavigate: (page: "dashboard" | "transactions" | "road-closure-permits" | "special-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "gps-tracking" | "cameras" | "alerts" | "enforcement" | "vehicles" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows") => void
 }
 
 type Page = SidebarProps["currentPage"]
@@ -56,6 +61,18 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     : undefined
   const pendingRoadClosurePermitBadge =
     pendingPermitsQuery.isLoading ? "..." : pendingRoadClosurePermits
+  const specialPermitListParams = { page: 0, size: 100 }
+  const specialPermitsQuery = useSpecialPermitsList(specialPermitListParams)
+  const routeRequestsQuery = useSpecialPermitRouteRequestsList(specialPermitListParams)
+  const specialPermitsTotal =
+    readSpecialPermitTotal(specialPermitsQuery.data) +
+    readSpecialPermitTotal(routeRequestsQuery.data)
+  const specialPermitsBadge =
+    specialPermitsQuery.isLoading || routeRequestsQuery.isLoading ? "..." : specialPermitsTotal
+  const permitsTotalBadge =
+    pendingPermitsQuery.isLoading || specialPermitsQuery.isLoading || routeRequestsQuery.isLoading
+      ? "..."
+      : (pendingRoadClosurePermits ?? 0) + specialPermitsTotal
   
   const handleLogout = () => {
     auth.signoutRedirect()
@@ -90,7 +107,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
   const permitsSubItems = [
     { label: t("nav.roadClosurePermits"), page: "road-closure-permits" as const, badge: pendingRoadClosurePermitBadge },
-    { label: t("nav.heavyTruckPermits"), page: "heavy-truck-permits" as const, badge: undefined },
+    { label: t("nav.specialPermits"), page: "special-permits" as const, badge: specialPermitsBadge },
   ]
 
   const devicesSubItems = [
@@ -121,7 +138,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     // { label: t("nav.timeWindows"), page: "time-windows" as const },
   ]
 
-  const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "heavy-truck-permits"
+  const isPermitsActive = currentPage === "road-closure-permits" || currentPage === "special-permits"
   const isDevicesActive = currentPage === "gps-tracking" || currentPage === "cameras"
   const isViolationsActive = currentPage === "alerts" || currentPage === "enforcement"
   const isStaffRolesActive = currentPage === "manage-staff" || currentPage === "manage-roles" || currentPage === "create-role" || currentPage === "roles-management"
@@ -239,9 +256,9 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           >
             <FileText className="h-5 w-5" />
             <span className="flex-1 text-left">{t("nav.permits")}</span>
-            {(pendingPermitsQuery.isLoading || Boolean(pendingRoadClosurePermits)) && (
+            {(permitsTotalBadge === "..." || Boolean(permitsTotalBadge)) && (
               <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-sm text-primary-foreground">
-                {pendingRoadClosurePermitBadge}
+                {permitsTotalBadge}
               </span>
             )}
             <ChevronDown className={cn("h-4 w-4 transition-transform", showPermits && "rotate-180")} />

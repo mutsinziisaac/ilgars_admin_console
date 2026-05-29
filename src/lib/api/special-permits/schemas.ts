@@ -27,22 +27,33 @@ export const SpecialPermitSchema = z
     applicantName: z.string().optional().nullable(),
     applicantContact: z.string().optional().nullable(),
     applicantPhone: z.string().optional().nullable(),
+    requestedBy: z.string().optional().nullable(),
     vehicleClass: z.string().optional().nullable(),
     axleCount: z.coerce.number().optional().nullable(),
     grossWeight: z.coerce.number().optional().nullable(),
     grossWeightKg: z.coerce.number().optional().nullable(),
+    vehicleCapacitySnapshot: z.coerce.number().optional().nullable(),
+    capacityUnit: z.string().optional().nullable(),
     requestedStartAt: z.string().optional().nullable(),
     requestedEndAt: z.string().optional().nullable(),
     validFrom: z.string().optional().nullable(),
     validTo: z.string().optional().nullable(),
     approvedBy: z.string().optional().nullable(),
     approvedAt: z.string().optional().nullable(),
+    escortReference: z.string().optional().nullable(),
     rejectedAt: z.string().optional().nullable(),
     createdAt: z.string().optional().nullable(),
     updatedAt: z.string().optional().nullable(),
     justification: z.string().optional().nullable(),
     reason: z.string().optional().nullable(),
     travelReason: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    routeName: z.string().optional().nullable(),
+    routeCode: z.string().optional().nullable(),
+    roadType: z.string().optional().nullable(),
+    routeGeoJson: z.string().optional().nullable(),
+    expectedDurationDays: z.coerce.number().optional().nullable(),
+    paymentMode: z.string().optional().nullable(),
     paymentStatus: z.string().optional().nullable(),
   })
   .passthrough()
@@ -94,5 +105,7 @@ export type SpecialPermit = z.infer<typeof SpecialPermitSchema>
 export type SpecialPermitListResponse = z.infer<typeof SpecialPermitListResponseSchema>
 export type SpecialPermitDetailResponse = z.infer<typeof SpecialPermitDetailResponseSchema>
 export type CreateSpecialPermitVehicleSelectionRequest = Record<string, unknown>
+export type CreateSpecialPermitRouteRequest = Record<string, unknown>
 export type ApproveSpecialPermitRequest = Record<string, unknown>
+export type ReviewSpecialPermitRouteRequest = Record<string, unknown>
 export type UpdateSpecialPermitPaymentStatusRequest = Record<string, unknown>

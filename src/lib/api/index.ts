@@ -95,6 +95,8 @@ export type {
   HeatmapResponse,
 } from "./analytics/schemas";
 export type {
+  EnforcementOfficer,
+  EnforcementOfficerListResponse,
   OfficerKpisPayload,
   OfficerKpisResponse,
 } from "./enforcement/schemas";

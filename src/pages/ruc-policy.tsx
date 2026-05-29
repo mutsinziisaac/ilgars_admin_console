@@ -367,7 +367,7 @@ export function RUCPolicyPage() {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">Policy Scope</p>
                 <p className="text-sm text-muted-foreground">
-                  This policy will be created as active for the selected municipality so heavy truck permit requests can pass backend validation.
+                  This policy will be created as active for the selected municipality so special permit requests can pass backend validation.
                 </p>
               </div>
             </div>
@@ -404,7 +404,7 @@ export function RUCPolicyPage() {
                 className="text-base h-11"
               />
               <p className="text-sm text-muted-foreground">
-                Vehicles at or above this threshold require a heavy truck special permit route request. Use kilograms ({POLICY_CAPACITY_UNIT_LABEL}), not tonnes.
+                Vehicles at or above this threshold require a special permit route request. Use kilograms ({POLICY_CAPACITY_UNIT_LABEL}), not tonnes.
               </p>
             </div>
 

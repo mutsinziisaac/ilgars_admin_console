@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { DEFAULT_MUNICIPALITY_ID } from "../constants"
+import { getActiveMunicipalityId, withActiveMunicipalityQueryKey } from "../municipality-scope"
 import {
   RoadClosurePermitsApi,
   type RoadClosurePermitSearchParams,
@@ -8,19 +8,19 @@ import type { RoadClosurePermitListResponse } from "./schemas"
 
 export const PENDING_ROAD_CLOSURE_PERMIT_STATUS = "PENDING_ADMIN_APPROVAL"
 
-export const pendingRoadClosurePermitParams = {
-  municipalityId: DEFAULT_MUNICIPALITY_ID,
+export const getPendingRoadClosurePermitParams = () => ({
+  municipalityId: getActiveMunicipalityId(),
   page: 0,
   size: 100,
   status: PENDING_ROAD_CLOSURE_PERMIT_STATUS,
-} satisfies RoadClosurePermitSearchParams
+}) satisfies RoadClosurePermitSearchParams
 
 export const roadClosurePermitKeys = {
   all: () => ["road-closure-permits"] as const,
   lists: () => [...roadClosurePermitKeys.all(), "list"] as const,
   list: (params?: RoadClosurePermitSearchParams) =>
-    [...roadClosurePermitKeys.lists(), params ?? {}] as const,
-  pending: () => roadClosurePermitKeys.list(pendingRoadClosurePermitParams),
+    [...roadClosurePermitKeys.lists(), withActiveMunicipalityQueryKey(params)] as const,
+  pending: () => roadClosurePermitKeys.list(getPendingRoadClosurePermitParams()),
 }
 
 export const readRoadClosurePermitTotal = (
@@ -85,7 +85,7 @@ export const usePendingRoadClosurePermits = () =>
     queryKey: roadClosurePermitKeys.pending(),
     queryFn: ({ signal }) =>
       RoadClosurePermitsApi.listRoadClosurePermits(
-        pendingRoadClosurePermitParams,
+        getPendingRoadClosurePermitParams(),
         signal,
       ),
     staleTime: 60 * 1000,

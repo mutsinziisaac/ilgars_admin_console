@@ -1,8 +1,8 @@
+import { withActiveMunicipalityQueryKey } from "../municipality-scope"
+
 export const exemptAreasKeys = {
   all: () => ["exempt-areas"] as const,
   list: (filters?: unknown) =>
-    filters
-      ? (["exempt-areas", "list", filters] as const)
-      : (["exempt-areas", "list"] as const),
+    ["exempt-areas", "list", withActiveMunicipalityQueryKey(filters)] as const,
   detail: (id: string) => ["exempt-areas", "detail", id] as const,
 }

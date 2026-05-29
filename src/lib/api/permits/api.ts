@@ -1,5 +1,5 @@
 import { coreRequest } from "../httpClient";
-import { DEFAULT_MUNICIPALITY_ID } from "../constants";
+import { getActiveMunicipalityId, withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope";
 import { toApiError } from "../errors";
 import { RoadClosureRatesApi } from "../road-closure-rates/api";
 import {
@@ -49,10 +49,7 @@ export const RoadClosurePermitsApi = {
     coreRequest<RoadClosurePermitListResponse>({
       method: "GET",
       url: "/v1/road-closure-permits",
-      params: {
-        municipalityId: DEFAULT_MUNICIPALITY_ID,
-        ...params,
-      },
+      params: withActiveMunicipality(params),
       signal,
       schema: RoadClosurePermitListResponseSchema,
     }),
@@ -81,10 +78,7 @@ export const RoadClosurePermitsApi = {
       method: "POST",
       url: "/v1/road-closure-permits",
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: RoadClosurePermitDetailResponseSchema,
@@ -101,11 +95,12 @@ export const RoadClosurePermitsApi = {
     detailRoadClosurePermitId = roadClosurePermitId,
   ) => {
     const encodedPermitId = encodeURIComponent(roadClosurePermitId);
+    const municipalityId = getActiveMunicipalityId();
     const decisionPayload = {
-      municipalityId: DEFAULT_MUNICIPALITY_ID,
       permitId: roadClosurePermitId,
       roadClosurePermitId,
       ...payload,
+      municipalityId,
     };
     const attempts = [
       {
@@ -145,7 +140,7 @@ export const RoadClosurePermitsApi = {
           method: "POST",
           url: attempt.url,
           params: {
-            municipalityId: DEFAULT_MUNICIPALITY_ID,
+            municipalityId,
           },
           data: attempt.data,
           signal,
@@ -178,10 +173,10 @@ export const RoadClosurePermitsApi = {
       url: `/v1/road-closure-permits/${encodeURIComponent(roadClosurePermitId)}/issue`,
       data: {
         data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
           permitId: roadClosurePermitId,
           roadClosurePermitId,
           paymentReference: payload.paymentReference,
+          municipalityId: getActiveMunicipalityId(),
         },
       },
       signal,

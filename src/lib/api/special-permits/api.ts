@@ -1,11 +1,13 @@
 import { coreRequest } from "../httpClient"
-import { DEFAULT_MUNICIPALITY_ID } from "../constants"
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope"
 import {
   SpecialPermitActionResponseSchema,
   SpecialPermitDetailResponseSchema,
   SpecialPermitListResponseSchema,
   type ApproveSpecialPermitRequest,
+  type CreateSpecialPermitRouteRequest,
   type CreateSpecialPermitVehicleSelectionRequest,
+  type ReviewSpecialPermitRouteRequest,
   type SpecialPermitDetailResponse,
   type SpecialPermitListResponse,
   type UpdateSpecialPermitPaymentStatusRequest,
@@ -19,6 +21,13 @@ export interface ListSpecialPermitsParams {
   size?: number
 }
 
+export interface ListSpecialPermitRouteRequestsParams {
+  municipalityId?: string
+  status?: string
+  page?: number
+  size?: number
+}
+
 export const SpecialPermitsApi = {
   /**
    * GET /v1/special-permits
@@ -27,12 +36,53 @@ export const SpecialPermitsApi = {
     coreRequest<SpecialPermitListResponse>({
       method: "GET",
       url: "/v1/special-permits",
-      params: {
-        municipalityId: DEFAULT_MUNICIPALITY_ID,
-        ...params,
-      },
+      params: withActiveMunicipality(params),
       signal,
       schema: SpecialPermitListResponseSchema,
+    }),
+
+  /**
+   * GET /v1/special-permit-route-requests
+   */
+  listSpecialPermitRouteRequests: (params?: ListSpecialPermitRouteRequestsParams, signal?: AbortSignal) =>
+    coreRequest<SpecialPermitListResponse>({
+      method: "GET",
+      url: "/v1/special-permit-route-requests",
+      params: withActiveMunicipality(params),
+      signal,
+      schema: SpecialPermitListResponseSchema,
+    }),
+
+  /**
+   * POST /v1/special-permit-route-requests
+   */
+  createSpecialPermitRouteRequest: (payload: CreateSpecialPermitRouteRequest, signal?: AbortSignal) =>
+    coreRequest<SpecialPermitDetailResponse>({
+      method: "POST",
+      url: "/v1/special-permit-route-requests",
+      data: {
+        data: withActiveMunicipalityData(payload),
+      },
+      signal,
+      schema: SpecialPermitDetailResponseSchema,
+    }),
+
+  /**
+   * POST /v1/special-permit-route-requests/{requestId}/approval
+   */
+  reviewSpecialPermitRouteRequest: (
+    requestId: string,
+    payload: ReviewSpecialPermitRouteRequest,
+    signal?: AbortSignal,
+  ) =>
+    coreRequest<unknown>({
+      method: "POST",
+      url: `/v1/special-permit-route-requests/${encodeURIComponent(requestId)}/approval`,
+      data: {
+        data: withActiveMunicipalityData(payload),
+      },
+      signal,
+      schema: SpecialPermitActionResponseSchema,
     }),
 
   /**
@@ -42,6 +92,7 @@ export const SpecialPermitsApi = {
     coreRequest<SpecialPermitDetailResponse>({
       method: "GET",
       url: `/v1/special-permits/${encodeURIComponent(permitId)}`,
+      params: withActiveMunicipality(),
       signal,
       schema: SpecialPermitDetailResponseSchema,
     }),
@@ -54,10 +105,7 @@ export const SpecialPermitsApi = {
       method: "POST",
       url: "/v1/special-permits/vehicle-selections",
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: SpecialPermitDetailResponseSchema,
@@ -71,10 +119,7 @@ export const SpecialPermitsApi = {
       method: "POST",
       url: `/v1/special-permits/${encodeURIComponent(permitId)}/approve`,
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: SpecialPermitActionResponseSchema,
@@ -92,10 +137,7 @@ export const SpecialPermitsApi = {
       method: "POST",
       url: `/v1/special-permits/${encodeURIComponent(permitId)}/payment-status`,
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: SpecialPermitActionResponseSchema,
