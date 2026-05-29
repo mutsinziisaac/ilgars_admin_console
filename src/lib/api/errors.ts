@@ -149,6 +149,93 @@ const getServerErrorDetail = (details: unknown): string | undefined => {
   return undefined;
 };
 
+const technicalMessagePatterns = [
+  /jakarta/i,
+  /exception/i,
+  /stack trace/i,
+  /request body must/i,
+  /json parse/i,
+  /cannot deserialize/i,
+  /constraint/i,
+  /null value/i,
+  /sql/i,
+  /hibernate/i,
+];
+
+const isTechnicalMessage = (message: string) =>
+  technicalMessagePatterns.some((pattern) => pattern.test(message));
+
+const sentenceCase = (message: string) => {
+  const trimmed = message.trim();
+  if (!trimmed) return trimmed;
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+};
+
+const humanizeKnownBackendMessage = (message: string): string | undefined => {
+  const normalized = message.trim();
+
+  if (/paymentReference is required/i.test(normalized)) {
+    return "Enter the payment reference before issuing this permit.";
+  }
+
+  if (/request body must be wrapped/i.test(normalized)) {
+    return "The app could not send this request in the format the server expects. Refresh and try again.";
+  }
+
+  const missingRoadClosureRate = normalized.match(
+    /Create an active road closure rate for municipality ([^,]+), charge type ([^,]+), purpose ([^,]+), and road type ([^ ]+)/i,
+  );
+  if (missingRoadClosureRate) {
+    const [, municipalityId, , purpose, roadType] = missingRoadClosureRate;
+    const displayPurpose = purpose.replace(/_/g, " ").toLowerCase();
+    const displayRoadType = roadType.replace(/_/g, " ").toLowerCase();
+
+    return `A matching active road closure rate is missing for ${displayPurpose} on ${displayRoadType}. Create or activate it for municipality ${municipalityId}, then try again.`;
+  }
+
+  if (/duplicate key value violates unique constraint/i.test(normalized)) {
+    const match = normalized.match(/Key \(([^)]+)\)=\(([^)]+)\) already exists/);
+    if (match) {
+      const fields = match[1].replace(/_/g, " ").replace(/,/g, " and ");
+      return `A record with this ${fields} already exists.`;
+    }
+    return "A record with these details already exists.";
+  }
+
+  return undefined;
+};
+
+const getStatusFallbackMessage = (
+  status: number | undefined,
+  defaultMessage: string,
+) => {
+  switch (status) {
+    case 0:
+      return "The server could not be reached. Check your connection and try again.";
+    case 400:
+      return "Some information is missing or invalid. Check the form and try again.";
+    case 401:
+      return "Your session has expired. Sign in again to continue.";
+    case 403:
+      return "You do not have permission to perform this action. Ask an administrator to update your role if you need access.";
+    case 404:
+      return "This record could not be found. It may have been removed or changed by someone else.";
+    case 409:
+      return "This action cannot be completed because the record is not in the right state. Refresh the page and try again.";
+    case 422:
+      return "The server could not accept the submitted details. Check the required fields and try again.";
+    case 429:
+      return "Too many requests were sent. Wait a moment, then try again.";
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return "The server had a problem completing this request. Try again in a moment.";
+    default:
+      return defaultMessage;
+  }
+};
+
 export const toApiError = (error: unknown): ApiError => {
   if (error instanceof ApiError) {
     return error;
@@ -221,13 +308,27 @@ export const getApiErrorMessage = (
 ): string => {
   const apiError = toApiError(error);
   const serverDetail = getServerErrorDetail(apiError.details);
+  const statusFallback = getStatusFallbackMessage(apiError.status, defaultMessage);
 
-  if (serverDetail && !serverDetail.includes("Exception") && !serverDetail.includes("jakarta")) {
-    return serverDetail;
+  if (apiError.status === 401 || apiError.status === 403) {
+    return statusFallback;
+  }
+
+  if (serverDetail) {
+    const knownMessage = humanizeKnownBackendMessage(serverDetail);
+    if (knownMessage) return knownMessage;
+
+    if (!isTechnicalMessage(serverDetail)) {
+      return sentenceCase(serverDetail);
+    }
+
+    return statusFallback;
   }
 
   if (apiError.message && apiError.message !== "Request failed") {
     const message = apiError.message;
+    const knownMessage = humanizeKnownBackendMessage(message);
+    if (knownMessage) return knownMessage;
 
     if (message.includes("duplicate key value violates unique constraint")) {
       const match = message.match(/Key \(([^)]+)\)=\(([^)]+)\) already exists/);
@@ -238,12 +339,15 @@ export const getApiErrorMessage = (
       return "A record with these details already exists.";
     }
 
-    if (!message.includes("jakarta") && !message.includes("Exception")) {
+    if (!isTechnicalMessage(message)) {
       const errorBodyMatch = message.match(/Error\s*:\s*(.+)$/s);
       if (errorBodyMatch) {
-        return errorBodyMatch[1].trim();
+        const extracted = errorBodyMatch[1].trim();
+        const knownExtractedMessage = humanizeKnownBackendMessage(extracted);
+        if (knownExtractedMessage) return knownExtractedMessage;
+        return isTechnicalMessage(extracted) ? statusFallback : sentenceCase(extracted);
       }
-      return message;
+      return sentenceCase(message);
     }
 
     const errorCodeMatch = message.match(/Error code: ([A-Z0-9-]+)/);
@@ -257,14 +361,14 @@ export const getApiErrorMessage = (
     const errorBodyMatch = details.match(/Error\s*:\s*(.+)$/s);
     if (errorBodyMatch) {
       const extracted = errorBodyMatch[1].trim();
-      if (!extracted.includes("Exception") && !extracted.includes("jakarta")) {
-        return extracted;
-      }
+      const knownExtractedMessage = humanizeKnownBackendMessage(extracted);
+      if (knownExtractedMessage) return knownExtractedMessage;
+      if (!isTechnicalMessage(extracted)) return sentenceCase(extracted);
     }
     if (details.includes("duplicate key")) {
       return "A record with these details already exists.";
     }
   }
 
-  return defaultMessage;
+  return statusFallback;
 };

@@ -1,5 +1,5 @@
 import { coreHttpClient, coreRequest } from "../httpClient";
-import { DEFAULT_MUNICIPALITY_ID } from "../constants";
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope";
 import {
   ExemptAreaDetailResponseSchema,
   ExemptAreaListResponseSchema,
@@ -25,11 +25,7 @@ export const ExemptAreasApi = {
     coreRequest<ExemptAreaListResponse>({
       method: "GET",
       url: "/v1/exempt-areas",
-      params: {
-        municipalityId: DEFAULT_MUNICIPALITY_ID,
-        active: true,
-        ...params,
-      },
+      params: withActiveMunicipality({ active: true, ...params }),
       signal,
       schema: ExemptAreaListResponseSchema,
     }),
@@ -43,10 +39,7 @@ export const ExemptAreasApi = {
       method: "POST",
       url: "/v1/exempt-areas",
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: ExemptAreaDetailResponseSchema,
@@ -73,10 +66,7 @@ export const ExemptAreasApi = {
       method: "PUT",
       url: `/v1/exempt-areas/${encodeURIComponent(areaId)}`,
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: ExemptAreaDetailResponseSchema,

@@ -1,5 +1,5 @@
 import { coreRequest, coreHttpClient } from "../httpClient";
-import { DEFAULT_MUNICIPALITY_ID } from "../constants";
+import { withActiveMunicipality, withActiveMunicipalityData } from "../municipality-scope";
 import {
   FinePolicyDetailResponseSchema,
   FinePolicyListResponseSchema,
@@ -25,10 +25,7 @@ export const FinePoliciesApi = {
     coreRequest<FinePolicyListResponse>({
       method: "GET",
       url: "/v1/fine-policies",
-      params: {
-        municipalityId: DEFAULT_MUNICIPALITY_ID,
-        ...params,
-      },
+      params: withActiveMunicipality(params),
       signal,
       schema: FinePolicyListResponseSchema,
     }),
@@ -42,10 +39,7 @@ export const FinePoliciesApi = {
       method: "POST",
       url: "/v1/fine-policies",
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: FinePolicyDetailResponseSchema,
@@ -72,10 +66,7 @@ export const FinePoliciesApi = {
       method: "PUT",
       url: `/v1/fine-policies/${encodeURIComponent(policyId)}`,
       data: {
-        data: {
-          municipalityId: DEFAULT_MUNICIPALITY_ID,
-          ...payload,
-        },
+        data: withActiveMunicipalityData(payload),
       },
       signal,
       schema: FinePolicyDetailResponseSchema,

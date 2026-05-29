@@ -6,7 +6,7 @@ import { LandingPage } from "@/pages/landing"
 import { DashboardPage } from "@/pages/dashboard"
 import { TransactionsPage } from "@/pages/transactions"
 import { RoadClosurePermitsContent } from "@/pages/road-closure-permits"
-import { AuthorizationsPage } from "@/pages/authorizations"
+import { SpecialPermitsPage } from "@/pages/special-permits"
 import { AlertsPage } from "@/pages/alerts"
 import { EnforcementPage } from "@/pages/enforcement"
 import { VehiclesPage } from "@/pages/vehicles"
@@ -27,7 +27,7 @@ import { RolesManagementPage } from "@/pages/roles-management"
 import { Toaster } from "@/components/ui/sonner"
 import { useI18n } from "@/lib/i18n"
 
-type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "heavy-truck-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
+type AppPage = "dashboard" | "transactions" | "road-closure-permits" | "special-permits" | "manage-staff" | "manage-roles" | "create-role" | "roles-management" | "alerts" | "enforcement" | "vehicles" | "gps-tracking" | "cameras" | "reports" | "municipality" | "tariff-plans" | "ruc-policy" | "routes" | "road-closure-rates" | "fines-configuration" | "geofencing-zones" | "vehicle-classification" | "weight-categories" | "time-windows"
 
 function FullPageStatus({
   title,
@@ -99,8 +99,8 @@ function AppContent() {
         return <TransactionsPage />
       case "road-closure-permits":
         return <RoadClosurePermitsContent />
-      case "heavy-truck-permits":
-        return <AuthorizationsPage />
+      case "special-permits":
+        return <SpecialPermitsPage />
       case "manage-staff":
       case "roles-management":
         return <RolesManagementPage view="staff" onManageRoles={() => setCurrentPage("manage-roles")} />

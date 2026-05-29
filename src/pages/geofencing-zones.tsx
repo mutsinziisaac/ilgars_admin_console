@@ -329,7 +329,7 @@ export function GeofencingZonesPage() {
       },
       {
         onSuccess: () => {
-          toast.success("Exempted route created successfully")
+          toast.success("Exempt area created successfully")
           setIsCreateOpen(false)
           resetForm(areaForm.municipalityId)
         },
@@ -361,7 +361,7 @@ export function GeofencingZonesPage() {
       },
       {
         onSuccess: () => {
-          toast.success("Exempted route updated successfully")
+          toast.success("Exempt area updated successfully")
           setIsEditOpen(false)
           setSelectedArea(null)
         },
@@ -413,7 +413,7 @@ export function GeofencingZonesPage() {
             id={`${isEdit ? "edit-" : ""}name`}
             value={areaForm.name}
             onChange={(event) => setAreaForm({ ...areaForm, name: event.target.value })}
-            placeholder="e.g., Kampala Exempted Route"
+            placeholder="e.g., Kampala Exempt Area"
             className="text-base h-11"
           />
         </div>
@@ -474,7 +474,7 @@ export function GeofencingZonesPage() {
               {isEdit ? "Saving..." : "Creating..."}
             </>
           ) : (
-            isEdit ? "Save Changes" : "Create Exempted Route"
+            isEdit ? "Save Changes" : "Create Exempt Area"
           )}
         </Button>
       </div>
@@ -495,7 +495,7 @@ export function GeofencingZonesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-4xl font-semibold text-foreground">Create Exempted Route</h1>
+            <h1 className="text-4xl font-semibold text-foreground">Create Exempt Area</h1>
             <p className="text-lg text-muted-foreground">
               Define an exempted route with GeoJSON route data for {getMunicipalityDisplayName(areaForm.municipalityId)}.
             </p>
@@ -585,7 +585,7 @@ export function GeofencingZonesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-4xl font-semibold text-foreground">Edit Exempted Route</h1>
+            <h1 className="text-4xl font-semibold text-foreground">Edit Exempt Area</h1>
             <p className="text-lg text-muted-foreground">
               Update the exempted route definition and GeoJSON route data for {getMunicipalityDisplayName(areaForm.municipalityId)}.
             </p>
@@ -665,7 +665,7 @@ export function GeofencingZonesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-semibold text-foreground">Exempted Routes</h1>
+          <h1 className="text-4xl font-semibold text-foreground">Exempt Areas</h1>
           <p className="text-lg text-muted-foreground">Manage exempted routes for {getMunicipalityDisplayName(selectedMunicipalityId)}</p>
         </div>
         <Button onClick={openCreateArea} disabled={createMutation.isPending}>
@@ -674,13 +674,13 @@ export function GeofencingZonesPage() {
           ) : (
             <Plus className="h-4 w-4 mr-2" />
           )}
-          Create Exempted Route
+          Create Exempt Area
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Exempted Routes</CardTitle>
+          <CardTitle className="text-2xl">Exempt Areas</CardTitle>
           <CardDescription className="text-base">
             Configure GeoJSON boundaries for municipal exemptions
           </CardDescription>

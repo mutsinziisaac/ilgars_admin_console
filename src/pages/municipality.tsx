@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,7 +43,8 @@ const getStoredBoundaryVersions = (municipalityId: string): BoundaryVersion[] =>
   if (typeof window === "undefined") return []
 
   try {
-    const stored = window.sessionStorage.getItem(getBoundaryVersionsStorageKey(municipalityId))
+    const storageKey = getBoundaryVersionsStorageKey(municipalityId)
+    const stored = window.localStorage.getItem(storageKey) ?? window.sessionStorage.getItem(storageKey)
     const boundaries = stored ? (JSON.parse(stored) as BoundaryVersion[]) : []
     boundaryVersionsByMunicipality.set(municipalityId, boundaries)
     return boundaries
@@ -55,10 +56,10 @@ const getStoredBoundaryVersions = (municipalityId: string): BoundaryVersion[] =>
 const storeBoundaryVersions = (municipalityId: string, boundaryVersions: BoundaryVersion[]) => {
   boundaryVersionsByMunicipality.set(municipalityId, boundaryVersions)
   if (typeof window !== "undefined") {
-    window.sessionStorage.setItem(
-      getBoundaryVersionsStorageKey(municipalityId),
-      JSON.stringify(boundaryVersions),
-    )
+    const storageKey = getBoundaryVersionsStorageKey(municipalityId)
+    const serializedBoundaries = JSON.stringify(boundaryVersions)
+    window.localStorage.setItem(storageKey, serializedBoundaries)
+    window.sessionStorage.setItem(storageKey, serializedBoundaries)
   }
 }
 
@@ -193,6 +194,7 @@ export function MunicipalityPage() {
   const [municipality, setMunicipality] = useState<Municipality | null>(() => getStoredMunicipality())
   const [municipalities, setMunicipalities] = useState<Municipality[]>(() => getStoredMunicipalities())
   const [municipalitySearch, setMunicipalitySearch] = useState("")
+  const [municipalityLookupId, setMunicipalityLookupId] = useState(getStoredMunicipalityId())
   const [boundaries, setBoundaries] = useState<BoundaryVersion[]>(() =>
     getStoredBoundaryVersions(getStoredMunicipalityId()),
   )
@@ -237,6 +239,86 @@ export function MunicipalityPage() {
     })
   }, [])
 
+  const buildFallbackMunicipality = (municipalityId: string): Municipality => ({
+    id: municipalityId,
+    code: municipalityId.slice(0, 8).toUpperCase(),
+    name: `Municipality ${municipalityId.slice(0, 8)}`,
+    timezone: getLocalTimeZone(),
+    status: "Active",
+  })
+
+  const getConfigMunicipality = (
+    response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
+    municipalityId: string,
+  ): Municipality => {
+    // Cast to `any` because Municipality's passthrough() schema gives every key
+    // an `unknown` index signature that swallows the union's named fields.
+    const configData = response.data as any
+
+    if (configData?.municipality) {
+      return configData.municipality
+    }
+
+    if (configData?.id && configData?.name && configData?.code) {
+      return configData as Municipality
+    }
+
+    return buildFallbackMunicipality(municipalityId)
+  }
+
+  const getConfigBoundaries = (
+    response: Awaited<ReturnType<typeof MunicipalitiesApi.getMunicipalityConfiguration>>,
+  ): BoundaryVersion[] => {
+    const configData = response.data as any
+
+    if (configData?.boundaryVersions || configData?.boundaries || configData?.activeBoundaryVersion) {
+      return [
+        ...((configData.boundaryVersions ?? configData.boundaries ?? []) as BoundaryVersion[]),
+        ...(configData.activeBoundaryVersion ? [configData.activeBoundaryVersion as BoundaryVersion] : []),
+      ]
+    }
+
+    return []
+  }
+
+  const handleLoadMunicipalityById = async () => {
+    const municipalityId = municipalityLookupId.trim()
+
+    if (!municipalityId) {
+      toast.error("Enter a municipality ID")
+      return
+    }
+
+    setIsLoadingMunicipality(true)
+    setMunicipalityError(null)
+    try {
+      const response = await MunicipalitiesApi.getMunicipalityConfiguration(municipalityId)
+      const loadedMunicipality = getConfigMunicipality(response, municipalityId)
+      const configBoundaries = mergeBoundaryVersions(getConfigBoundaries(response), getStoredBoundaryVersions(municipalityId))
+
+      storeActiveMunicipality(loadedMunicipality)
+      storeBoundaryVersions(loadedMunicipality.id, configBoundaries)
+      setBoundaries(configBoundaries)
+      setMunicipalities(getStoredMunicipalities())
+      setMunicipalityLookupId(loadedMunicipality.id)
+
+      toast.success("Municipality configuration loaded", {
+        description: `${loadedMunicipality.name} is now the active municipality for configuration pages.`,
+      })
+    } catch (error) {
+      const fallbackMunicipality = buildFallbackMunicipality(municipalityId)
+      storeActiveMunicipality(fallbackMunicipality)
+      setBoundaries(getStoredBoundaryVersions(municipalityId))
+      setMunicipalities(getStoredMunicipalities())
+      setMunicipalityError(getApiErrorMessage(error, "Configuration lookup failed. The ID was still saved locally as active."))
+      toast.error("Could not fetch municipality configuration", {
+        description: getApiErrorMessage(error, "Configuration lookup failed. The ID was saved locally as active."),
+      })
+    } finally {
+      setIsLoadingMunicipality(false)
+    }
+  }
+
   const hydrateMunicipalityFromStorage = useCallback(
     (municipalityId = getStoredMunicipalityId(), fallbackBoundaries: BoundaryVersion[] = []) => {
       const storedMunicipalities = getStoredMunicipalities()
@@ -264,14 +346,6 @@ export function MunicipalityPage() {
     [storeActiveMunicipality],
   )
 
-  useEffect(() => {
-    hydrateMunicipalityFromStorage(getStoredMunicipalityId())
-  }, [hydrateMunicipalityFromStorage])
-
-  useEffect(() => {
-    setMunicipalities(getStoredMunicipalities())
-  }, [])
-
   const handleUpdateMunicipality = () => {
     if (!municipality) return
 
@@ -287,6 +361,7 @@ export function MunicipalityPage() {
 
   const handleSelectMunicipality = (nextMunicipality: Municipality) => {
     storeActiveMunicipality(nextMunicipality)
+    setMunicipalityLookupId(nextMunicipality.id)
     const storedBoundaries = getStoredBoundaryVersions(nextMunicipality.id)
     setBoundaries(storedBoundaries)
     hydrateMunicipalityFromStorage(nextMunicipality.id, storedBoundaries)
@@ -723,6 +798,51 @@ export function MunicipalityPage() {
           Create Municipality
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl">Load Municipality Configs</CardTitle>
+          <CardDescription className="text-base">
+            Enter a municipality ID to make it active and load its saved configuration profile.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="municipality-id-lookup" className="text-base">Municipality ID</Label>
+              <Input
+                id="municipality-id-lookup"
+                value={municipalityLookupId}
+                onChange={(event) => setMunicipalityLookupId(event.target.value)}
+                placeholder="Paste municipality UUID"
+                className="h-11 font-mono text-base"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                onClick={handleLoadMunicipalityById}
+                disabled={isLoadingMunicipality || !municipalityLookupId.trim()}
+                className="h-11 px-6 text-base"
+              >
+                {isLoadingMunicipality ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 h-4 w-4" />
+                    Load Configs
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Once loaded, routes, tariff plans, road closure rates, RUC policies, fines, exempt areas, and boundary versions use this active municipality ID.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
