@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from "@/components/ui/skeleton"
 import { Settings, Edit, Info, Plus, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import { getApiErrorMessage } from "@/lib/api"
 import {
   useRUCPoliciesList,
   useCreateRUCPolicy,
@@ -21,6 +22,9 @@ import {
   getMunicipalityDisplayName,
   getStoredMunicipalityId,
 } from "@/lib/municipality-registry"
+
+const POLICY_CAPACITY_UNIT = "KGS"
+const POLICY_CAPACITY_UNIT_LABEL = "kg"
 
 export function RUCPolicyPage() {
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(getStoredMunicipalityId())
@@ -45,8 +49,8 @@ export function RUCPolicyPage() {
       setSelectedMunicipalityId(policyForm.municipalityId)
       resetForm()
     },
-    onError: (error: any) => {
-      toast.error(`Failed to create RUC policy: ${error.message}`)
+    onError: (error: unknown) => {
+      toast.error(`Failed to create RUC policy: ${getApiErrorMessage(error, "Create request failed")}`)
     },
   })
 
@@ -56,8 +60,8 @@ export function RUCPolicyPage() {
       setIsEditOpen(false)
       setSelectedPolicy(null)
     },
-    onError: (error: any) => {
-      toast.error(`Failed to update RUC policy: ${error.message}`)
+    onError: (error: unknown) => {
+      toast.error(`Failed to update RUC policy: ${getApiErrorMessage(error, "Update request failed")}`)
     },
   })
 
@@ -71,9 +75,9 @@ export function RUCPolicyPage() {
       setActivatingPolicyId(null)
       toast.success("RUC policy activated")
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       setActivatingPolicyId(null)
-      toast.error(`Failed to activate RUC policy: ${error.message}`)
+      toast.error(`Failed to activate RUC policy: ${getApiErrorMessage(error, "Activation request failed")}`)
     },
   })
 
@@ -84,7 +88,7 @@ export function RUCPolicyPage() {
   const [policyForm, setPolicyForm] = useState({
     municipalityId: getStoredMunicipalityId(),
     specialPermitCapacityThreshold: 20000,
-    specialPermitCapacityUnit: "KGS",
+    specialPermitCapacityUnit: POLICY_CAPACITY_UNIT,
     gracePeriodHours: 168 // 7 days default
   })
 
@@ -94,7 +98,7 @@ export function RUCPolicyPage() {
     setPolicyForm({
       municipalityId,
       specialPermitCapacityThreshold: 20000,
-      specialPermitCapacityUnit: "KGS",
+      specialPermitCapacityUnit: POLICY_CAPACITY_UNIT,
       gracePeriodHours: 168
     })
   }
@@ -108,9 +112,9 @@ export function RUCPolicyPage() {
     createMutation.mutate({
       municipalityId: policyForm.municipalityId,
       specialPermitCapacityThreshold: policyForm.specialPermitCapacityThreshold,
-      specialPermitCapacityUnit: policyForm.specialPermitCapacityUnit,
+      specialPermitCapacityUnit: POLICY_CAPACITY_UNIT,
       gracePeriodHours: policyForm.gracePeriodHours,
-      active: false
+      active: true
     }, {
       onSuccess: () => {
         setSelectedMunicipalityId(policyForm.municipalityId)
@@ -123,7 +127,7 @@ export function RUCPolicyPage() {
     updateMutation.mutate({
       municipalityId: policyForm.municipalityId || selectedPolicy.municipalityId,
       specialPermitCapacityThreshold: policyForm.specialPermitCapacityThreshold,
-      specialPermitCapacityUnit: policyForm.specialPermitCapacityUnit,
+      specialPermitCapacityUnit: POLICY_CAPACITY_UNIT,
       gracePeriodHours: policyForm.gracePeriodHours
     })
   }
@@ -138,7 +142,7 @@ export function RUCPolicyPage() {
     setPolicyForm({
       municipalityId: policy.municipalityId,
       specialPermitCapacityThreshold: policy.specialPermitCapacityThreshold,
-      specialPermitCapacityUnit: policy.specialPermitCapacityUnit,
+      specialPermitCapacityUnit: POLICY_CAPACITY_UNIT,
       gracePeriodHours: policy.gracePeriodHours
     })
     setIsEditOpen(true)
@@ -236,7 +240,7 @@ export function RUCPolicyPage() {
                 <Settings className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="text-sm text-muted-foreground">Permit Threshold</p>
-                  <p className="text-2xl font-semibold">{activePolicy.specialPermitCapacityThreshold.toLocaleString()} {activePolicy.specialPermitCapacityUnit}</p>
+                  <p className="text-2xl font-semibold">{activePolicy.specialPermitCapacityThreshold.toLocaleString()} {POLICY_CAPACITY_UNIT_LABEL}</p>
                 </div>
               </div>
 
@@ -269,7 +273,7 @@ export function RUCPolicyPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <AlertCircle className="h-12 w-12 text-destructive mb-4" />
               <h3 className="text-lg font-semibold mb-2">Failed to load RUC policies</h3>
-              <p className="text-muted-foreground mb-4">{(error as any)?.message || "An error occurred"}</p>
+              <p className="text-muted-foreground mb-4">{getApiErrorMessage(error, "An error occurred")}</p>
               <Button variant="outline" onClick={() => refetch()}>
                 Try Again
               </Button>
@@ -284,7 +288,7 @@ export function RUCPolicyPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-base">Threshold ({policies[0]?.specialPermitCapacityUnit})</TableHead>
+                  <TableHead className="text-base">Threshold ({POLICY_CAPACITY_UNIT_LABEL})</TableHead>
                   <TableHead className="text-base">Grace Period (hours)</TableHead>
                   <TableHead className="text-base">Created</TableHead>
                   <TableHead className="text-base">Status</TableHead>
@@ -363,8 +367,19 @@ export function RUCPolicyPage() {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">Policy Scope</p>
                 <p className="text-sm text-muted-foreground">
-                  This policy will be created for the active municipality and can be activated after review.
+                  This policy will be created as active for the selected municipality so special permit requests can pass backend validation.
                 </p>
+              </div>
+            </div>
+            <div className="rounded-lg border border-[#DAA22A]/40 bg-[#DAA22A]/10 p-4">
+              <div className="flex gap-3">
+                <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#8A6414]" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Weight unit policy</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Enter and review all capacity thresholds in kilograms ({POLICY_CAPACITY_UNIT_LABEL}), not tonnes.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -389,7 +404,7 @@ export function RUCPolicyPage() {
                 className="text-base h-11"
               />
               <p className="text-sm text-muted-foreground">
-                Vehicles exceeding this weight require circulation licence (in {policyForm.specialPermitCapacityUnit})
+                Vehicles at or above this threshold require a special permit route request. Use kilograms ({POLICY_CAPACITY_UNIT_LABEL}), not tonnes.
               </p>
             </div>
 
@@ -459,7 +474,7 @@ export function RUCPolicyPage() {
                 className="text-base h-11"
               />
               <p className="text-sm text-muted-foreground">
-                Vehicles exceeding this weight require circulation licence
+                Vehicles exceeding this weight require circulation licence. Use kilograms ({POLICY_CAPACITY_UNIT_LABEL}), not tonnes.
               </p>
             </div>
 
@@ -488,7 +503,7 @@ export function RUCPolicyPage() {
                   <p className="text-sm font-semibold text-amber-900">Important</p>
                   <p className="text-sm text-amber-800 mt-1">
                     Changes to RUC policy will affect all vehicles and permits immediately. 
-                    Ensure you review the impact before saving.
+                    Capacity thresholds must remain in kilograms ({POLICY_CAPACITY_UNIT_LABEL}), not tonnes.
                   </p>
                 </div>
               </div>
@@ -535,7 +550,8 @@ export function RUCPolicyPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Special Permit Capacity Threshold</p>
-                  <p className="text-2xl font-semibold">{selectedPolicy.specialPermitCapacityThreshold.toLocaleString()} {selectedPolicy.specialPermitCapacityUnit}</p>
+                  <p className="text-2xl font-semibold">{selectedPolicy.specialPermitCapacityThreshold.toLocaleString()} {POLICY_CAPACITY_UNIT_LABEL}</p>
+                  <p className="text-sm text-muted-foreground">Stored as kilograms, not tonnes</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Grace Period</p>

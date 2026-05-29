@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,8 +13,9 @@ import {
   useRoadClosureRatesList,
 } from "@/lib/api/road-closure-rates/hooks"
 import { RoadClosureRatesApi } from "@/lib/api/road-closure-rates/api"
+import { roadClosureRatesKeys } from "@/lib/api/road-closure-rates/queryKeys"
 import type { RoadClosureRate } from "@/lib/api/road-closure-rates/schemas"
-import { ROAD_CLOSURE_RATES_STORAGE_KEY_PREFIX } from "@/lib/api/constants"
+import { getApiErrorMessage } from "@/lib/api"
 import {
   getMunicipalityDisplayName,
   getStoredMunicipalityId as getRegistryMunicipalityId,
@@ -21,7 +23,7 @@ import {
 
 type ClosureType = "FULL_CLOSURE" | "PARTIAL_RESTRICTION"
 type RoadType = "PRIMARY_ROAD" | "SECONDARY_ROAD" | "TERTIARY_ROAD"
-type Purpose = "CONSTRUCTION" | "FILMING" | "SPORTING_EVENTS" | "FAIRS" | "FOR_PROFIT_EVENTS"
+type Purpose = "CONSTRUCTION" | "FILMING" | "SPORTING_EVENT" | "FAIRS" | "FOR_PROFIT_EVENTS"
 
 const roadTypes: Array<{ label: string; value: RoadType }> = [
   { label: "Protocol Roads", value: "PRIMARY_ROAD" },
@@ -32,7 +34,7 @@ const roadTypes: Array<{ label: string; value: RoadType }> = [
 const purposes: Array<{ label: string; value: Purpose }> = [
   { label: "Construction works", value: "CONSTRUCTION" },
   { label: "Filming", value: "FILMING" },
-  { label: "Sporting events", value: "SPORTING_EVENTS" },
+  { label: "Sporting events", value: "SPORTING_EVENT" },
   { label: "Fairs", value: "FAIRS" },
   { label: "For-profit events", value: "FOR_PROFIT_EVENTS" },
 ]
@@ -41,14 +43,14 @@ const defaultRates: Record<ClosureType, Record<Purpose, Record<RoadType, number>
   FULL_CLOSURE: {
     CONSTRUCTION: { PRIMARY_ROAD: 50000, SECONDARY_ROAD: 30000, TERTIARY_ROAD: 15000 },
     FILMING: { PRIMARY_ROAD: 50000, SECONDARY_ROAD: 30000, TERTIARY_ROAD: 20000 },
-    SPORTING_EVENTS: { PRIMARY_ROAD: 10000, SECONDARY_ROAD: 5000, TERTIARY_ROAD: 3500 },
+    SPORTING_EVENT: { PRIMARY_ROAD: 10000, SECONDARY_ROAD: 5000, TERTIARY_ROAD: 3500 },
     FAIRS: { PRIMARY_ROAD: 2000, SECONDARY_ROAD: 1000, TERTIARY_ROAD: 0 },
     FOR_PROFIT_EVENTS: { PRIMARY_ROAD: 40000, SECONDARY_ROAD: 20000, TERTIARY_ROAD: 10000 },
   },
   PARTIAL_RESTRICTION: {
     CONSTRUCTION: { PRIMARY_ROAD: 10000, SECONDARY_ROAD: 5000, TERTIARY_ROAD: 3500 },
     FILMING: { PRIMARY_ROAD: 40000, SECONDARY_ROAD: 30000, TERTIARY_ROAD: 20000 },
-    SPORTING_EVENTS: { PRIMARY_ROAD: 5000, SECONDARY_ROAD: 3500, TERTIARY_ROAD: 1800 },
+    SPORTING_EVENT: { PRIMARY_ROAD: 5000, SECONDARY_ROAD: 3500, TERTIARY_ROAD: 1800 },
     FAIRS: { PRIMARY_ROAD: 2000, SECONDARY_ROAD: 1000, TERTIARY_ROAD: 0 },
     FOR_PROFIT_EVENTS: { PRIMARY_ROAD: 20000, SECONDARY_ROAD: 10000, TERTIARY_ROAD: 5000 },
   },
@@ -58,38 +60,6 @@ const EMPTY_RATES: RoadClosureRate[] = []
 
 const getStoredMunicipalityId = () => {
   return getRegistryMunicipalityId()
-}
-
-const getRatesStorageKey = (municipalityId: string) =>
-  `${ROAD_CLOSURE_RATES_STORAGE_KEY_PREFIX}.${municipalityId}`
-
-const getStoredRates = (municipalityId: string): RoadClosureRate[] => {
-  if (typeof window === "undefined") return []
-
-  try {
-    const stored = localStorage.getItem(getRatesStorageKey(municipalityId))
-    return stored ? (JSON.parse(stored) as RoadClosureRate[]) : []
-  } catch {
-    return []
-  }
-}
-
-const storeRates = (municipalityId: string, rates: RoadClosureRate[]) => {
-  if (typeof window === "undefined") return
-
-  localStorage.setItem(getRatesStorageKey(municipalityId), JSON.stringify(rates))
-}
-
-const getRateKey = (rate: RoadClosureRate) =>
-  `${rate.municipalityId}.${rate.closureType ?? "FULL_CLOSURE"}.${rate.purpose}.${rate.roadType}`
-
-const mergeRates = (incoming: RoadClosureRate[], fallback: RoadClosureRate[] = []) => {
-  const byKey = new Map<string, RoadClosureRate>()
-
-  fallback.forEach((rate) => byKey.set(getRateKey(rate), rate))
-  incoming.forEach((rate) => byKey.set(getRateKey(rate), rate))
-
-  return Array.from(byKey.values())
 }
 
 const buildDraftRatesFromExisting = (
@@ -117,31 +87,14 @@ export function RoadClosureRatesPage() {
   const [formMunicipalityId, setFormMunicipalityId] = useState(activeMunicipalityId)
   const [draftRates, setDraftRates] = useState(defaultRates.FULL_CLOSURE)
   const [isSavingRates, setIsSavingRates] = useState(false)
-  const [cachedRates, setCachedRates] = useState<RoadClosureRate[]>(() =>
-    getStoredRates(getStoredMunicipalityId()),
-  )
+  const queryClient = useQueryClient()
 
-  const { data, isLoading, error, refetch } = useRoadClosureRatesList({
+  const { data, isLoading, error } = useRoadClosureRatesList({
     municipalityId: activeMunicipalityId,
   })
   const createMutation = useCreateRoadClosureRate()
   const apiRates = data?.data ?? data?.content ?? EMPTY_RATES
-  const rates = useMemo(() => mergeRates(apiRates, cachedRates), [apiRates, cachedRates])
-
-  useEffect(() => {
-    const latestMunicipalityId = getStoredMunicipalityId()
-    setActiveMunicipalityId(latestMunicipalityId)
-    setFormMunicipalityId(latestMunicipalityId)
-    setCachedRates(getStoredRates(latestMunicipalityId))
-  }, [])
-
-  useEffect(() => {
-    if (!apiRates.length) return
-
-    const nextRates = mergeRates(apiRates, getStoredRates(activeMunicipalityId))
-    setCachedRates(nextRates)
-    storeRates(activeMunicipalityId, nextRates)
-  }, [activeMunicipalityId, apiRates])
+  const rates = apiRates
 
   const selectedRates = rates.filter((rate: RoadClosureRate) => {
     if (rate.closureType) return rate.closureType === closureType
@@ -172,7 +125,6 @@ export function RoadClosureRatesPage() {
     const municipalityId = getStoredMunicipalityId()
     setFormMunicipalityId(municipalityId)
     setActiveMunicipalityId(municipalityId)
-    setCachedRates(getStoredRates(municipalityId))
     setDraftRates(
       hasRatesForClosureType
         ? buildDraftRatesFromExisting(closureType, selectedRates)
@@ -181,7 +133,7 @@ export function RoadClosureRatesPage() {
     setIsCreateOpen(true)
   }
 
-  const handleCreateRates = async () => {
+  const handleSaveRates = async () => {
     const municipalityId = formMunicipalityId.trim()
 
     if (!municipalityId) {
@@ -194,8 +146,12 @@ export function RoadClosureRatesPage() {
       const responses = await Promise.all(
         purposes.flatMap((purpose) =>
           roadTypes.map((roadType) => {
-            const existingRate = selectedRates.find(
-              (rate) => rate.purpose === purpose.value && rate.roadType === roadType.value,
+            const existingRate = apiRates.find(
+              (rate) =>
+                rate.municipalityId === municipalityId &&
+                (rate.closureType ?? "FULL_CLOSURE") === closureType &&
+                rate.purpose === purpose.value &&
+                rate.roadType === roadType.value,
             )
             const payload = {
               municipalityId,
@@ -214,21 +170,26 @@ export function RoadClosureRatesPage() {
           }),
         ),
       )
-      const createdRates = responses.map((response) => ({
-        ...response.data,
-        municipalityId: response.data.municipalityId || municipalityId,
-        closureType,
-        active: response.data.active ?? true,
-      }))
-      const nextRates = mergeRates(createdRates, getStoredRates(municipalityId))
+      await Promise.all(
+        responses.map(async (response) => {
+          if (response.data.active) return response
 
+          await RoadClosureRatesApi.activateRoadClosureRate(response.data.id)
+          return {
+            ...response,
+            data: {
+              ...response.data,
+              active: true,
+            },
+          }
+        }),
+      )
       setActiveMunicipalityId(municipalityId)
-      setCachedRates(nextRates)
-      storeRates(municipalityId, nextRates)
+      await queryClient.invalidateQueries({ queryKey: roadClosureRatesKeys.all() })
       setIsCreateOpen(false)
       toast.success(hasRatesForClosureType ? "Road closure rates updated" : "Road closure rates created")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create rates")
+      toast.error(getApiErrorMessage(error, "Failed to save road closure rates"))
     } finally {
       setIsSavingRates(false)
     }
@@ -322,7 +283,7 @@ export function RoadClosureRatesPage() {
           <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={isSubmittingRates}>
             Cancel
           </Button>
-          <Button onClick={handleCreateRates} disabled={isSubmittingRates}>
+          <Button onClick={handleSaveRates} disabled={isSubmittingRates}>
             {isSubmittingRates ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

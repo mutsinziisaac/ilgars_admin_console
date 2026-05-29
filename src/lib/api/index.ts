@@ -20,6 +20,7 @@ export { ExemptAreasApi } from "./exempt-areas/api";
 export { DevicesApi } from "./devices/api";
 export { AnalyticsApi } from "./analytics/api";
 export { EnforcementApi } from "./enforcement/api";
+export { SpecialPermitsApi } from "./special-permits/api";
 
 // Export schemas and types
 export type { Vehicle, VehicleListResponse, VehicleDetailResponse } from "./vehicles/schemas";
@@ -94,6 +95,16 @@ export type {
   HeatmapResponse,
 } from "./analytics/schemas";
 export type {
+  EnforcementOfficer,
+  EnforcementOfficerListResponse,
   OfficerKpisPayload,
   OfficerKpisResponse,
 } from "./enforcement/schemas";
+export type {
+  SpecialPermit,
+  SpecialPermitListResponse,
+  SpecialPermitDetailResponse,
+  CreateSpecialPermitVehicleSelectionRequest,
+  ApproveSpecialPermitRequest,
+  UpdateSpecialPermitPaymentStatusRequest,
+} from "./special-permits/schemas";
